@@ -108,21 +108,6 @@ SOURCE_CONNECTION_LIST_EXAMPLES = {
         "modified_at": "2024-01-15T14:22:15Z",
         "sync_id": "123e4567-e89b-12d3-a456-426614174000",
         "collection": "engineering-docs-ab123",
-        "white_label_id": None,
-    },
-    "white_label_slack": {
-        "id": "white123-4567-89ab-cdef-012345678901",
-        "name": "Customer Slack Workspace",
-        "description": (
-            "Team communications and project discussions from customer's Slack workspace"
-        ),
-        "short_name": "slack",
-        "status": "active",
-        "created_at": "2024-01-16T10:15:00Z",
-        "modified_at": "2024-01-16T10:15:00Z",
-        "sync_id": "wl456789-abcd-ef01-2345-67890abcdef1",
-        "collection": "customer-communications-xy789",
-        "white_label_id": "wl123456-789a-bcde-f012-345678901234",
     },
 }
 
@@ -179,24 +164,6 @@ COLLECTION_EXAMPLES = {
         "created_by_email": "admin@company.com",
         "modified_by_email": "finance@company.com",
         "status": "ACTIVE",
-    },
-}
-
-# White label examples for different source types
-WHITE_LABEL_EXAMPLES = {
-    "github_integration": {
-        "id": "white789-0abc-def0-1234-567890abcdef",
-        "name": "Support Team GitHub Integration",
-        "source_short_name": "github",
-        "redirect_url": "https://support.yoursite.com/integrations/github/callback",
-        "client_id": "Iv1.a1b2c3d4e5f6g7h8",
-        "client_secret": "1234567890abcdef1234567890abcdef12345678",
-        "allowed_origins": "https://support.yoursite.com,https://internal.yoursite.com",
-        "organization_id": "org12345-6789-abcd-ef01-234567890abc",
-        "created_at": "2024-01-05T16:45:00Z",
-        "modified_at": "2024-01-14T10:20:00Z",
-        "created_by_email": "support@company.com",
-        "modified_by_email": "admin@company.com",
     },
 }
 
@@ -506,28 +473,6 @@ def create_collection_list_response(collection_types: list, summary: str):
                             "value": [
                                 COLLECTION_EXAMPLES[collection_type]
                                 for collection_type in collection_types
-                            ],
-                        }
-                    }
-                }
-            },
-        }
-    }
-
-
-def create_white_label_list_response(white_label_types: list, summary: str):
-    """Create a white label list response example with multiple white label integrations."""
-    return {
-        "200": {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "white_labels_list": {
-                            "summary": summary,
-                            "value": [
-                                WHITE_LABEL_EXAMPLES[white_label_type]
-                                for white_label_type in white_label_types
                             ],
                         }
                     }

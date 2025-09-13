@@ -129,7 +129,6 @@ class TestCreateSync:
         mock_source_connection.name = "Test Source Connection"
         mock_source_connection.description = "Test description"
         mock_source_connection.short_name = "test-source"
-        mock_source_connection.white_label_id = None
         mock_source_connection.sync_id = uuid.uuid4()
         mock_source_connection.organization_id = uuid.uuid4()
         mock_source_connection.connection_id = uuid.uuid4()
@@ -210,7 +209,6 @@ class TestCreateSync:
         mock_source_connection.name = "Test Source Connection"
         mock_source_connection.description = "Test description"
         mock_source_connection.short_name = "test-source"
-        mock_source_connection.white_label_id = None
         mock_source_connection.sync_id = uuid.uuid4()
         mock_source_connection.organization_id = uuid.uuid4()
         mock_source_connection.connection_id = uuid.uuid4()

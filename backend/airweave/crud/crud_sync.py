@@ -224,30 +224,6 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
 
         return [schemas.SyncWithoutConnections.model_validate(sync) for sync in syncs]
 
-    async def get_all_for_white_label(
-        self, db: AsyncSession, white_label_id: UUID, ctx: ApiContext
-    ) -> list[schemas.Sync]:
-        """Get sync by white label ID.
-
-        Args:
-            db (AsyncSession): The database session
-            white_label_id (UUID): The ID of the white label
-            ctx (ApiContext): The API context
-
-        Returns:
-            list[schemas.Sync]: The enriched syncs
-        """
-        stmt = select(Sync).where(Sync.white_label_id == white_label_id)
-        result = await db.execute(stmt)
-        syncs = result.scalars().unique().all()
-
-        # Validate permissions for each sync
-        for sync in syncs:
-            await self._validate_organization_access(ctx, sync.organization_id)
-
-        # Enrich all syncs in a single efficient query
-        return await self.enricher_for_all(db, syncs)
-
     async def get_all_for_source_connection(
         self, db: AsyncSession, source_connection_id: UUID, ctx: ApiContext
     ) -> list[schemas.Sync]:

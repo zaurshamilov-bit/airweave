@@ -55,14 +55,6 @@ class SourceConnectionBase(BaseModel):
         ),
         examples=["stripe", "postgresql", "slack"],
     )
-    white_label_id: Optional[UUID] = Field(
-        None,
-        description=(
-            "Optional identifier for white label OAuth integrations that use your own "
-            "branding and credentials. Only applicable for sources that support OAuth "
-            "authentication."
-        ),
-    )
     auth_provider: Optional[str] = Field(
         None,
         description=(
@@ -382,84 +374,6 @@ class SourceConnectionCreate(SourceConnectionCreateBase):
         return self
 
 
-class SourceConnectionCreateWithWhiteLabel(SourceConnectionCreateBase):
-    """Schema for creating a source connection through white label OAuth integrations."""
-
-    collection: Optional[str] = Field(
-        None,
-        description=(
-            "Readable ID of the collection where synced data will be stored. If not provided, "
-            "a new collection will be automatically created."
-        ),
-        examples=["finance-data-ab123", "customer-support-xy789"],
-    )
-    cron_schedule: Optional[str] = Field(
-        None,
-        description=(
-            "Cron expression for automatic data synchronization schedule. Uses standard cron "
-            "format: minute hour day month weekday."
-        ),
-        examples=["0 */6 * * *", "0 9 * * 1-5"],
-    )
-    auth_fields: Optional[ConfigValues] = Field(
-        None,
-        description=(
-            "Authentication credentials for the data source. For white label OAuth flows, these "
-            "are typically obtained automatically during the OAuth consent process."
-        ),
-    )
-    credential_id: Optional[UUID] = Field(
-        None,
-        description=(
-            "ID of an existing integration credential to use instead of creating a new one. "
-            "Useful when credentials have already been established through OAuth flows."
-        ),
-    )
-    sync_immediately: bool = Field(
-        True,
-        description=(
-            "Whether to start an initial data synchronization immediately after creating the "
-            "connection."
-        ),
-    )
-    white_label_id: Optional[UUID] = Field(
-        None,
-        description=(
-            "ID of the white label integration configuration. This is automatically set by the "
-            "white label OAuth endpoint and links the connection to your custom OAuth application."
-        ),
-    )
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "name": "Company Slack Workspace",
-                    "description": "Main Slack workspace for team communications",
-                    "short_name": "slack",
-                    "collection": "team-communications",
-                    "cron_schedule": "0 */2 * * *",
-                    "sync_immediately": True,
-                    "white_label_id": "123e4567-e89b-12d3-a456-426614174000",
-                }
-            ]
-        }
-    )
-
-    @field_validator("cron_schedule")
-    def validate_cron_schedule(cls, v: str) -> str:
-        """Validate cron schedule format using standard cron syntax."""
-        if v is None:
-            return None
-        cron_pattern = r"^(\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-6]|SUN|MON|TUE|WED|THU|FRI|SAT|[0-6]-[0-6]|[0-6]/[0-6]|[0-6],[0-6]|\*\/[0-6])$"  # noqa: E501
-        if not re.match(cron_pattern, v):
-            raise ValueError(
-                "Invalid cron schedule format. Use standard cron syntax: "
-                "minute hour day month weekday"
-            )
-        return v
-
-
 class SourceConnectionCreateWithCredential(SourceConnectionCreateBase):
     """Schema for creating a source connection with pre-existing credentials (internal use)."""
 
@@ -594,13 +508,6 @@ class SourceConnectionUpdate(BaseModel):
             "and should not be modified manually."
         ),
     )
-    white_label_id: Optional[UUID] = Field(
-        None,
-        description=(
-            "ID of the white label integration. Used for custom OAuth integrations "
-            "with your own branding."
-        ),
-    )
     auth_provider: Optional[UUID] = Field(
         None,
         description=(
@@ -684,13 +591,6 @@ class SourceConnectionInDBBase(SourceConnectionBase):
             "This creates the link between your data source and searchable content."
         ),
         examples=["finance-data-ab123", "customer-support-xy789"],
-    )
-    white_label_id: Optional[UUID] = Field(
-        None,
-        description=(
-            "Identifier for custom OAuth integrations. Only present for connections "
-            "created through white label OAuth flows."
-        ),
     )
     created_by_email: Optional[EmailStr] = Field(
         None,
@@ -835,7 +735,7 @@ class SourceConnection(SourceConnectionInDBBase):
                     "sync_id": "123e4567-e89b-12d3-a456-426614174000",
                     "organization_id": "org12345-6789-abcd-ef01-234567890abc",
                     "connection_id": "conn9876-5432-10fe-dcba-098765432100",
-                    "white_label_id": None,
+                    "": None,
                     "created_at": "2024-01-15T09:30:00Z",
                     "modified_at": "2024-01-15T14:22:15Z",
                     "created_by_email": "engineering@company.com",
@@ -1097,10 +997,6 @@ class SourceConnectionListItem(BaseModel):
         description="Readable ID of the collection where this connection syncs data.",
         examples=["finance-data-ab123", "customer-support-xy789"],
     )
-    white_label_id: Optional[UUID] = Field(
-        None,
-        description="Identifier for custom OAuth integrations, if applicable.",
-    )
 
     is_authenticated: bool = Field(
         ..., description="Indicates if the connection has valid, active credentials."
@@ -1154,7 +1050,7 @@ class SourceConnectionListItem(BaseModel):
                     "modified_at": "2024-01-15T14:22:15Z",
                     "sync_id": "123e4567-e89b-12d3-a456-426614174000",
                     "collection": "engineering-docs-ab123",
-                    "white_label_id": None,
+                    "": None,
                 }
             ]
         },

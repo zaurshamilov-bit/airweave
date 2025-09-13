@@ -44,7 +44,6 @@ interface SourceConnection {
     modified_at: string;
     connection_id?: string;
     collection: string;
-    white_label_id?: string;
     created_by_email: string;
     modified_by_email: string;
     auth_fields?: Record<string, any> | string;

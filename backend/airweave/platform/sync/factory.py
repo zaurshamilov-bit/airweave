@@ -153,7 +153,7 @@ class SyncFactory:
         Returns:
             SyncContext object with all required components
         """
-        # Get source connection data first to access white_label_id safely
+        # Get source connection data first to access safely
         source_connection_data = await cls._get_source_connection_data(db, sync, ctx)
 
         # Create a contextualized logger with all job metadata
@@ -170,18 +170,10 @@ class SyncFactory:
             },
         )
 
-        # Fetch white label if set in sync using pre-fetched white_label_id
-        white_label = None
-        if source_connection_data["white_label_id"]:
-            white_label = await crud.white_label.get(
-                db, id=source_connection_data["white_label_id"], ctx=ctx
-            )
-
         source = await cls._create_source_instance_with_data(
             db=db,
             source_connection_data=source_connection_data,
             ctx=ctx,
-            white_label=white_label,
             access_token=access_token,
             logger=logger,  # Pass the contextual logger
         )
@@ -272,7 +264,6 @@ class SyncFactory:
             ctx=ctx,
             logger=logger,
             guard_rail=guard_rail,
-            white_label=white_label,
             force_full_sync=force_full_sync,
         )
 
@@ -288,7 +279,6 @@ class SyncFactory:
         sync: schemas.Sync,
         logger: ContextualLogger,
         ctx: ApiContext,
-        white_label: Optional[schemas.WhiteLabel] = None,
         access_token: Optional[str] = None,
     ) -> BaseSource:
         """Create and configure the source instance based on authentication type."""
@@ -296,7 +286,7 @@ class SyncFactory:
         source_connection_data = await cls._get_source_connection_data(db, sync, ctx)
 
         return await cls._create_source_instance_with_data(
-            db, source_connection_data, ctx, white_label, access_token, logger
+            db, source_connection_data, ctx, access_token, logger
         )
 
     @classmethod
@@ -306,7 +296,6 @@ class SyncFactory:
         source_connection_data: dict,
         ctx: ApiContext,
         logger: ContextualLogger,
-        white_label: Optional[schemas.WhiteLabel] = None,
         access_token: Optional[str] = None,
     ) -> BaseSource:
         """Create and configure the source instance using pre-fetched connection data."""
@@ -330,7 +319,6 @@ class SyncFactory:
             db=db,
             source_connection_data=source_connection_data,
             ctx=ctx,
-            white_label=white_label,
             access_token=access_token,
             auth_provider_instance=auth_provider_instance,
         )
@@ -384,7 +372,6 @@ class SyncFactory:
                 source_connection_data=source_connection_data,
                 source_credentials=source_credentials,
                 ctx=ctx,
-                white_label=white_label,
                 logger=logger,
                 auth_provider_instance=auth_provider_instance,
             )
@@ -427,11 +414,6 @@ class SyncFactory:
         auth_config_class = source_model.auth_config_class
         # Convert SQLAlchemy values to clean Python types to avoid lazy loading
         short_name = str(source_connection_obj.short_name)  # From SourceConnection
-        white_label_id = (
-            UUID(str(source_connection_obj.white_label_id))
-            if source_connection_obj.white_label_id
-            else None
-        )
         connection_id = UUID(str(connection.id))
 
         # Check if this connection uses an auth provider
@@ -458,7 +440,6 @@ class SyncFactory:
             "source_model": source_model,
             "source_class": source_class,
             "config_fields": config_fields,  # From SourceConnection
-            "white_label_id": white_label_id,  # From SourceConnection
             "short_name": short_name,  # From SourceConnection
             "auth_config_class": auth_config_class,
             "connection_id": connection_id,
@@ -551,7 +532,6 @@ class SyncFactory:
         db: AsyncSession,
         source_connection_data: dict,
         ctx: ApiContext,
-        white_label: Optional[schemas.WhiteLabel],
         access_token: Optional[str],
         auth_provider_instance: Optional[Any] = None,
     ) -> any:
@@ -598,7 +578,6 @@ class SyncFactory:
                 decrypted_credential=decrypted_credential,
                 ctx=ctx,
                 connection_id=source_connection_data["connection_id"],
-                white_label=white_label,
             )
 
         # Simple credentials - no token extraction needed
@@ -647,7 +626,6 @@ class SyncFactory:
         decrypted_credential: dict,
         ctx: ApiContext,
         connection_id: UUID,
-        white_label: Optional[schemas.WhiteLabel],
     ) -> any:
         """Handle credentials that require auth configuration."""
         # Use pre-fetched auth_config_class to avoid SQLAlchemy lazy loading issues
@@ -666,7 +644,7 @@ class SyncFactory:
                 ctx,
                 connection_id,
                 decrypted_credential,
-                white_label,
+                None,
             )
             # Just use the access token
             return oauth2_response.access_token
@@ -680,7 +658,6 @@ class SyncFactory:
         source: BaseSource,
         source_connection_data: dict,
         ctx: ApiContext,
-        white_label: Optional[schemas.WhiteLabel],
         final_access_token: Optional[str],
         logger: ContextualLogger,
     ) -> None:
@@ -695,7 +672,7 @@ class SyncFactory:
                 source,
                 source_connection_data,
                 ctx,
-                white_label,
+                None,
                 final_access_token,
                 logger,
             )
@@ -708,7 +685,6 @@ class SyncFactory:
         source_connection_data: dict,
         source_credentials: any,
         ctx: ApiContext,
-        white_label: Optional[schemas.WhiteLabel],
         logger: ContextualLogger,
         auth_provider_instance: Optional[BaseAuthProvider] = None,
     ) -> None:
@@ -752,7 +728,6 @@ class SyncFactory:
                 source_connection=minimal_source_connection,
                 ctx=ctx,
                 initial_credentials=source_credentials,
-                white_label=white_label,
                 is_direct_injection=False,  # TokenManager will determine this internally
                 logger_instance=logger,
                 auth_provider_instance=auth_provider_instance,

@@ -110,7 +110,6 @@ from .source_connection import (
     SourceConnectionCreate,
     SourceConnectionCreateContinuous,
     SourceConnectionCreateWithCredential,
-    SourceConnectionCreateWithWhiteLabel,
     SourceConnectionInDBBase,
     SourceConnectionListItem,
     SourceConnectionMakeContinuous,
@@ -158,4 +157,3 @@ from .user import (
     UserUpdate,
     UserWithOrganizations,
 )
-from .white_label import WhiteLabel, WhiteLabelCreate, WhiteLabelInDBBase, WhiteLabelUpdate

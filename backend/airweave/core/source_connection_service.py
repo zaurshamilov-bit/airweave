@@ -299,7 +299,6 @@ class SourceConnectionService:
         db: AsyncSession,
         source_connection_in: Union[
             schemas.SourceConnectionCreate,
-            schemas.SourceConnectionCreateWithWhiteLabel,
             schemas.SourceConnectionCreateWithCredential,
         ],
         ctx: ApiContext,
@@ -438,7 +437,6 @@ class SourceConnectionService:
                 "connection_id": connection_id,
                 "readable_collection_id": collection.readable_id,
                 "sync_id": sync.id,
-                "white_label_id": core_attrs.get("white_label_id"),
                 "readable_auth_provider_id": core_attrs.get("auth_provider"),
                 "auth_provider_config": core_attrs.get("auth_provider_config"),
                 "is_authenticated": True,
@@ -771,7 +769,6 @@ class SourceConnectionService:
                 sync_id=sc.sync_id,
                 collection=sc.readable_collection_id,
                 is_authenticated=sc.is_authenticated,
-                white_label_id=sc.white_label_id,
             )
             for sc in source_connections
         ]
@@ -810,7 +807,6 @@ class SourceConnectionService:
                 status=sc.status,
                 collection=sc.readable_collection_id,
                 is_authenticated=sc.is_authenticated,
-                white_label_id=sc.white_label_id,
             )
             for sc in source_connections
         ]
@@ -1375,7 +1371,6 @@ class SourceConnectionService:
                 "connection_id": connection_id,
                 "readable_collection_id": collection.readable_id,
                 "sync_id": sync.id,
-                "white_label_id": None,
                 "readable_auth_provider_id": None,
                 "auth_provider_config": None,
                 "is_authenticated": True,
@@ -1462,8 +1457,6 @@ class SourceConnectionService:
                 "description": source_connection_in.description,
                 "short_name": source.short_name,
                 "is_authenticated": False,
-                # Safely get white_label_id if it exists, otherwise use None
-                "white_label_id": getattr(source_connection_in, "white_label_id", None),
                 "readable_collection_id": source_connection_in.collection,
             }
             sc_shell_obj = await crud.source_connection.create(
@@ -1679,7 +1672,6 @@ class SourceConnectionService:
                 "connection_id": connection.id,
                 "readable_collection_id": collection.readable_id,
                 "sync_id": sync.id,
-                "white_label_id": payload.get("white_label_id"),
                 "is_authenticated": True,
             }
             sc_row = await crud.source_connection.update(

@@ -230,9 +230,6 @@ const DashboardLayout = () => {
     location.pathname === "/",
     [location.pathname]);
 
-  const isWhiteLabelActive = useMemo(() =>
-    location.pathname.startsWith('/white-label'),
-    [location.pathname]);
 
   const isApiKeysActive = useMemo(() =>
     location.pathname === '/api-keys',
@@ -371,16 +368,6 @@ const DashboardLayout = () => {
             </NavItem>
           </div>
 
-          {/* White Label moved outside Configure section */}
-          <div>
-            <NavItem
-              to="/white-label"
-              isActive={isWhiteLabelActive}
-              icon={<Tag className="mr-2 h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />}
-            >
-              White Label
-            </NavItem>
-          </div>
         </div>
       </ScrollArea>
 
@@ -389,7 +376,7 @@ const DashboardLayout = () => {
         <UserProfileDropdown />
       </div>
     </div>
-  ), [resolvedTheme, handleCreateCollection, isDashboardActive, isApiKeysActive, isAuthProvidersActive, isWhiteLabelActive, currentOrganization?.id, collectionsAllowed, sourceConnectionsAllowed, entitiesAllowed, syncsAllowed, isCheckingUsage, usageCheckDetails]);
+  ), [resolvedTheme, handleCreateCollection, isDashboardActive, isApiKeysActive, isAuthProvidersActive, currentOrganization?.id, collectionsAllowed, sourceConnectionsAllowed, entitiesAllowed, syncsAllowed, isCheckingUsage, usageCheckDetails]);
 
   // Main component render
   return (

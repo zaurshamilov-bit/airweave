@@ -190,7 +190,6 @@ class OAuth2Service:
         ctx: ApiContext,
         connection_id: UUID,
         decrypted_credential: dict,
-        white_label: Optional[schemas.WhiteLabel] = None,
     ) -> OAuth2TokenResponse:
         """Refresh an access token using a refresh token.
 
@@ -203,8 +202,6 @@ class OAuth2Service:
             ctx (ApiContext): The API context.
             connection_id (UUID): The ID of the connection to refresh the token for.
             decrypted_credential (dict): The token and optional config fields
-            white_label (Optional[schemas.WhiteLabel]): White label configuration to use if
-                available.
 
         Returns:
         -------
@@ -230,11 +227,6 @@ class OAuth2Service:
             client_id, client_secret = await OAuth2Service._get_client_credentials(
                 ctx.logger, integration_config, None, decrypted_credential
             )
-
-            # Override with white label credentials if available
-            if white_label and white_label.source_short_name == integration_short_name:
-                client_id = white_label.client_id
-                client_secret = white_label.client_secret
 
             # Prepare request parameters
             headers, payload = OAuth2Service._prepare_token_request(
@@ -531,75 +523,6 @@ class OAuth2Service:
         return f"{app_url}/auth/callback"
 
     @staticmethod
-    async def generate_auth_url_for_whitelabel(
-        db: AsyncSession, white_label: schemas.WhiteLabel
-    ) -> str:
-        """Generate the OAuth2 authorization URL for a white label integration."""
-        source = await crud.source.get_by_short_name(
-            db=db, short_name=white_label.source_short_name
-        )
-
-        if not source:
-            raise NotFoundException(f"Source not found: {white_label.source_short_name}")
-
-        integration_config = await integration_settings.get_by_short_name(source.short_name)
-
-        if not integration_config:
-            raise NotFoundException("Integration not found")
-
-        # Use white_label's redirect_url instead of the default one
-        params = {
-            "response_type": "code",
-            "client_id": white_label.client_id,
-            "redirect_uri": white_label.redirect_url,
-            **(integration_config.additional_frontend_params or {}),
-        }
-
-        if integration_config.scope:
-            params["scope"] = integration_config.scope
-
-        auth_url = f"{integration_config.url}?{urlencode(params)}"
-        return auth_url
-
-    @staticmethod
-    async def exchange_code_for_whitelabel(
-        logger: ContextualLogger,
-        code: str,
-        white_label: schemas.WhiteLabel,
-    ) -> OAuth2TokenResponse:
-        """Exchange OAuth2 authorization code for tokens using white label credentials.
-
-        Args:
-        ----
-            logger: The logger to use.
-            code: The authorization code to exchange
-            white_label: The white label configuration to use
-
-        Returns:
-        -------
-            OAuth2TokenResponse: The response containing the access token and other token details.
-
-        Raises:
-        ------
-            NotFoundException: If the integration is not found
-        """
-        integration_config = await integration_settings.get_by_short_name(
-            white_label.source_short_name
-        )
-        if not integration_config:
-            raise NotFoundException(f"Integration {white_label.source_short_name} not found.")
-
-        logger.info(f"Exchanging code for white label: {white_label.source_short_name}")
-        logger.info(f"Client ID: {white_label.client_id}")
-        return await OAuth2Service._exchange_code(
-            code=code,
-            redirect_uri=white_label.redirect_url,
-            client_id=white_label.client_id,
-            client_secret=white_label.client_secret,
-            integration_config=integration_config,
-        )
-
-    @staticmethod
     async def _exchange_code(
         *,
         logger: ContextualLogger,
@@ -676,50 +599,6 @@ class OAuth2Service:
             ) from e
 
         return OAuth2TokenResponse(**response.json())
-
-    @staticmethod
-    async def create_oauth2_connection_for_whitelabel(
-        db: AsyncSession,
-        white_label: schemas.WhiteLabel,
-        code: str,
-        ctx: ApiContext,
-    ) -> schemas.Connection:
-        """Create a new OAuth2 connection using white label credentials.
-
-        Args:
-        ----
-            db: Database session
-            white_label: The white label configuration to use
-            code: The authorization code to exchange
-            ctx: The API context
-
-        Returns:
-        -------
-            schemas.Connection: The created connection
-        """
-        source = await crud.source.get_by_short_name(db, white_label.source_short_name)
-        if not source:
-            raise NotFoundException(f"Source not found: {white_label.source_short_name}")
-
-        settings = await integration_settings.get_by_short_name(source.short_name)
-        if not settings:
-            raise NotFoundException("Integration not found")
-
-        if not OAuth2Service._supports_oauth2(source.auth_type):
-            raise HTTPException(status_code=400, detail="Source does not support OAuth2")
-
-        # Exchange code for token using white label credentials
-        oauth2_response = await OAuth2Service.exchange_code_for_whitelabel(
-            ctx.logger, code=code, white_label=white_label
-        )
-
-        return await OAuth2Service._create_connection(
-            db=db,
-            source=source,
-            settings=settings,
-            oauth2_response=oauth2_response,
-            ctx=ctx,
-        )
 
     @staticmethod
     def _supports_oauth2(auth_type: AuthType) -> bool:

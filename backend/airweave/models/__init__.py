@@ -16,6 +16,7 @@ from .entity_relation import EntityRelation
 from .integration_credential import IntegrationCredential
 from .organization import Organization
 from .organization_billing import OrganizationBilling
+from .pg_field_catalog import PgFieldCatalogColumn, PgFieldCatalogTable
 from .redirect_session import RedirectSession
 from .source import Source
 from .source_connection import SourceConnection
@@ -27,7 +28,6 @@ from .transformer import Transformer
 from .usage import Usage
 from .user import User
 from .user_organization import UserOrganization
-from .white_label import WhiteLabel
 
 __all__ = [
     "APIKey",
@@ -38,8 +38,8 @@ __all__ = [
     "EntityCount",
     "Connection",
     "ConnectionInitSession",
-    "DagNode",
     "DagEdge",
+    "DagNode",
     "Destination",
     "EmbeddingModel",
     "EntityDefinition",
@@ -47,6 +47,8 @@ __all__ = [
     "IntegrationCredential",
     "Organization",
     "OrganizationBilling",
+    "PgFieldCatalogColumn",
+    "PgFieldCatalogTable",
     "RedirectSession",
     "Source",
     "SourceConnection",
@@ -59,5 +61,4 @@ __all__ = [
     "Usage",
     "User",
     "UserOrganization",
-    "WhiteLabel",
 ]
