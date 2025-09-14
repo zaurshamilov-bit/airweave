@@ -44,7 +44,7 @@ class CRUDConnectionInitSession(CRUDBaseOrganization[ConnectionInitSession, Base
         )
 
         # Ensure org id is set (defensive)
-        data.setdefault("organization_id", ctx.organization.id)
+        data["organization_id"] = ctx.organization.id
 
         allowed_cols = {c.name for c in self.model.__table__.columns}
         filtered = {k: v for k, v in data.items() if k in allowed_cols}
