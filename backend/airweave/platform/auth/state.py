@@ -20,7 +20,7 @@ import secrets
 import time
 from typing import Any, Dict
 
-STATE_SECRET = "replace-me-with-a-strong-secret"  # e.g. from settings/env
+from airweave.core.config import settings
 
 
 def _b64u(data: bytes) -> str:
@@ -56,7 +56,7 @@ def make_state(payload: Dict[str, Any]) -> str:
         "nonce": secrets.token_urlsafe(16),
     }
     body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
-    sig = hmac.new(STATE_SECRET.encode(), body, hashlib.sha256).digest()
+    sig = hmac.new(settings.STATE_SECRET.encode(), body, hashlib.sha256).digest()
     return f"{_b64u(body)}.{_b64u(sig)}"
 
 
@@ -85,7 +85,7 @@ def verify_state(token: str, max_age_seconds: int = 10 * 60) -> Dict[str, Any]:
         raise ValueError("Malformed state") from err
 
     body = _b64u_dec(body_b64)
-    expected = hmac.new(STATE_SECRET.encode(), body, hashlib.sha256).digest()
+    expected = hmac.new(settings.STATE_SECRET.encode(), body, hashlib.sha256).digest()
     got = _b64u_dec(sig_b64)
 
     if not hmac.compare_digest(expected, got):
