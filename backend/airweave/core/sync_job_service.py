@@ -102,6 +102,7 @@ class SyncJobService:
     ) -> None:
         """Update sync job status with provided details."""
         try:
+            sync_id_for_analytics = None
             async with get_db_context() as db:
                 db_sync_job = await crud.sync_job.get(db=db, id=sync_job_id, ctx=ctx)
 
@@ -140,17 +141,30 @@ class SyncJobService:
                         ctx=ctx,
                     )
 
+                # Capture sync_id before commit to avoid attribute expiration
+                try:
+                    sync_id_for_analytics = db_sync_job.sync_id
+                except Exception:
+                    sync_id_for_analytics = None
+
                 await db.commit()
                 logger.info(
                     f"Successfully updated sync job {sync_job_id} status to {db_status_value}"
                 )
 
-                # Track analytics for sync completion
-                if status == SyncJobStatus.COMPLETED and stats:
-                    await self._track_sync_completion(sync_job_id, db_sync_job.sync_id, stats, ctx)
-
         except Exception as e:
             logger.error(f"Failed to update sync job status: {e}")
+            return
+
+        # Track analytics for sync completion outside DB context to avoid session issues
+        if status == SyncJobStatus.COMPLETED and stats and sync_id_for_analytics is not None:
+            try:
+                await self._track_sync_completion(sync_job_id, sync_id_for_analytics, stats, ctx)
+            except Exception as e:
+                # Analytics failure should not be treated as status update failure
+                logger.warning(
+                    f"Failed to track sync completion analytics for job {sync_job_id}: {e}"
+                )
 
     async def _track_sync_completion(
         self, sync_job_id: UUID, sync_id: UUID, stats: SyncProgressUpdate, ctx: ApiContext

@@ -215,10 +215,6 @@ class EntityProcessor:
 
         from airweave.platform.entities._base import AirweaveSystemMetadata
 
-        # Check if entity needs lazy materialization
-        if hasattr(entity, "needs_materialization") and entity.needs_materialization:
-            await entity.materialize()
-
         # Create or update system metadata
         if entity.airweave_system_metadata is None:
             entity.airweave_system_metadata = AirweaveSystemMetadata()
