@@ -37,7 +37,6 @@ The search interface is exposed via REST API or MCP. When using MCP, Airweave es
     - [TypeScript/JavaScript](#typescriptjavascript)
   - [🔑 Key Features](#-key-features)
   - [🔧 Technology Stack](#-technology-stack)
-  - [🛣️ Roadmap](#️-roadmap)
   - [👥 Contributing](#-contributing)
   - [📄 License](#-license)
   - [🔗 Connect](#-connect)
@@ -143,10 +142,6 @@ await client.collections.create({
 - **Backend**: FastAPI (Python)
 - **Databases**: PostgreSQL (metadata), Qdrant (vectors)
 - **Deployment**: Docker Compose (dev), Kubernetes (prod)
-
-## 🛣️ Roadmap
-
-- TBD
 
 ## 👥 Contributing
 
