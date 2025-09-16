@@ -1,1057 +1,308 @@
-"""Source connection schemas.
+"""Refactored source connection schemas with cleaner abstractions and explicit auth paths."""
 
-A source connection is an authenticated and configured link to a data source that
-automatically syncs data into your collection, enabling unified search across multiple systems.
-"""
-
-import re
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional, Tuple, Union
+from enum import Enum
+from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from airweave.core.shared_models import SourceConnectionStatus, SyncJobStatus
 from airweave.platform.configs._base import ConfigValues
 
+# ===========================
+# Authentication Enumerations
+# ===========================
 
-class SourceConnectionBase(BaseModel):
-    """Base schema for source connections with common fields."""
 
-    name: str = Field(
-        ...,
-        description=(
-            "Human-readable display name for the source connection. This helps you identify "
-            "the connection in the UI and should clearly describe what data it connects to "
-            "(e.g., 'Production Stripe Account', 'Customer Support Database')."
-        ),
-        min_length=1,
-        max_length=64,
+class AuthenticationMethod(str, Enum):
+    """Explicit authentication methods for source connections."""
+
+    DIRECT = "direct"  # Direct credentials (API keys, passwords, etc.)
+    OAUTH_BROWSER = "oauth_browser"  # OAuth flow with browser redirect
+    OAUTH_TOKEN = "oauth_token"  # Direct OAuth token injection
+    OAUTH_BYOC = "oauth_byoc"  # Bring Your Own Client OAuth - MUST if set
+    AUTH_PROVIDER = "auth_provider"  # External auth provider (e.g., Composio)
+
+
+class OAuthType(str, Enum):
+    """OAuth token types for sources."""
+
+    ACCESS_ONLY = "access_only"  # Just access token, no refresh
+    WITH_REFRESH = "with_refresh"  # Access + refresh token
+    WITH_ROTATING_REFRESH = "with_rotating_refresh"  # Refresh token rotates on use
+
+
+# ===========================
+# Nested Response Objects
+# ===========================
+
+
+class LastSyncJob(BaseModel):
+    """Nested object for last sync job information."""
+
+    id: Optional[UUID] = None
+    status: Optional[SyncJobStatus] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
+
+    # Entity metrics
+    entities_processed: int = 0
+    entities_inserted: int = 0
+    entities_updated: int = 0
+    entities_deleted: int = 0
+    entities_failed: int = 0
+
+    # Error information
+    error: Optional[str] = None
+    error_details: Optional[Dict[str, Any]] = None
+
+    @property
+    def success_rate(self) -> Optional[float]:
+        """Calculate success rate of entity processing."""
+        if self.entities_processed == 0:
+            return None
+        return (self.entities_processed - self.entities_failed) / self.entities_processed
+
+
+class Schedule(BaseModel):
+    """Nested object for schedule information."""
+
+    cron_expression: Optional[str] = Field(None, description="Cron schedule expression")
+    next_run_at: Optional[datetime] = Field(None, description="Next scheduled run time")
+    is_continuous: bool = Field(False, description="Whether sync runs continuously")
+    cursor_field: Optional[str] = Field(None, description="Field used for incremental sync")
+    cursor_value: Optional[Any] = Field(None, description="Current cursor position")
+
+
+class AuthenticationInfo(BaseModel):
+    """Nested object for authentication information (when depth > 0)."""
+
+    method: AuthenticationMethod
+    is_authenticated: bool
+    authenticated_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+
+    # OAuth-specific
+    authentication_url: Optional[str] = Field(None, description="URL to complete OAuth flow")
+    authentication_url_expiry: Optional[datetime] = None
+
+    # Auth provider specific
+    auth_provider_id: Optional[str] = None
+    auth_provider_name: Optional[str] = None
+
+    # Redirect URL
+    redirect_url: Optional[str] = None
+
+
+class EntityState(BaseModel):
+    """Nested object for entity state information (when depth > 1)."""
+
+    entity_type: str
+    total_count: int
+    last_updated_at: Optional[datetime]
+    sync_status: Literal["pending", "syncing", "synced", "failed"]
+    error: Optional[str] = None
+
+
+# ===========================
+# Input Schemas
+# ===========================
+
+
+class SourceConnectionCreate(BaseModel):
+    """Unified creation schema with explicit authentication routing."""
+
+    # Required field
+    name: str = Field(..., min_length=4, max_length=42)
+    short_name: str = Field(..., description="Source type identifier")
+    authentication_method: AuthenticationMethod
+    collection: str = Field(..., description="Collection readable ID")
+
+    # Optional fields
+    description: Optional[str] = Field(None, max_length=255)
+    config_fields: Optional[ConfigValues] = None
+    cron_schedule: Optional[str] = None
+    sync_immediately: bool = Field(True, description="Run initial sync after creation")
+
+    # Authentication fields (exactly one group must be provided based on method)
+
+    # For DIRECT auth
+    auth_fields: Optional[ConfigValues] = Field(
+        None, description="Direct authentication credentials (for method=direct)"
     )
-    description: Optional[str] = Field(
+
+    # For OAUTH_BROWSER
+    redirect_url: Optional[str] = Field(
+        None, description="URL to redirect after OAuth completion (for method=oauth_browser)"
+    )
+
+    # For OAUTH_TOKEN
+    access_token: Optional[str] = Field(
         None,
-        description=(
-            "Optional additional context about the data this connection provides. Use this to "
-            "document the purpose, data types, or any special considerations for this connection."
-        ),
-        max_length=255,
-    )
-    config_fields: Optional[ConfigValues] = Field(
-        None,
-        description=(
-            "Source-specific configuration options that control data retrieval behavior. "
-            "These vary by source type and control how data is retrieved (e.g., database "
-            "queries, API filters, file paths). Check the documentation of a specific source "
-            "(for example [Github](https://docs.airweave.ai/docs/connectors/github)) to see "
-            "what is required."
-        ),
-        examples=[],
-    )
-    short_name: str = Field(
-        ...,
-        description=(
-            "Technical identifier of the source type (e.g., 'github', 'stripe', "
-            "'postgresql', 'slack'). This determines which connector Airweave uses to sync data."
-        ),
-        examples=["stripe", "postgresql", "slack"],
-    )
-    auth_provider: Optional[str] = Field(
-        None,
-        description=(
-            "Readable ID of the auth provider used to create this connection. "
-            "Present only if the connection was created through an auth provider."
-        ),
-    )
-    auth_provider_config: Optional[Dict[str, Any]] = Field(
-        None,
-        description=(
-            "Configuration used with the auth provider to create this connection. "
-            "Present only if the connection was created through an auth provider."
-        ),
-    )
-
-    class Config:
-        """Pydantic configuration."""
-
-        from_attributes = True
-
-
-class SourceConnectionCreateBase(BaseModel):
-    """Base schema for creating source connections without white label fields."""
-
-    name: str = Field(
-        ...,
-        description=(
-            "Human-readable name for the source connection. This helps you identify the "
-            "connection in the UI and should clearly describe what data it connects to."
-        ),
-        min_length=4,
-        max_length=42,
-        examples=["Production Stripe Account", "Main PostgreSQL DB", "Support Tickets API"],
-    )
-    description: Optional[str] = Field(
-        None,
-        description=(
-            "Optional detailed description of what this source connection provides. Use this to "
-            "document the purpose, data types, or any special considerations for this connection."
-        ),
-        examples=[
-            "Production Stripe account for payment and subscription data",
-            "Customer support tickets from Zendesk",
-        ],
-    )
-    config_fields: Optional[ConfigValues] = Field(
-        None,
-        description=(
-            "Source-specific configuration parameters required for data extraction. "
-            "These vary by source type and control how data is retrieved (e.g., database "
-            "queries, API filters, file paths). Check the documentation of a specific source "
-            "(for example [Github](https://docs.airweave.ai/docs/connectors/github)) to see "
-            "what is required."
-        ),
-    )
-    short_name: str = Field(
-        ...,
-        description=(
-            "Technical identifier of the source type that determines which connector to use for "
-            "data synchronization."
-        ),
-        examples=["stripe", "postgresql", "slack", "notion"],
-    )
-
-    class Config:
-        """Pydantic configuration."""
-
-        from_attributes = True
-
-    def map_to_core_and_auxiliary_attributes(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """Map the source connection create schema to core and auxiliary attributes.
-
-        This separates the attributes in the schema into two groups:
-        1. Core attributes: These are used to create the SourceConnection model directly
-        2. Auxiliary attributes: These are used in the creation process but aren't part of the model
-
-        Returns:
-            A tuple containing (core_attributes, auxiliary_attributes)
-        """
-        data = self.model_dump(exclude_unset=True)
-
-        # Handle auth provider config conversion (but keep auth_provider as-is for service logic)
-        if "auth_provider_config" in data:
-            # Convert ConfigValues to dict if needed
-            config = data["auth_provider_config"]
-            if hasattr(config, "model_dump"):
-                data["auth_provider_config"] = config.model_dump()
-
-        # Auxiliary attributes used in the creation process but not directly in the model
-        auxiliary_attrs = {
-            "auth_mode": data.pop("auth_mode", None),  # Auth mode is for routing, not stored
-            "auth_fields": data.pop("auth_fields", None),
-            "credential_id": data.pop("credential_id", None),
-            "cron_schedule": data.pop("cron_schedule", None),
-            "sync_immediately": data.pop("sync_immediately", True),
-            "client_id": data.pop("client_id", None),  # OAuth-specific, not stored
-            "client_secret": data.pop("client_secret", None),  # OAuth-specific, not stored
-            "redirect_url": data.pop("redirect_url", None),  # OAuth-specific, not stored
-            "token_inject": data.pop("token_inject", None),  # OAuth-specific, not stored
-        }
-
-        # Everything else is a core attribute for the SourceConnection model
-        core_attrs = data
-
-        return core_attrs, auxiliary_attrs
-
-
-# -----------------------------
-# Token injection for OAuth2
-# -----------------------------
-class TokenInject(BaseModel):
-    """Structured container for directly injecting OAuth2 tokens.
-
-    Used with auth_mode='oauth2' to create a connection without a browser redirect.
-    All fields are treated as write-only and are never returned by the API.
-    """
-
-    access_token: str = Field(
-        ...,
-        description="Bearer/OAuth2 access token",
+        description="OAuth access token (for method=oauth_token)",
         json_schema_extra={"writeOnly": True},
     )
     refresh_token: Optional[str] = Field(
         None,
-        description="OAuth2 refresh token",
+        description="OAuth refresh token (for method=oauth_token)",
         json_schema_extra={"writeOnly": True},
     )
-    token_type: Optional[str] = Field(None, description="e.g., 'Bearer'")
-    expires_at: Optional[datetime] = Field(None, description="Absolute expiry time (if known)")
-    extra: Optional[Dict[str, Any]] = Field(
-        None, description="Provider-specific token fields (optional)"
+    token_expires_at: Optional[datetime] = Field(
+        None, description="Token expiration time (for method=oauth_token)"
     )
 
-
-class SourceConnectionCreate(SourceConnectionCreateBase):
-    """Schema for creating a source connection through the public API.
-
-    The `auth_mode` field determines how authentication is handled:
-    - `oauth2`: Browser-based OAuth flow or direct token injection
-    - `direct_auth`: Direct credentials via auth_fields
-    - `external_provider`: Through an auth provider like Composio
-    """
-
-    collection: Optional[str] = Field(
-        None,
-        description=(
-            "Readable ID of the collection where synced data will be stored. If not provided, "
-            "a new collection will be automatically created."
-        ),
-    )
-    cron_schedule: Optional[str] = Field(
-        None,
-        description=(
-            "Cron expression for automatic data synchronization schedule. If not provided, "
-            "data will only sync when manually triggered. Use standard cron format: "
-            "minute hour day month weekday."
-        ),
-    )
-    sync_immediately: bool = Field(
-        True,
-        description=(
-            "Whether to start an initial data synchronization immediately after "
-            "creating the connection."
-        ),
-    )
-
-    # Authentication mode and fields
-    auth_mode: Literal["oauth2", "direct_auth", "external_provider"] = Field(
-        ...,
-        description=(
-            "Authentication mode that determines how credentials are provided:\n"
-            "- `oauth2`: OAuth2 flow (browser redirect or token injection)\n"
-            "- `direct_auth`: Direct credentials via auth_fields\n"
-            "- `external_provider`: Through an auth provider (e.g., Composio)"
-        ),
-    )
-
-    # Direct auth option
-    auth_fields: Optional[ConfigValues] = Field(
-        None,
-        description=(
-            "Authentication credentials for direct_auth mode. Required fields "
-            "vary by source type. Check the documentation of a specific source."
-        ),
-    )
-
-    # External provider option
-    auth_provider: Optional[str] = Field(
-        None,
-        description=(
-            "Readable ID of auth provider for external_provider mode. "
-            "See https://docs.airweave.ai/docs/auth-providers for details."
-        ),
-        examples=["composio"],
-    )
-    auth_provider_config: Optional[ConfigValues] = Field(
-        None,
-        description=("Configuration for the auth provider when using external_provider mode."),
-    )
-
-    # OAuth2 options
+    # For OAUTH_BYOC
     client_id: Optional[str] = Field(
         None,
-        description="OAuth client ID for BYOC (Bring Your Own Credentials) OAuth flows.",
+        description="OAuth client ID (for method=oauth_byoc)",
+        json_schema_extra={"writeOnly": True},
     )
     client_secret: Optional[str] = Field(
         None,
-        description="OAuth client secret for BYOC OAuth flows.",
-        json_schema_extra={"writeOnly": True},
-    )
-    redirect_url: Optional[str] = Field(
-        None,
-        description="Final redirect URL after OAuth completion (defaults to app URL).",
-    )
-    token_inject: Optional[TokenInject] = Field(
-        None,
-        description=(
-            "For oauth2 mode: directly provide tokens to skip browser redirect. "
-            "Creates connection immediately without OAuth flow."
-        ),
+        description="OAuth client secret (for method=oauth_byoc)",
         json_schema_extra={"writeOnly": True},
     )
 
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "name": "GitHub - Airweave Repository",
-                    "description": "Sync code and documentation from our main repository",
-                    "short_name": "github",
-                    "collection": "engineering-docs",
-                    "auth_mode": "direct_auth",
-                    "auth_fields": {
-                        "personal_access_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                        "repo_name": "airweave-ai/airweave",
-                    },
-                    "config_fields": {"branch": "main"},
-                    "cron_schedule": "0 */6 * * *",
-                    "sync_immediately": True,
-                },
-                {
-                    "name": "Slack Workspace",
-                    "description": "Connect to Slack via OAuth",
-                    "short_name": "slack",
-                    "auth_mode": "oauth2",
-                    "collection": "team-communications",
-                    "sync_immediately": True,
-                },
-                {
-                    "name": "GitHub via Composio",
-                    "description": "Using external auth provider",
-                    "short_name": "github",
-                    "auth_mode": "external_provider",
-                    "auth_provider": "composio",
-                    "auth_provider_config": {
-                        "auth_config_id": "github_oauth",
-                        "account_id": "user123",
-                    },
-                    "collection": "code-repos",
-                },
-            ]
-        }
+    # For AUTH_PROVIDER
+    auth_provider: Optional[str] = Field(
+        None, description="Auth provider readable ID (for method=auth_provider)"
     )
-
-    @field_validator("cron_schedule")
-    def validate_cron_schedule(cls, v: str) -> str:
-        """Validate cron schedule format using standard cron syntax."""
-        if v is None:
-            return None
-        cron_pattern = r"^(\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-6]|SUN|MON|TUE|WED|THU|FRI|SAT|[0-6]-[0-6]|[0-6]/[0-6]|[0-6],[0-6]|\*\/[0-6])$"  # noqa: E501
-        if not re.match(cron_pattern, v):
-            raise ValueError(
-                "Invalid cron schedule format. Use standard cron syntax: "
-                "minute hour day month weekday"
-            )
-        return v
-
-    def _has_oauth_fields(self) -> bool:
-        """Check if any OAuth fields are present."""
-        return bool(self.client_id or self.client_secret or self.token_inject)
-
-    def _has_provider_fields(self) -> bool:
-        """Check if any auth provider fields are present."""
-        return bool(self.auth_provider or self.auth_provider_config)
+    auth_provider_config: Optional[ConfigValues] = Field(
+        None, description="Auth provider configuration (for method=auth_provider)"
+    )
 
     @model_validator(mode="after")
-    def validate_auth_mode_fields(self):
-        """Validate that the correct fields are provided for each auth_mode."""
-        mode = self.auth_mode
-        validations = {
-            "direct_auth": [
-                (not self.auth_fields, "auth_fields is required for auth_mode='direct_auth'"),
-                (self._has_provider_fields(), "auth_provider/auth_provider_config not allowed"),
-                (self._has_oauth_fields(), "OAuth fields not allowed for auth_mode='direct_auth'"),
-            ],
-            "external_provider": [
-                (
-                    not self.auth_provider,
-                    "auth_provider is required for auth_mode='external_provider'",
-                ),
-                (self.auth_fields, "auth_fields not allowed for auth_mode='external_provider'"),
-                (
-                    self._has_oauth_fields(),
-                    "OAuth fields not allowed for auth_mode='external_provider'",
-                ),
-            ],
-            "oauth2": [
-                (self.auth_fields, "auth_fields not allowed for auth_mode='oauth2'"),
-                (self._has_provider_fields(), "auth_provider/auth_provider_config not allowed"),
-            ],
-        }
+    def validate_auth_fields_for_method(self):
+        """Ensure correct fields are provided for the authentication method."""
+        method = self.authentication_method
 
-        for condition, error in validations.get(mode, []):
-            if condition:
-                raise ValueError(error)
+        if method == AuthenticationMethod.DIRECT:
+            if not self.auth_fields:
+                raise ValueError("auth_fields required for direct authentication")
+
+        elif method == AuthenticationMethod.OAUTH_BROWSER:
+            # redirect_url is optional, will use default if not provided
+            pass
+
+        elif method == AuthenticationMethod.OAUTH_TOKEN:
+            if not self.access_token:
+                raise ValueError("access_token required for oauth_token method")
+
+        elif method == AuthenticationMethod.OAUTH_BYOC:
+            if not self.client_id or not self.client_secret:
+                raise ValueError("client_id and client_secret required for oauth_byoc method")
+
+        elif method == AuthenticationMethod.AUTH_PROVIDER:
+            if not self.auth_provider:
+                raise ValueError("auth_provider required for auth_provider method")
 
         return self
-
-
-class SourceConnectionCreateWithCredential(SourceConnectionCreateBase):
-    """Schema for creating a source connection with pre-existing credentials (internal use)."""
-
-    collection: Optional[str] = Field(
-        None,
-        description="Readable ID of the collection where synced data will be stored.",
-    )
-    cron_schedule: Optional[str] = Field(
-        None,
-        description="Cron expression for automatic data synchronization schedule.",
-    )
-    credential_id: UUID = Field(
-        ...,
-        description=(
-            "ID of the existing integration credential to use for authentication. "
-            "This credential must already exist and be associated with the same source type."
-        ),
-    )
-    config_fields: Optional[ConfigValues] = Field(
-        None,
-        description=(
-            "Source-specific configuration parameters required for data extraction. "
-            "These vary by source type and control how data is retrieved (e.g., database "
-            "queries, API filters, file paths). Check the documentation of a specific source "
-            "(for example [Github](https://docs.airweave.ai/docs/connectors/github)) to see "
-            "what is required."
-        ),
-    )
-    sync_immediately: bool = Field(
-        True,
-        description=(
-            "Whether to start an initial data synchronization immediately after creating "
-            "the connection."
-        ),
-    )
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "name": "OAuth Stripe Connection",
-                    "description": "Stripe connection created through OAuth flow",
-                    "short_name": "stripe",
-                    "collection": "finance-data",
-                    "credential_id": "123e4567-e89b-12d3-a456-426614174000",
-                    "config_fields": {"webhook_url": "https://my-app.com/webhooks"},
-                    "cron_schedule": "0 0,6,12,18 * * *",
-                    "sync_immediately": True,
-                }
-            ]
-        }
-    )
-
-    @field_validator("cron_schedule")
-    def validate_cron_schedule(cls, v: str) -> str:
-        """Validate cron schedule format using standard cron syntax."""
-        if v is None:
-            return None
-        cron_pattern = r"^(\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-6]|SUN|MON|TUE|WED|THU|FRI|SAT|[0-6]-[0-6]|[0-6]/[0-6]|[0-6],[0-6]|\*\/[0-6])$"  # noqa: E501
-        if not re.match(cron_pattern, v):
-            raise ValueError(
-                "Invalid cron schedule format. Use standard cron syntax: "
-                "minute hour day month weekday"
-            )
-        return v
-
-    def map_to_core_and_auxiliary_attributes(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """Map the source connection create schema to core and auxiliary attributes.
-
-        For credential-based creation, the credential_id is an auxiliary attribute.
-        """
-        data = self.model_dump(exclude_unset=True)
-
-        # Auxiliary attributes used in the creation process but not directly in the model
-        auxiliary_attrs = {
-            "auth_fields": None,  # No auth_fields for credential-based creation
-            "credential_id": data.pop("credential_id"),
-            "cron_schedule": data.pop("cron_schedule", None),
-            "sync_immediately": data.pop("sync_immediately", True),
-        }
-
-        # Everything else is a core attribute for the SourceConnection model
-        core_attrs = data
-
-        return core_attrs, auxiliary_attrs
 
 
 class SourceConnectionUpdate(BaseModel):
-    """Schema for updating an existing source connection."""
+    """Update schema for source connections."""
 
-    name: Optional[str] = Field(
-        None,
-        description="Updated name for the source connection. Must be between 4 and 42 characters.",
-        min_length=4,
-        max_length=42,
-        examples=["Updated Stripe Connection", "Main DB - Updated"],
-    )
-    description: Optional[str] = Field(
-        None,
-        description="Updated description of what this source connection provides.",
-        examples=["Updated: Now includes subscription events and customer data"],
-    )
-    auth_fields: Optional[Union[ConfigValues, str]] = Field(
-        None,
-        description=(
-            "Updated authentication credentials for the data source. "
-            "Provide new credentials to refresh or update authentication."
-        ),
-    )
-    config_fields: Optional[ConfigValues] = Field(
-        None,
-        description=(
-            "Source-specific configuration parameters required for data extraction. "
-            "These vary by source type and control how data is retrieved (e.g., database "
-            "queries, API filters, file paths). Check the documentation of a specific source "
-            "(for example [Github](https://docs.airweave.ai/docs/connectors/github)) to see "
-            "what is required."
-        ),
-    )
-    cron_schedule: Optional[str] = Field(
-        None,
-        description=(
-            "Updated cron expression for automatic synchronization schedule. "
-            "Set to null to disable automatic syncing."
-        ),
-        examples=["0 */4 * * *", "0 9,17 * * 1-5"],
-    )
-    connection_id: Optional[UUID] = Field(
-        None,
-        description=(
-            "Internal connection identifier. This is typically managed automatically "
-            "and should not be modified manually."
-        ),
-    )
-    auth_provider: Optional[UUID] = Field(
-        None,
-        description=(
-            "Updated auth provider readable ID. "
-            "Only relevant if the connection uses an auth provider."
-        ),
-    )
-    auth_provider_config: Optional[Dict[str, Any]] = Field(
-        None,
-        description=(
-            "Updated configuration for the auth provider. "
-            "Only relevant if the connection uses an auth provider."
-        ),
-    )
+    name: Optional[str] = Field(None, min_length=4, max_length=42)
+    description: Optional[str] = Field(None, max_length=255)
+    config_fields: Optional[ConfigValues] = None
+    cron_schedule: Optional[str] = None
 
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "name": "GitHub - Updated Engineering Documentation",
-                    "description": (
-                        "Updated: Now includes API documentation and code examples "
-                        "from multiple repositories"
-                    ),
-                    "auth_fields": {
-                        "personal_access_token": "ghp_yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
-                        "repo_name": "airweave-ai/engineering-docs",
-                    },
-                    "config_fields": {"branch": "develop"},
-                    "cron_schedule": "0 */4 * * *",
-                }
-            ]
-        }
-    )
-
-
-class SourceConnectionInDBBase(SourceConnectionBase):
-    """Base schema for source connections stored in the database with system fields."""
-
-    id: UUID = Field(
-        ...,
-        description=(
-            "Unique system identifier for this source connection. This UUID is generated "
-            "automatically and used for API operations."
-        ),
-    )
-    sync_id: Optional[UUID] = Field(
-        None,
-        description=(
-            "Internal identifier for the sync configuration associated with this source "
-            "connection. Managed automatically by the system."
-        ),
-    )
-    organization_id: UUID = Field(
-        ...,
-        description=(
-            "Identifier of the organization that owns this source connection. "
-            "Source connections are isolated per organization."
-        ),
-    )
-    created_at: datetime = Field(
-        ...,
-        description="Timestamp when the source connection was created (ISO 8601 format).",
-    )
-    modified_at: datetime = Field(
-        ...,
-        description="Timestamp when the source connection was last modified (ISO 8601 format).",
-    )
-    connection_id: Optional[UUID] = Field(
-        None,
-        description=(
-            "Internal identifier for the underlying connection object that manages "
-            "authentication and configuration."
-        ),
-        exclude=True,  # Internal field, not exposed in API
-    )
-    collection: str = Field(
-        ...,
-        description=(
-            "Readable ID of the collection where this source connection syncs its data. "
-            "This creates the link between your data source and searchable content."
-        ),
-        examples=["finance-data-ab123", "customer-support-xy789"],
-    )
-    created_by_email: Optional[EmailStr] = Field(
-        None,
-        description="Email address of the user who created this source connection.",
-    )
-    modified_by_email: Optional[EmailStr] = Field(
-        None,
-        description="Email address of the user who last modified this source connection.",
-    )
-
-    is_authenticated: bool = Field(
-        False,
-        description=(
-            "Indicates if the connection has been successfully authenticated. "
-            "Will be 'false' for connections pending completion of an OAuth flow."
-        ),
-    )
-
-    connection_init_session_id: Optional[UUID] = Field(
-        None,
-        description="The internal ID of the initiation session used to create this connection.",
-        exclude=True,  # Internal field, not exposed in API
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def map_collection_field(cls, data: Any) -> Any:
-        """Map readable_collection_id to collection before validation."""
-        if isinstance(data, dict):
-            # If readable_collection_id exists and collection doesn't, map it
-            if "readable_collection_id" in data and "collection" not in data:
-                data["collection"] = data["readable_collection_id"]
-        elif hasattr(data, "readable_collection_id"):
-            # If it's an ORM object, we need to convert to dict first
-            # Extract all attributes we need
-            data_dict = {}
-            for field in cls.model_fields:
-                if hasattr(data, field):
-                    data_dict[field] = getattr(data, field)
-
-            data_dict["collection"] = data.readable_collection_id
-
-            return data_dict
-        return data
-
-    class Config:
-        """Pydantic configuration."""
-
-        from_attributes = True
-
-
-class SourceConnection(SourceConnectionInDBBase):
-    """Complete source connection representation returned by the API."""
-
-    auth_fields: Optional[Union[ConfigValues, str]] = Field(
-        None,
-        description=(
-            "Authentication credentials for the data source. "
-            "Returns '********' by default for security."
-        ),
-    )
-    status: Optional[SourceConnectionStatus] = Field(
-        None,
-        description="Current operational status of the source connection:<br/>"
-        "• **active**: Connection is healthy and ready for data synchronization<br/>"
-        "• **in_progress**: Currently syncing data from the source<br/>"
-        "• **failing**: Recent sync attempts have failed and require attention",
-    )
-    last_sync_job_status: Optional[SyncJobStatus] = Field(
-        None,
-        description="Status of the most recent data synchronization job:<br/>"
-        "• **completed**: Last sync finished successfully<br/>"
-        "• **failed**: Last sync encountered errors<br/>"
-        "• **in_progress**: Currently running a sync job<br/>"
-        "• **pending**: Sync job is queued and waiting to start",
-    )
-    last_sync_job_id: Optional[UUID] = Field(
-        None,
-        description=(
-            "Unique identifier of the most recent sync job. Use this to track sync progress "
-            "or retrieve detailed job information."
-        ),
-    )
-    last_sync_job_started_at: Optional[datetime] = Field(
-        None,
-        description="Timestamp when the most recent sync job started (ISO 8601 format).",
-    )
-    last_sync_job_completed_at: Optional[datetime] = Field(
-        None,
-        description=(
-            "Timestamp when the most recent sync job completed (ISO 8601 format). "
-            "Null if the job is still running or failed."
-        ),
-    )
-    last_sync_job_error: Optional[str] = Field(
-        None,
-        description=(
-            "Error message from the most recent sync job if it failed. "
-            "Use this to diagnose and resolve sync issues."
-        ),
-    )
-    cron_schedule: Optional[str] = Field(
-        None,
-        description=(
-            "Cron expression defining when automatic data synchronization occurs. "
-            "Null if automatic syncing is disabled and syncs must be triggered manually."
-        ),
-        examples=["0 */6 * * *", "0 9,17 * * 1-5"],
-    )
-    next_scheduled_run: Optional[datetime] = Field(
-        None,
-        description=(
-            "Timestamp when the next automatic sync is scheduled to run (ISO 8601 format). "
-            "Null if no automatic schedule is configured."
-        ),
-    )
-    authentication_url: Optional[str] = Field(
-        None,
-        description=(
-            "OAuth authorization URL to visit if the connection requires authentication. "
-            "Only present for OAuth sources that need user authorization."
-        ),
-    )
-    authentication_url_expiry: Optional[datetime] = Field(
-        None,
-        description="UTC timestamp when the authentication URL will expire (ISO 8601 format).",
-    )
-
-    model_config = ConfigDict(
-        from_attributes=True,
-        json_schema_extra={
-            "examples": [
-                {
-                    "id": "550e8400-e29b-41d4-a716-446655440000",
-                    "name": "GitHub - Engineering Documentation",
-                    "description": (
-                        "Sync technical documentation and code from our engineering repos"
-                    ),
-                    "short_name": "github",
-                    "collection": "engineering-docs-ab123",
-                    "status": "active",
-                    "sync_id": "123e4567-e89b-12d3-a456-426614174000",
-                    "organization_id": "org12345-6789-abcd-ef01-234567890abc",
-                    "connection_id": "conn9876-5432-10fe-dcba-098765432100",
-                    "": None,
-                    "created_at": "2024-01-15T09:30:00Z",
-                    "modified_at": "2024-01-15T14:22:15Z",
-                    "created_by_email": "engineering@company.com",
-                    "modified_by_email": "engineering@company.com",
-                    "auth_fields": {
-                        "personal_access_token": "********",
-                        "repo_name": "airweave-ai/docs",
-                    },
-                    "config_fields": {"branch": "main"},
-                    "last_sync_job_status": "completed",
-                    "last_sync_job_id": "987fcdeb-51a2-43d7-8f3e-1234567890ab",
-                    "last_sync_job_started_at": "2024-01-15T14:00:00Z",
-                    "last_sync_job_completed_at": "2024-01-15T14:05:22Z",
-                    "last_sync_job_error": None,
-                    "cron_schedule": "0 */6 * * *",
-                    "next_scheduled_run": "2024-01-16T02:00:00Z",
-                    "authentication_url": "https://app.airweave.ai/source-connections/authorize/1234567890",
-                    "authentication_url_expiry": "2024-01-16T02:00:00Z",
-                }
-            ]
-        },
-    )
-
-    @classmethod
-    def from_orm_with_collection_mapping(cls, obj):
-        """Create a SourceConnection from a source_connection ORM model."""
-        # Convert to dict and filter out SQLAlchemy internal attributes
-        obj_dict = {k: v for k, v in obj.__dict__.items() if not k.startswith("_")}
-
-        # Map the readable_collection_id to collection if needed
-        if hasattr(obj, "readable_collection_id"):
-            obj_dict["collection"] = obj.readable_collection_id
-
-        # Map the readable_auth_provider_id to auth_provider if needed
-        if hasattr(obj, "readable_auth_provider_id"):
-            obj_dict["auth_provider"] = obj.readable_auth_provider_id
-
-        return cls.model_validate(obj_dict)
-
-
-class SourceConnectionCreateContinuous(SourceConnectionCreateBase):
-    """Schema for creating a continuously syncing source connection (BETA).
-
-    This endpoint creates a source connection that stays continuously in sync with your
-    data source. Your data will be automatically synchronized every minute, ensuring it's
-    always up-to-date without any manual intervention or sync management.
-    """
-
-    collection: Optional[str] = Field(
-        None,
-        description=(
-            "Readable ID of the collection where synced data will be stored. If not provided, "
-            "a new collection will be automatically created."
-        ),
-    )
-    enable_daily_cleanup: bool = Field(
-        True,
-        description=(
-            "Whether to create a daily forced full sync with entity cleanup. "
-            "Defaults to true for resilience; set to false to rely solely on incremental changes."
-        ),
-    )
+    # Re-authentication (only for certain methods)
     auth_fields: Optional[ConfigValues] = Field(
-        None,
-        description=(
-            "Authentication credentials required to access the data source. The required fields "
-            "vary by source type. Check the documentation of a specific source (for example "
-            "[Github](https://docs.airweave.ai/docs/connectors/github)) to see what is required."
-        ),
-    )
-    auth_provider: Optional[str] = Field(
-        None,
-        description=(
-            "Unique readable ID of a connected auth provider to use for authentication instead of "
-            "providing auth_fields directly."
-        ),
-        examples=["composio"],
-    )
-    auth_provider_config: Optional[ConfigValues] = Field(
-        None,
-        description=("Configuration for the auth provider when using auth_provider field."),
-    )
-    cursor_field: Optional[str] = Field(
-        None,
-        description=(
-            "Specify which field in the entity should be used as the cursor for incremental syncs. "
-            "This field must contain a timestamp or incrementing value that indicates when records "
-            "were last modified. Required for sources without predefined entities "
-            "(e.g., databases). "
-            "If not specified, the source's default cursor field will be used if available."
-        ),
-        examples=["updated_at", "modified_timestamp", "last_modified", "created_at"],
-    )
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "name": "GitHub - Live Repository Mirror",
-                    "description": "Continuously sync our GitHub repository",
-                    "short_name": "github",
-                    "collection": "engineering-docs",
-                    "auth_fields": {
-                        "personal_access_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                        "repo_name": "airweave-ai/airweave",
-                    },
-                    "config_fields": {"branch": "main"},
-                },
-                {
-                    "name": "Database - Live Sync",
-                    "description": "Keep database records continuously synchronized",
-                    "short_name": "postgresql",
-                    "collection": "customer-data",
-                    "auth_fields": {
-                        "host": "localhost",
-                        "port": 5432,
-                        "database": "myapp",
-                        "user": "postgres",
-                        "password": "secret",
-                        "schema": "public",
-                        "tables": "users,orders",
-                    },
-                    "cursor_field": "updated_at",
-                },
-            ]
-        }
-    )
-
-    def map_to_core_and_auxiliary_attributes(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """Map the source connection create schema to core and auxiliary attributes."""
-        data = self.model_dump(exclude_unset=True)
-
-        # Handle auth provider config conversion
-        if "auth_provider_config" in data:
-            config = data["auth_provider_config"]
-            if hasattr(config, "model_dump"):
-                data["auth_provider_config"] = config.model_dump()
-
-        # Extract cursor_field - DON'T store in config_fields
-        cursor_field = data.pop("cursor_field", None)
-        enable_daily_cleanup = data.pop("enable_daily_cleanup", True)
-
-        # Auxiliary attributes for the creation process
-        auxiliary_attrs = {
-            "auth_fields": data.pop("auth_fields", None),
-            "credential_id": data.pop("credential_id", None),
-            "cron_schedule": None,  # No regular cron schedule
-            "sync_immediately": True,  # Always sync immediately
-            "minute_level_cron": "*/1 * * * *",  # Default to every minute
-            "auto_start_schedule": True,  # Always auto-start
-            "cursor_field": cursor_field,  # Pass cursor field separately
-            "enable_daily_cleanup": enable_daily_cleanup,
-        }
-
-        # Core attributes for the SourceConnection model
-        core_attrs = data
-
-        return core_attrs, auxiliary_attrs
-
-
-class SourceConnectionContinuousResponse(SourceConnection):
-    """Response schema for continuous source connection creation."""
-
-    minute_level_schedule: Optional[Dict[str, Any]] = Field(
-        None,
-        description=(
-            "Information about the created minute-level schedule including schedule ID, "
-            "cron expression, and current status."
-        ),
-        examples=[
-            {
-                "schedule_id": "sync_550e8400-e29b-41d4_schedule",
-                "cron_expression": "*/5 * * * *",
-                "status": "active",
-                "next_run": "2024-01-15T14:05:00Z",
-            }
-        ],
+        None, description="Update authentication credentials (direct auth only)"
     )
 
 
-class SourceConnectionMakeContinuous(BaseModel):
-    """Schema for converting an existing source connection to continuous (BETA)."""
+class SourceConnectionValidate(BaseModel):
+    """Schema for validating source connection credentials."""
 
-    cursor_field: Optional[str] = Field(
-        None,
-        description=(
-            "Specify which field in the entity should be used as the cursor for incremental syncs. "
-            "If omitted, the source's default cursor field will be used if available. "
-            "Required for sources without a default (e.g., PostgreSQL)."
-        ),
-        examples=["updated_at", "modified_timestamp", "last_modified"],
-    )
-    enable_daily_cleanup: bool = Field(
-        True,
-        description=(
-            "Whether to create a daily forced full sync with entity cleanup. "
-            "This helps remove orphaned entities that incremental syncs cannot detect."
-        ),
-    )
-    run_initial_sync: bool = Field(
-        True,
-        description=(
-            "Whether to immediately trigger a sync job after enabling continuous mode. "
-            "If no cursor data exists yet, this initial run will perform a full sync."
-        ),
-    )
+    short_name: str
+    authentication_method: AuthenticationMethod
+    auth_fields: Optional[ConfigValues] = None
+    access_token: Optional[str] = Field(None, json_schema_extra={"writeOnly": True})
+    config_fields: Optional[ConfigValues] = None
 
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "cursor_field": "updated_at",
-                    "enable_daily_cleanup": True,
-                    "run_initial_sync": True,
-                }
-            ]
-        }
-    )
+
+# ===========================
+# Output Schemas
+# ===========================
 
 
 class SourceConnectionListItem(BaseModel):
-    """Simplified source connection representation for list operations."""
+    """Minimal source connection for list views."""
 
-    id: UUID = Field(
-        ...,
-        description="Unique identifier for the source connection.",
-    )
-    name: str = Field(
-        ...,
-        description="Human-readable name of the source connection.",
-    )
-    description: Optional[str] = Field(
-        None,
-        description="Brief description of what data this connection provides.",
-    )
-    short_name: str = Field(
-        ...,
-        description="Technical identifier of the source type (e.g., 'stripe', 'postgresql').",
-    )
-    status: SourceConnectionStatus = Field(
-        ...,
-        description="Current operational status: active, in_progress, or failing.",
-    )
-    created_at: datetime = Field(
-        ...,
-        description="When the source connection was created (ISO 8601 format).",
-    )
-    modified_at: datetime = Field(
-        ...,
-        description="When the source connection was last modified (ISO 8601 format).",
-    )
-    sync_id: Optional[UUID] = Field(
-        ...,
-        description="Internal identifier for the sync configuration. "
-        "Will be null for pending connections.",
-    )
-    collection: str = Field(
-        ...,
-        description="Readable ID of the collection where this connection syncs data.",
-        examples=["finance-data-ab123", "customer-support-xy789"],
+    id: UUID
+    name: str
+    short_name: str
+    collection: str
+    status: SourceConnectionStatus
+    is_authenticated: bool
+    created_at: datetime
+    modified_at: datetime
+
+    # Summary fields
+    last_sync_at: Optional[datetime] = None
+    next_sync_at: Optional[datetime] = None
+    entities_count: int = 0
+
+
+class SourceConnection(BaseModel):
+    """Source connection with optional depth expansion."""
+
+    # Core fields (always present)
+    id: UUID
+    name: str
+    description: Optional[str]
+    short_name: str
+    collection: str
+    status: SourceConnectionStatus
+    created_at: datetime
+    modified_at: datetime
+
+    # Authentication status (always present)
+    is_authenticated: bool
+    auth_method: Optional[AuthenticationMethod] = Field(
+        None, description="Authentication method used"
     )
 
-    is_authenticated: bool = Field(
-        ..., description="Indicates if the connection has valid, active credentials."
-    )
+    # Config (depth 0+)
+    config_fields: Optional[ConfigValues] = None
 
-    connection_init_session_id: Optional[UUID] = Field(
-        None,
-        description="Internal ID of the session that initiated this connection, if applicable.",
-    )
+    # Schedule info (depth 0+)
+    schedule: Optional[Schedule] = None
 
-    @model_validator(mode="after")
-    def map_collection_readable_id(self) -> "SourceConnectionListItem":
-        """Map collection_readable_id to collection if present."""
-        # This is handled in the before mode validator below
-        return self
+    # Last sync job (depth 0+)
+    last_sync_job: Optional[LastSyncJob] = None
 
-    @model_validator(mode="before")
-    @classmethod
-    def map_collection_field(cls, data: Any) -> Any:
-        """Map collection_readable_id to collection before validation."""
-        if isinstance(data, dict):
-            # If collection_readable_id exists and collection doesn't, map it
-            if "collection_readable_id" in data and "collection" not in data:
-                data["collection"] = data["collection_readable_id"]
-        elif hasattr(data, "readable_collection_id"):
-            # If it's an ORM object, we need to convert to dict first
-            # Extract all attributes we need
-            data_dict = {}
-            for field in cls.model_fields:
-                if hasattr(data, field):
-                    data_dict[field] = getattr(data, field)
+    # Expanded fields (depth 1+)
+    authentication: Optional[AuthenticationInfo] = None
 
-            data_dict["collection"] = data.readable_collection_id
+    # Entity states (depth 2+)
+    entity_states: Optional[List[EntityState]] = None
 
-            return data_dict
-        return data
+    # Never expose these
+    model_config = {"exclude": {"sync_id", "connection_id", "credential_id"}}
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        json_schema_extra={
-            "examples": [
-                {
-                    "id": "550e8400-e29b-41d4-a716-446655440000",
-                    "name": "GitHub - Engineering Documentation",
-                    "description": (
-                        "Sync technical documentation and code from our engineering repos"
-                    ),
-                    "short_name": "github",
-                    "status": "active",
-                    "created_at": "2024-01-15T09:30:00Z",
-                    "modified_at": "2024-01-15T14:22:15Z",
-                    "sync_id": "123e4567-e89b-12d3-a456-426614174000",
-                    "collection": "engineering-docs-ab123",
-                    "": None,
-                }
-            ]
-        },
-    )
+
+class SourceConnectionJob(BaseModel):
+    """Individual sync job for a source connection."""
+
+    id: UUID
+    source_connection_id: UUID
+    status: SyncJobStatus
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
+
+    # Metrics
+    entities_processed: Optional[int] = 0
+    entities_inserted: Optional[int] = 0
+    entities_updated: Optional[int] = 0
+    entities_deleted: Optional[int] = 0
+    entities_failed: Optional[int] = 0
+
+    # Error info
+    error: Optional[str] = None
+    error_details: Optional[Dict[str, Any]] = None

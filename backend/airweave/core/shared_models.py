@@ -16,7 +16,7 @@ class SyncJobStatus(str, Enum):
 
     CREATED = "created"
     PENDING = "pending"
-    IN_PROGRESS = "in_progress"
+    RUNNING = "running"  # Changed from IN_PROGRESS for consistency
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -40,13 +40,13 @@ class SyncStatus(str, Enum):
 
 
 class SourceConnectionStatus(str, Enum):
-    """Source connection status enum."""
+    """Source connection status enum - represents overall connection state."""
 
-    ACTIVE = "active"
-    NOT_YET_AUTHORIZED = "not_yet_authorized"  # connection exists but needs authentication
-    PENDING = "pending"  # For shells pending execution
-    IN_PROGRESS = "in_progress"
-    FAILING = "failing"
+    ACTIVE = "active"  # Authenticated and ready to sync
+    PENDING_AUTH = "pending_auth"  # Awaiting authentication (OAuth flow, etc.)
+    SYNCING = "syncing"  # Currently running a sync job
+    ERROR = "error"  # Last sync failed or auth error
+    INACTIVE = "inactive"  # Manually disabled
 
 
 class CollectionStatus(str, Enum):

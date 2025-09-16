@@ -14,7 +14,6 @@ import tenacity
 from tenacity import stop_after_attempt, wait_exponential
 
 from airweave.core.logging import logger
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import BaseEntity, Breadcrumb
 from airweave.platform.entities.jira import (
@@ -22,13 +21,19 @@ from airweave.platform.entities.jira import (
     JiraProjectEntity,
 )
 from airweave.platform.sources._base import BaseSource
+from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 
 
 @source(
     name="Jira",
     short_name="jira",
-    auth_type=AuthType.oauth2_with_refresh,
-    auth_config_class="JiraAuthConfig",
+    auth_methods=[
+        AuthenticationMethod.OAUTH_BROWSER,
+        AuthenticationMethod.OAUTH_TOKEN,
+        AuthenticationMethod.AUTH_PROVIDER,
+    ],
+    oauth_type=OAuthType.WITH_REFRESH,
+    auth_config_class=None,
     config_class="JiraConfig",
     labels=["Project Management", "Issue Tracking"],
 )

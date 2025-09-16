@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional
 import httpx
 from fastapi import HTTPException
 
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.auth_providers._base import BaseAuthProvider
 from airweave.platform.decorators import auth_provider
 
@@ -13,7 +12,6 @@ from airweave.platform.decorators import auth_provider
 @auth_provider(
     name="Composio",
     short_name="composio",
-    auth_type=AuthType.api_key,
     auth_config_class="ComposioAuthConfig",
     config_class="ComposioConfig",
 )

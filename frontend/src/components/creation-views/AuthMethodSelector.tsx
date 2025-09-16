@@ -8,14 +8,12 @@ interface AuthMethodSelectorProps {
   selectedMethod: AuthMode | undefined;
   onMethodChange: (method: AuthMode) => void;
   availableAuthMethods: AuthMode[];
-  hasAuthProviders?: boolean;
 }
 
 export const AuthMethodSelector: React.FC<AuthMethodSelectorProps> = ({
   selectedMethod,
   onMethodChange,
   availableAuthMethods,
-  hasAuthProviders = false,
 }) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
@@ -53,7 +51,6 @@ export const AuthMethodSelector: React.FC<AuthMethodSelectorProps> = ({
       >
         {availableAuthMethods.map((method) => {
           const info = methodInfo[method];
-          const isDisabled = method === 'external_provider' && !hasAuthProviders;
 
           return (
             <label
@@ -66,13 +63,11 @@ export const AuthMethodSelector: React.FC<AuthMethodSelectorProps> = ({
                     : "border-blue-500/50 bg-blue-50/50"
                   : isDark
                     ? "border-gray-800 hover:border-gray-700 bg-gray-900/30"
-                    : "border-gray-200 hover:border-gray-300 bg-white",
-                isDisabled && "opacity-50 cursor-not-allowed"
+                    : "border-gray-200 hover:border-gray-300 bg-white"
               )}
             >
               <RadioGroupItem
                 value={method}
-                disabled={isDisabled}
                 className="mt-0.5"
               />
               <div className={cn(
@@ -80,7 +75,6 @@ export const AuthMethodSelector: React.FC<AuthMethodSelectorProps> = ({
                 isDark ? "text-gray-200" : "text-gray-700"
               )}>
                 {info.label}
-                {isDisabled && <span className="text-xs text-gray-500 ml-1">(No providers connected)</span>}
               </div>
             </label>
           );

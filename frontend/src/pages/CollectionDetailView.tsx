@@ -635,38 +635,40 @@ const Collections = () => {
         });
     }, [selectedConnection?.id]);
 
-    // Get connection status indicator based on entity state
+    // Get connection status indicator based on connection state
     const getConnectionStatusIndicator = (connection: SourceConnection) => {
-        const entityState = entityStateStore.getEntityState(connection.id);
-
+        // Use the connection's status directly from the API response
         let colorClass = "bg-gray-400";
         let status = "unknown";
         let isAnimated = false;
 
-        // Check for NOT_YET_AUTHORIZED status first
-        if (connection.status === 'not_yet_authorized' || !connection.is_authenticated) {
-            colorClass = "bg-cyan-500";
-            status = "Authentication required";
-        } else if (entityState) {
-            if (entityState.syncStatus === 'pending') {
-                colorClass = "bg-blue-500";  // Changed from yellow to blue
-                status = "Sync pending";
-                isAnimated = true;
-            } else if (entityState.syncStatus === 'in_progress') {
+        // Map the backend SourceConnectionStatus enum values
+        switch (connection.status) {
+            case 'pending_auth':
+                colorClass = "bg-cyan-500";
+                status = "Authentication required";
+                break;
+            case 'syncing':
                 colorClass = "bg-blue-500";
                 status = "Syncing";
                 isAnimated = true;
-            } else if (entityState.syncStatus === 'failed') {
+                break;
+            case 'error':
                 colorClass = "bg-red-500";
                 status = "Sync failed";
-            } else if (entityState.syncStatus === 'completed') {
+                break;
+            case 'active':
                 colorClass = "bg-green-500";
-                status = "Synced";
-            }
-        } else if (connection.is_authenticated) {
-            // Authenticated but no sync state yet
-            colorClass = "bg-gray-400";
-            status = "Ready to sync";
+                status = "Active";
+                break;
+            case 'inactive':
+                colorClass = "bg-gray-400";
+                status = "Inactive";
+                break;
+            default:
+                // Fallback for unknown status
+                colorClass = "bg-gray-400";
+                status = "Unknown";
         }
 
         return (

@@ -8,11 +8,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airweave import crud
 from airweave.api.context import ApiContext
 from airweave.core.exceptions import NotFoundException
 from airweave.core.shared_models import CollectionStatus, SourceConnectionStatus
 from airweave.crud._base_organization import CRUDBaseOrganization
-from airweave.crud.crud_source_connection import source_connection as crud_source_connection
 from airweave.models.collection import Collection
 from airweave.schemas.collection import CollectionCreate, CollectionUpdate
 
@@ -41,7 +41,7 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
             The computed ephemeral status
         """
         # Get all source connections for this collection
-        source_connections = await crud_source_connection.get_for_collection(
+        source_connections = await crud.source_connection.get_for_collection(
             db, readable_collection_id=collection.readable_id, ctx=ctx
         )
 
@@ -60,9 +60,9 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
         in_progress_count = 0
 
         for sc in active_connections:
-            if sc.status == SourceConnectionStatus.FAILING:
+            if sc.status == SourceConnectionStatus.ERROR:
                 failing_count += 1
-            elif sc.status == SourceConnectionStatus.IN_PROGRESS:
+            elif sc.status == SourceConnectionStatus.SYNCING:
                 in_progress_count += 1
 
         # If any active connections are in progress, the collection is active

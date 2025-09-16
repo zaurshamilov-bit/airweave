@@ -21,9 +21,11 @@ interface SourceConfigViewProps {
 interface SourceDetails {
   short_name: string;
   name: string;
-  auth_type?: string;
-  auth_config_class?: string;
-  auth_fields?: {
+  auth_methods?: string[];  // Array of supported auth methods
+  oauth_type?: string;  // OAuth token type (access_only, with_refresh, etc.)
+  requires_byoc?: boolean;  // Whether source requires user to bring their own OAuth credentials
+  auth_config_class?: string;  // Optional, only for DIRECT auth sources
+  auth_fields?: {  // Optional, only present for DIRECT auth sources
     fields: Array<{
       name: string;
       title?: string;
@@ -97,39 +99,36 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
   const [connectionUrl, setConnectionUrl] = useState('');
 
-  // Sources that require custom OAuth credentials (BYOC - Bring Your Own Credentials)
-  const BYOC_SOURCES = ['google_drive', 'gmail', 'dropbox', 'google_calendar'];
-
-  // Check if source requires custom OAuth credentials
+  // Check if source requires custom OAuth credentials (BYOC - Bring Your Own Credentials)
   const requiresCustomOAuth = () => {
-    return BYOC_SOURCES.includes(selectedSource || '') ||
-           sourceDetails?.auth_config_class?.includes('BYOC');
+    // Check the requires_byoc flag on the source
+    return sourceDetails?.requires_byoc === true;
   };
 
-  // Check if this is a config-based auth source (like GitHub)
-  const isConfigAuth = () => {
-    return sourceDetails?.auth_type === 'config_class' &&
-           !sourceDetails?.auth_config_class?.includes('OAuth');
+  // Check if this is a direct auth source (API keys, passwords, etc.)
+  const isDirectAuth = () => {
+    return sourceDetails?.auth_methods?.includes('direct');
   };
 
   // Determine available auth methods based on source
   const getAvailableAuthMethods = (): AuthMode[] => {
-    if (!sourceDetails) return [];
+    if (!sourceDetails || !sourceDetails.auth_methods) return [];
 
     const methods: AuthMode[] = [];
 
-    // Check for direct auth/config auth
-    if (sourceDetails.auth_type === 'api_key' || sourceDetails.auth_type === 'basic' || isConfigAuth()) {
+    // Check for direct auth (API keys, passwords, config)
+    if (sourceDetails.auth_methods.includes('direct')) {
       methods.push('direct_auth');
     }
 
-    // Check for OAuth
-    if (sourceDetails.auth_type?.startsWith('oauth2') || sourceDetails.auth_config_class?.includes('OAuth')) {
+    // Check for OAuth browser flow
+    if (sourceDetails.auth_methods.includes('oauth_browser') ||
+        sourceDetails.auth_methods.includes('oauth_token')) {
       methods.push('oauth2');
     }
 
-    // Add external provider if any are connected
-    if (authProviderConnections.length > 0) {
+    // Add external provider if any are connected and source supports it
+    if (authProviderConnections.length > 0 && sourceDetails.auth_methods.includes('auth_provider')) {
       methods.push('external_provider');
     }
 
@@ -151,55 +150,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         if (response.ok) {
           const source = await response.json();
           setSourceDetails(source);
-
-          // Only set auth mode if it hasn't been set yet (preserve user selection)
-          if (!authMode) {
-            // Determine available methods inline to avoid dependency issues
-            const methods: AuthMode[] = [];
-            if (source.auth_type === 'api_key' || source.auth_type === 'basic' ||
-                (source.auth_type === 'config_class' && !source.auth_config_class?.includes('OAuth'))) {
-              methods.push('direct_auth');
-            }
-            if (source.auth_type?.startsWith('oauth2') || source.auth_config_class?.includes('OAuth')) {
-              methods.push('oauth2');
-            }
-            if (authProviderConnections.length > 0) {
-              methods.push('external_provider');
-            }
-
-            // Default to direct credentials or OAuth, not auth provider
-            if (source.auth_type === 'config_class') {
-              // Check if it's OAuth config or direct config
-              if (source.auth_config_class?.includes('OAuth')) {
-                setAuthMode('oauth2');
-                // Auto-enable custom credentials for BYOC sources
-                const isBYOC = BYOC_SOURCES.includes(selectedSource || '') ||
-                              source.auth_config_class?.includes('BYOC');
-                if (isBYOC) {
-                  setUseOwnCredentials(true);
-                }
-              } else {
-                // Config-based auth (like GitHub) uses direct_auth mode
-                setAuthMode('direct_auth');
-              }
-            } else if (source.auth_type === 'api_key' || source.auth_type === 'basic') {
-              setAuthMode('direct_auth');
-            } else if (source.auth_type?.startsWith('oauth2')) {
-              setAuthMode('oauth2');
-            } else if (methods.includes('direct_auth')) {
-              // Prefer direct auth if available
-              setAuthMode('direct_auth');
-            } else if (methods.includes('oauth2')) {
-              // Then OAuth
-              setAuthMode('oauth2');
-            } else if (methods.includes('external_provider')) {
-              // Auth provider as last resort
-              setAuthMode('external_provider');
-            } else if (methods.length > 0) {
-              // Set first available method as default
-              setAuthMode(methods[0]);
-            }
-          }
 
           // Initialize auth fields for config-based auth
           if (source.auth_fields?.fields) {
@@ -228,7 +178,29 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     };
 
     fetchSourceDetails();
-  }, [selectedSource]); // Don't re-run when authProviderConnections changes to preserve user selection
+  }, [selectedSource]);
+
+  // Set default auth mode based on available methods
+  // This runs after source details and auth providers are loaded
+  useEffect(() => {
+    if (!sourceDetails || !sourceDetails.auth_methods || authMode) return;
+
+    // Determine default auth mode based on available methods
+    if (sourceDetails.auth_methods.includes('direct')) {
+      // Prefer direct auth if available
+      setAuthMode('direct_auth');
+    } else if (sourceDetails.auth_methods.includes('oauth_browser')) {
+      // Then OAuth
+      setAuthMode('oauth2');
+      // Auto-enable custom credentials for sources that require BYOC
+      if (sourceDetails.requires_byoc) {
+        setUseOwnCredentials(true);
+      }
+    } else if (authProviderConnections.length > 0 && sourceDetails.auth_methods.includes('auth_provider')) {
+      // Auth provider only if providers are connected
+      setAuthMode('external_provider');
+    }
+  }, [sourceDetails, authProviderConnections, authMode, setAuthMode]);
 
   // Helper function to get required config fields for a provider
   const getRequiredProviderConfigFields = (providerShortName: string) => {
@@ -236,7 +208,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       case 'composio':
         return ['auth_config_id', 'account_id'];
       case 'pipedream':
-        return ['workflow_id', 'account_id'];
+        return ['project_id', 'account_id'];  // environment and external_user_id are optional
       default:
         return [];
     }
@@ -300,13 +272,24 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         return;
       }
 
+      // Map frontend auth modes to backend authentication methods
+      let authenticationMethod = 'oauth_browser'; // default
+      if (authMode === 'direct_auth') {
+        authenticationMethod = 'direct';
+      } else if (authMode === 'oauth2') {
+        // Always use oauth_browser, the backend will check requires_byoc
+        authenticationMethod = 'oauth_browser';
+      } else if (authMode === 'external_provider') {
+        authenticationMethod = 'auth_provider';
+      }
+
       const payload: any = {
         name: connectionName.trim(),
         description: `${sourceName} connection for ${collectionName}`,
         short_name: selectedSource,
-        collection: collectionId,
-        auth_mode: authMode || 'oauth2',
-        // For direct auth (API key, config), sync immediately since we have credentials
+        collection: isAddingToExisting ? existingCollectionId : collectionId,  // Changed from collection_id to collection
+        authentication_method: authenticationMethod,
+        // For direct auth, sync immediately since we have credentials
         // For OAuth, don't sync until after authorization is complete
         // For external provider, sync immediately since we're using existing auth
         sync_immediately: authMode === 'direct_auth' || authMode === 'external_provider',
@@ -318,7 +301,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       }
 
       // Handle different auth modes
-      if (authMode === 'external_provider') {
+      if (authenticationMethod === 'auth_provider') {
         // External provider auth
         if (!selectedAuthProvider) {
           toast.error('Please select an auth provider');
@@ -329,24 +312,17 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         if (authProviderConfig && Object.keys(authProviderConfig).length > 0) {
           payload.auth_provider_config = authProviderConfig;
         }
-      } else if (authMode === 'direct_auth' && isConfigAuth()) {
-        // Config-based auth (like GitHub)
-        if (Object.keys(authFields).length === 0) {
-          toast.error('Please provide all required configuration fields');
-          setIsCreating(false);
-          return;
-        }
-        payload.auth_fields = authFields;
-      } else if (authMode === 'direct_auth') {
-        // Direct auth (API key, basic auth)
+      } else if (authenticationMethod === 'direct') {
+        // Direct auth (API key, passwords, config)
         if (Object.keys(authFields).length === 0) {
           toast.error('Please provide authentication credentials');
           setIsCreating(false);
           return;
         }
         payload.auth_fields = authFields;
-      } else if (authMode === 'oauth2' || !authMode) {
+      } else if (authenticationMethod === 'oauth_browser') {
         // OAuth2 flow
+        // Check if source requires BYOC or user chose to use own credentials
         if (requiresCustomOAuth() || useOwnCredentials) {
           if (!clientId || !clientSecret) {
             toast.error('Please provide OAuth client credentials');
@@ -371,14 +347,16 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       const result = await response.json();
 
       // Check if OAuth flow is needed
-      if (result.authentication_url) {
+      // The authentication_url is now inside the authentication object (depth 1)
+      const authUrl = result.authentication?.authentication_url;
+      if (authUrl) {
         setOAuthData(
           result.id,
           payload.redirect_url || `${window.location.origin}?oauth_return=true`,
-          result.authentication_url
+          authUrl
         );
 
-        setConnectionUrl(result.authentication_url);
+        setConnectionUrl(authUrl);
       } else {
         // Direct auth, config auth, or external provider successful
         setConnectionId(result.id);
@@ -466,7 +444,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                     selectedMethod={authMode}
                     onMethodChange={setAuthMode}
                     availableAuthMethods={getAvailableAuthMethods()}
-                    hasAuthProviders={authProviderConnections.length > 0}
                   />
                 )}
 
@@ -479,8 +456,8 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                   />
                 )}
 
-                {/* Config-based auth fields (like GitHub) */}
-                {authMode === 'direct_auth' && isConfigAuth() && sourceDetails?.auth_fields?.fields && (
+                {/* Direct auth fields (API keys, passwords, config) */}
+                {authMode === 'direct_auth' && sourceDetails?.auth_fields?.fields && (
                   <div className="space-y-3">
                     <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Configuration
@@ -498,36 +475,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                         )}
                         <ValidatedInput
                           type={field.name.includes('password') || field.name.includes('token') ? 'password' : 'text'}
-                          placeholder=""
-                          value={authFields[field.name] || ''}
-                          onChange={(value) => setAuthFields({ ...authFields, [field.name]: value })}
-                          validation={getAuthFieldValidation(field.name)}
-                          className={cn(
-                            "focus:border-gray-400 dark:focus:border-gray-600",
-                            isDark
-                              ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
-                              : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
-                          )}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Direct auth fields (API key, basic auth) */}
-                {authMode === 'direct_auth' && !isConfigAuth() && sourceDetails?.auth_fields?.fields && (
-                  <div className="space-y-3">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Authentication
-                    </label>
-                    {sourceDetails.auth_fields.fields.map((field) => (
-                      <div key={field.name}>
-                        <label className="block text-sm font-medium mb-1">
-                          {field.title || field.name}
-                          {field.required && <span className="text-red-500 ml-1">*</span>}
-                        </label>
-                        <ValidatedInput
-                          type={field.name.includes('password') || field.name.includes('key') || field.name.includes('token') ? 'password' : 'text'}
                           placeholder=""
                           value={authFields[field.name] || ''}
                           onChange={(value) => setAuthFields({ ...authFields, [field.name]: value })}

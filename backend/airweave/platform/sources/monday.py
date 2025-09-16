@@ -9,7 +9,6 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import MondayAuthConfig
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
@@ -22,13 +21,19 @@ from airweave.platform.entities.monday import (
     MondayUpdateEntity,
 )
 from airweave.platform.sources._base import BaseSource
+from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 
 
 @source(
     name="Monday",
     short_name="monday",
-    auth_type=AuthType.oauth2,
-    auth_config_class="MondayAuthConfig",
+    auth_methods=[
+        AuthenticationMethod.OAUTH_BROWSER,
+        AuthenticationMethod.OAUTH_TOKEN,
+        AuthenticationMethod.AUTH_PROVIDER,
+    ],
+    oauth_type=OAuthType.ACCESS_ONLY,
+    auth_config_class=None,
     config_class="MondayConfig",
     labels=["Project Management"],
 )

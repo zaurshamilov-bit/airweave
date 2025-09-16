@@ -10,7 +10,6 @@ import httpx
 import tenacity
 from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import BitbucketAuthConfig
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
@@ -25,12 +24,14 @@ from airweave.platform.utils.file_extensions import (
     get_language_for_extension,
     is_text_file,
 )
+from airweave.schemas.source_connection import AuthenticationMethod
 
 
 @source(
     name="Bitbucket",
     short_name="bitbucket",
-    auth_type=AuthType.config_class,
+    auth_methods=[AuthenticationMethod.DIRECT, AuthenticationMethod.AUTH_PROVIDER],
+    oauth_type=None,
     auth_config_class="BitbucketAuthConfig",
     config_class="BitbucketConfig",
     labels=["Code"],

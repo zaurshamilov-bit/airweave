@@ -274,6 +274,90 @@ export const workflowIdValidation: FieldValidation<string> = {
 };
 
 /**
+ * Project ID validation for Pipedream
+ * Requirements: Non-empty, starts with proj_
+ */
+export const projectIdValidation: FieldValidation<string> = {
+  field: 'projectId',
+  debounceMs: 500,
+  showOn: 'change',
+  validate: (value: string): ValidationResult => {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return { isValid: true, severity: 'info' };
+    }
+
+    // Check if starts with proj_
+    if (!trimmed.startsWith('proj_')) {
+      return {
+        isValid: false,
+        hint: 'Project ID should start with "proj_"',
+        severity: 'info'
+      };
+    }
+
+    return { isValid: true, severity: 'info' };
+  }
+};
+
+/**
+ * Environment validation for Pipedream
+ * Requirements: Either 'production' or 'development'
+ */
+export const environmentValidation: FieldValidation<string> = {
+  field: 'environment',
+  debounceMs: 500,
+  showOn: 'change',
+  validate: (value: string): ValidationResult => {
+    const trimmed = value.trim().toLowerCase();
+
+    if (!trimmed) {
+      return { isValid: true, severity: 'info' };
+    }
+
+    if (trimmed !== 'production' && trimmed !== 'development') {
+      return {
+        isValid: false,
+        hint: 'Environment must be either "production" or "development"',
+        severity: 'info'
+      };
+    }
+
+    return { isValid: true, severity: 'info' };
+  }
+};
+
+/**
+ * External User ID validation for Pipedream
+ * Requirements: Optional field, alphanumeric with underscores/hyphens
+ */
+export const externalUserIdValidation: FieldValidation<string> = {
+  field: 'externalUserId',
+  debounceMs: 500,
+  showOn: 'change',
+  validate: (value: string): ValidationResult => {
+    const trimmed = value.trim();
+
+    // Optional field - empty is valid
+    if (!trimmed) {
+      return { isValid: true, severity: 'info' };
+    }
+
+    // Check for valid characters (alphanumeric, underscore, hyphen)
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+      return {
+        isValid: false,
+        hint: 'External User ID can only contain letters, numbers, underscores, and hyphens',
+        severity: 'info'
+      };
+    }
+
+    return { isValid: true, severity: 'info' };
+  }
+};
+
+/**
  * Redirect URL validation
  */
 export const redirectUrlValidation: FieldValidation<string> = {
@@ -332,6 +416,12 @@ export function getAuthFieldValidation(fieldType: string): FieldValidation<strin
       return accountIdValidation;
     case 'workflow_id':
       return workflowIdValidation;
+    case 'project_id':
+      return projectIdValidation;
+    case 'environment':
+      return environmentValidation;
+    case 'external_user_id':
+      return externalUserIdValidation;
     default:
       return null;
   }

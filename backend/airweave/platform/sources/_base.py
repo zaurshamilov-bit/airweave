@@ -22,12 +22,17 @@ from pydantic import BaseModel
 from airweave.core.logging import logger
 from airweave.platform.entities._base import ChunkEntity, FileEntity
 from airweave.platform.file_handling.file_manager import file_manager
+from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 
 
 class BaseSource:
     """Base class for all sources."""
 
     _labels: ClassVar[list[str]] = []
+    _auth_methods: ClassVar[list[AuthenticationMethod]] = []
+    _oauth_type: ClassVar[Optional[OAuthType]] = None
+    _requires_byoc: ClassVar[bool] = False
+    _auth_config_class: ClassVar[Optional[str]] = None
 
     def __init__(self):
         """Initialize the base source."""
@@ -95,6 +100,36 @@ class BaseSource:
         """
         return None
 
+    @classmethod
+    def supports_auth_method(cls, method: AuthenticationMethod) -> bool:
+        """Check if source supports a given authentication method."""
+        return method in cls._auth_methods
+
+    @classmethod
+    def get_supported_auth_methods(cls) -> list[AuthenticationMethod]:
+        """Get all supported authentication methods."""
+        return cls._auth_methods
+
+    @classmethod
+    def get_oauth_type(cls) -> Optional[OAuthType]:
+        """Get OAuth token type if this is an OAuth source."""
+        return cls._oauth_type
+
+    @classmethod
+    def is_oauth_source(cls) -> bool:
+        """Check if this is an OAuth-based source."""
+        return AuthenticationMethod.OAUTH_BROWSER in cls._auth_methods
+
+    @classmethod
+    def requires_refresh_token(cls) -> bool:
+        """Check if source requires refresh token."""
+        return cls._oauth_type in [OAuthType.WITH_REFRESH, OAuthType.WITH_ROTATING_REFRESH]
+
+    @classmethod
+    def requires_byoc(cls) -> bool:
+        """Check if source requires user to bring their own OAuth client credentials."""
+        return cls._requires_byoc
+
     def get_effective_cursor_field(self) -> Optional[str]:
         """Get the cursor field to use for this sync.
 
@@ -160,7 +195,7 @@ class BaseSource:
 
         Args:
             credentials: Optional credentials for authenticated sources.
-                       For AuthType.none sources, this can be None.
+                       For sources without authentication, this can be None.
             config: Optional configuration parameters
 
         Returns:

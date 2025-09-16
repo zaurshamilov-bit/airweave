@@ -14,10 +14,10 @@ import asyncpg
 
 from airweave.core.pg_field_catalog_service import overwrite_catalog
 from airweave.db.session import get_db_context
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import ChunkEntity, PolymorphicEntity
 from airweave.platform.sources._base import BaseSource
+from airweave.schemas.source_connection import AuthenticationMethod
 
 # Mapping of PostgreSQL types to Python types
 PG_TYPE_MAP = {
@@ -44,7 +44,8 @@ PG_TYPE_MAP = {
 @source(
     name="PostgreSQL",
     short_name="postgresql",
-    auth_type=AuthType.config_class,
+    auth_methods=[AuthenticationMethod.DIRECT, AuthenticationMethod.AUTH_PROVIDER],
+    oauth_type=None,
     auth_config_class="PostgreSQLAuthConfig",
     config_class="PostgreSQLConfig",
     labels=["Database"],

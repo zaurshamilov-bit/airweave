@@ -284,112 +284,70 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
         />
     );
 
-    const CopyButton = ({ value, fieldName }: { value: string; fieldName: string }) => (
-        <button
-            onClick={() => handleCopy(value, fieldName)}
-            className={cn(
-                "p-1.5 rounded-md transition-colors",
-                isDark
-                    ? "hover:bg-gray-700"
-                    : "hover:bg-gray-100"
-            )}
-        >
-            {copiedField === fieldName ? (
-                <Check className="h-4 w-4 text-green-500" />
-            ) : (
-                <Copy className="h-4 w-4 text-gray-500" />
-            )}
-        </button>
-    );
-
     return (
-        <div className="h-full flex flex-col">
-            {/* Content area - scrollable */}
-            <div className="px-8 py-10 flex-1 overflow-auto">
-                <div className="space-y-8">
-                    {/* Header with action buttons */}
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                                {authProviderName} Connection
-                            </h2>
-                            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                                View and manage your {authProviderName} connection details
-                            </p>
-                        </div>
+        <div className="h-full flex flex-col max-h-[90vh]">
+            {/* Fixed header with action buttons */}
+            <div className={cn(
+                "px-6 pt-6 pb-4 border-b",
+                isDark ? "border-gray-800/50" : "border-gray-100"
+            )}>
+                <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+                        {authProviderName} Connection
+                    </h2>
 
-                        {/* Action buttons */}
-                        <div className="flex gap-2">
-                            {/* Edit button */}
-                            <div
-                                onClick={() => {
-                                    // Close current dialog and open edit dialog
-                                    if (onComplete) {
-                                        onComplete({
-                                            action: 'edit',
-                                            authProviderConnectionId,
-                                            authProviderName,
-                                            authProviderShortName
-                                        });
-                                    }
-                                }}
-                                className={cn(
-                                    "h-10 w-10 rounded-full transition-all duration-200 flex items-center justify-center cursor-pointer border-2 border-transparent",
-                                    isDark
-                                        ? "hover:bg-gray-800 hover:border-gray-600"
-                                        : "hover:bg-gray-50 hover:border-gray-300"
-                                )}
-                                title="Edit connection"
-                                role="button"
-                                tabIndex={0}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                        e.preventDefault();
-                                        // Close current dialog and open edit dialog
-                                        if (onComplete) {
-                                            onComplete({
-                                                action: 'edit',
-                                                authProviderConnectionId,
-                                                authProviderName,
-                                                authProviderShortName
-                                            });
-                                        }
-                                    }
-                                }}
-                            >
-                                <Pencil className="h-5 w-5 text-gray-600 hover:text-blue-500" />
-                            </div>
+                    {/* Action buttons - more subtle */}
+                    <div className="flex gap-1">
+                        <button
+                            onClick={() => {
+                                if (onComplete) {
+                                    onComplete({
+                                        action: 'edit',
+                                        authProviderConnectionId,
+                                        authProviderName,
+                                        authProviderShortName
+                                    });
+                                }
+                            }}
+                            className={cn(
+                                "h-8 w-8 rounded-lg transition-all duration-150 flex items-center justify-center",
+                                isDark
+                                    ? "hover:bg-gray-800/60 text-gray-400 hover:text-gray-200"
+                                    : "hover:bg-gray-100 text-gray-500 hover:text-gray-700"
+                            )}
+                            title="Edit connection"
+                        >
+                            <Pencil className="h-4 w-4" />
+                        </button>
 
-                            {/* Delete button */}
-                            <div
-                                onClick={() => setShowDeleteDialog(true)}
-                                className={cn(
-                                    "h-10 w-10 rounded-full transition-all duration-200 flex items-center justify-center cursor-pointer border-2 border-transparent",
-                                    isDark
-                                        ? "hover:bg-gray-800 hover:border-gray-600"
-                                        : "hover:bg-gray-50 hover:border-gray-300"
-                                )}
-                                title="Delete connection"
-                                role="button"
-                                tabIndex={0}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                        e.preventDefault();
-                                        setShowDeleteDialog(true);
-                                    }
-                                }}
-                            >
-                                <Trash className="h-5 w-5 text-gray-600 hover:text-red-500" />
-                            </div>
-                        </div>
+                        <button
+                            onClick={() => setShowDeleteDialog(true)}
+                            className={cn(
+                                "h-8 w-8 rounded-lg transition-all duration-150 flex items-center justify-center",
+                                isDark
+                                    ? "hover:bg-gray-800/60 text-gray-400 hover:text-red-400"
+                                    : "hover:bg-gray-100 text-gray-500 hover:text-red-500"
+                            )}
+                            title="Delete connection"
+                        >
+                            <Trash className="h-4 w-4" />
+                        </button>
                     </div>
+                </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    View and manage your {authProviderName} connection details
+                </p>
+            </div>
 
-                    {/* Auth Provider Icon - smaller, cleaner */}
+            {/* Content area - scrollable with better spacing */}
+            <div className="flex-1 overflow-y-auto px-6 py-6">
+                <div className="space-y-6 pb-6">
+                    {/* Auth Provider Icon - more integrated */}
                     {authProviderShortName && (
-                        <div className="flex justify-center py-8">
+                        <div className="flex justify-center py-4">
                             <div className={cn(
-                                "w-32 h-32 flex items-center justify-center rounded-2xl p-4",
-                                isDark ? "bg-gray-800/50" : "bg-gray-50"
+                                "w-20 h-20 flex items-center justify-center rounded-xl p-3",
+                                isDark ? "bg-gray-800/30" : "bg-gray-50/70"
                             )}>
                                 <img
                                     src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
@@ -398,8 +356,8 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                                     onError={(e) => {
                                         e.currentTarget.style.display = 'none';
                                         e.currentTarget.parentElement!.innerHTML = `
-                                            <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
-                                                <span class="text-3xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
+                                            <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900/50' : 'bg-blue-50'}">
+                                                <span class="text-xl font-semibold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
                                                     ${authProviderShortName.substring(0, 2).toUpperCase()}
                                                 </span>
                                             </div>
@@ -410,53 +368,64 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                         </div>
                     )}
 
-                    {/* Connection Details */}
-                    <div className="space-y-6">
+                    {/* Connection Details - cleaner design */}
+                    <div className="space-y-4">
                         {/* Name */}
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                        <div className="space-y-1.5">
+                            <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-500 uppercase tracking-wide">
                                 Name
                             </label>
                             <div className={cn(
-                                "w-full px-4 py-2.5 rounded-lg text-sm",
-                                "border",
+                                "w-full px-3 py-2 rounded-md text-sm",
                                 isDark
-                                    ? "bg-gray-800 border-gray-700 text-white"
-                                    : "bg-white border-gray-200 text-gray-900"
+                                    ? "bg-gray-800/40 text-gray-100"
+                                    : "bg-gray-50 text-gray-900"
                             )}>
                                 {connectionDetails.name}
                             </div>
                         </div>
 
                         {/* Readable ID */}
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                        <div className="space-y-1.5">
+                            <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-500 uppercase tracking-wide">
                                 Readable ID
                             </label>
                             <div className={cn(
-                                "w-full px-4 py-2.5 rounded-lg text-sm flex items-center justify-between",
-                                "border",
+                                "w-full px-3 py-2 rounded-md text-sm flex items-center justify-between group",
                                 isDark
-                                    ? "bg-gray-800 border-gray-700 text-white"
-                                    : "bg-white border-gray-200 text-gray-900"
+                                    ? "bg-gray-800/40 text-gray-100"
+                                    : "bg-gray-50 text-gray-900"
                             )}>
-                                <span className="font-mono break-all">{connectionDetails.readable_id}</span>
-                                <CopyButton value={connectionDetails.readable_id} fieldName="Readable ID" />
+                                <span className="font-mono text-xs break-all">{connectionDetails.readable_id}</span>
+                                <button
+                                    onClick={() => handleCopy(connectionDetails.readable_id, "Readable ID")}
+                                    className={cn(
+                                        "p-1 rounded transition-opacity opacity-0 group-hover:opacity-100",
+                                        isDark
+                                            ? "hover:bg-gray-700/50"
+                                            : "hover:bg-gray-200/50"
+                                    )}
+                                >
+                                    {copiedField === "Readable ID" ? (
+                                        <Check className="h-3.5 w-3.5 text-green-500" />
+                                    ) : (
+                                        <Copy className="h-3.5 w-3.5 text-gray-400" />
+                                    )}
+                                </button>
                             </div>
                         </div>
 
                         {/* Created By */}
                         {connectionDetails.created_by_email && (
-                            <div>
-                                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                            <div className="space-y-1.5">
+                                <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-500 uppercase tracking-wide">
                                     Created By
                                 </label>
                                 <div className={cn(
-                                    "w-full px-4 py-2.5 rounded-lg text-sm",
-                                    "border",
+                                    "w-full px-3 py-2 rounded-md text-sm",
                                     isDark
-                                        ? "bg-gray-800 border-gray-700 text-white"
-                                        : "bg-white border-gray-200 text-gray-900"
+                                        ? "bg-gray-800/40 text-gray-100"
+                                        : "bg-gray-50 text-gray-900"
                                 )}>
                                     {connectionDetails.created_by_email}
                                 </div>
@@ -464,16 +433,15 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                         )}
 
                         {/* Created At */}
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                        <div className="space-y-1.5">
+                            <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-500 uppercase tracking-wide">
                                 Created At
                             </label>
                             <div className={cn(
-                                "w-full px-4 py-2.5 rounded-lg text-sm",
-                                "border",
+                                "w-full px-3 py-2 rounded-md text-sm",
                                 isDark
-                                    ? "bg-gray-800 border-gray-700 text-white"
-                                    : "bg-white border-gray-200 text-gray-900"
+                                    ? "bg-gray-800/40 text-gray-100"
+                                    : "bg-gray-50 text-gray-900"
                             )}>
                                 {formatDate(connectionDetails.created_at)}
                             </div>
@@ -481,16 +449,15 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
 
                         {/* Modified By */}
                         {connectionDetails.modified_by_email && (
-                            <div>
-                                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                            <div className="space-y-1.5">
+                                <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-500 uppercase tracking-wide">
                                     Modified By
                                 </label>
                                 <div className={cn(
-                                    "w-full px-4 py-2.5 rounded-lg text-sm",
-                                    "border",
+                                    "w-full px-3 py-2 rounded-md text-sm",
                                     isDark
-                                        ? "bg-gray-800 border-gray-700 text-white"
-                                        : "bg-white border-gray-200 text-gray-900"
+                                        ? "bg-gray-800/40 text-gray-100"
+                                        : "bg-gray-50 text-gray-900"
                                 )}>
                                     {connectionDetails.modified_by_email}
                                 </div>
@@ -498,16 +465,15 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                         )}
 
                         {/* Modified At */}
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                        <div className="space-y-1.5">
+                            <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-500 uppercase tracking-wide">
                                 Modified At
                             </label>
                             <div className={cn(
-                                "w-full px-4 py-2.5 rounded-lg text-sm",
-                                "border",
+                                "w-full px-3 py-2 rounded-md text-sm",
                                 isDark
-                                    ? "bg-gray-800 border-gray-700 text-white"
-                                    : "bg-white border-gray-200 text-gray-900"
+                                    ? "bg-gray-800/40 text-gray-100"
+                                    : "bg-gray-50 text-gray-900"
                             )}>
                                 {formatDate(connectionDetails.modified_at)}
                             </div>
@@ -516,19 +482,21 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                 </div>
             </div>
 
-            {/* Bottom actions - Clean minimal */}
+            {/* Bottom actions - minimal and clean */}
             <div className={cn(
-                "px-8 py-6 border-t",
-                isDark ? "border-gray-800" : "border-gray-200"
+                "px-6 py-4 border-t",
+                isDark ? "border-gray-800/50" : "border-gray-100"
             )}>
                 <button
                     onClick={onCancel}
                     className={cn(
-                        "w-full py-2 px-4 rounded-lg text-sm font-medium transition-all",
-                        "bg-blue-600 hover:bg-blue-700 text-white"
+                        "w-full py-2 px-4 rounded-lg text-sm font-medium transition-all duration-150",
+                        isDark
+                            ? "bg-gray-800 hover:bg-gray-700 text-gray-100"
+                            : "bg-gray-100 hover:bg-gray-200 text-gray-700"
                     )}
                 >
-                    Close
+                    Done
                 </button>
             </div>
 

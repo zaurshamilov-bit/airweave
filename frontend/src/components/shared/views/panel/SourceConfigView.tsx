@@ -150,10 +150,10 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ context }) =
                 useSidePanelStore.getState().closePanel();
                 // We need to trigger a refresh of the source connections on the collection page
                 // This is now handled in the Collections.tsx component's useEffect
-            } else if (result.status === 'pending' && result.authentication_url) {
+            } else if (result.status === 'pending' && result.authentication?.authentication_url) {
                 // Transition panel to show the redirect URL
                 setView('oauthRedirect', {
-                    authenticationUrl: result.authentication_url,
+                    authenticationUrl: result.authentication.authentication_url,
                     sourceName: sourceName
                 });
             }

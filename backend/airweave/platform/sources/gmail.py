@@ -28,7 +28,6 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from airweave.core.logging import logger
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
 from airweave.platform.entities.gmail import (
@@ -38,13 +37,20 @@ from airweave.platform.entities.gmail import (
     GmailThreadEntity,
 )
 from airweave.platform.sources._base import BaseSource
+from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 
 
 @source(
     name="Gmail",
     short_name="gmail",
-    auth_type=AuthType.oauth2_with_refresh,
-    auth_config_class="GmailAuthConfig",
+    auth_methods=[
+        AuthenticationMethod.OAUTH_BROWSER,
+        AuthenticationMethod.OAUTH_TOKEN,
+        AuthenticationMethod.AUTH_PROVIDER,
+    ],
+    oauth_type=OAuthType.WITH_REFRESH,
+    requires_byoc=True,
+    auth_config_class=None,
     config_class="GmailConfig",
     labels=["Communication", "Email"],
 )

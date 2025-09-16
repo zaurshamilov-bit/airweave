@@ -21,7 +21,6 @@ from typing import Any, AsyncGenerator, Dict, Optional
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import StripeAuthConfig
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import ChunkEntity
@@ -39,12 +38,14 @@ from airweave.platform.entities.stripe import (
     StripeSubscriptionEntity,
 )
 from airweave.platform.sources._base import BaseSource
+from airweave.schemas.source_connection import AuthenticationMethod
 
 
 @source(
     name="Stripe",
     short_name="stripe",
-    auth_type=AuthType.config_class,
+    auth_methods=[AuthenticationMethod.DIRECT, AuthenticationMethod.AUTH_PROVIDER],
+    oauth_type=None,
     auth_config_class="StripeAuthConfig",
     config_class="StripeConfig",
     labels=["Payment"],

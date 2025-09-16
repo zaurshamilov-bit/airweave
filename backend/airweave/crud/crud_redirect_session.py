@@ -9,9 +9,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave.api.context import ApiContext
+from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.redirect_session import RedirectSession
 
 _ALPHABET = string.ascii_letters + string.digits
+
+
+# TODO: this into base crud
 
 
 class CRUDRedirectSession:
@@ -37,6 +41,7 @@ class CRUDRedirectSession:
         final_url: str,
         expires_at: datetime,
         ctx: ApiContext,
+        uow: Optional[UnitOfWork] = None,
     ) -> RedirectSession:
         """Create a new redirect session with the given parameters.
 
@@ -46,6 +51,7 @@ class CRUDRedirectSession:
             final_url: URL to redirect to after completion
             expires_at: Expiration datetime for the session
             ctx: API context containing organization info
+            uow: Optional unit of work for transaction management
 
         Returns:
             The created RedirectSession instance
@@ -58,8 +64,10 @@ class CRUDRedirectSession:
         )
         db.add(obj)
         await db.flush()
-        await db.commit()
-        await db.refresh(obj)
+        # Only commit if not part of a larger transaction
+        if not uow:
+            await db.commit()
+            await db.refresh(obj)
         return obj
 
     async def get_by_code(self, db: AsyncSession, code: str) -> Optional[RedirectSession]:
@@ -76,11 +84,19 @@ class CRUDRedirectSession:
         res = await db.execute(q)
         return res.scalar_one_or_none()
 
-    async def consume(self, db: AsyncSession, code: str) -> None:
-        """Delete the mapping (one-time use)."""
+    async def consume(self, db: AsyncSession, code: str, uow: Optional[UnitOfWork] = None) -> None:
+        """Delete the mapping (one-time use).
+
+        Args:
+            db: Database session
+            code: The unique code to delete
+            uow: Optional unit of work for transaction management
+        """
         q = delete(RedirectSession).where(RedirectSession.code == code)
         await db.execute(q)
-        await db.commit()
+        # Only commit if not part of a larger transaction
+        if not uow:
+            await db.commit()
 
     @staticmethod
     def is_expired(rs: RedirectSession) -> bool:

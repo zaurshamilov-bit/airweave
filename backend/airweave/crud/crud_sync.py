@@ -359,6 +359,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         """
         # Dump the obj_in to a dict
         obj_in_dict = obj_in.model_dump()
+        obj_in_dict.pop("run_immediately")
 
         # Pop off the connection ids
         source_connection_id = obj_in_dict.pop("source_connection_id")

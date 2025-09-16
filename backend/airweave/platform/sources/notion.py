@@ -15,7 +15,6 @@ from httpx import HTTPStatusError, ReadTimeout, TimeoutException
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from airweave.core.logging import logger
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
 from airweave.platform.entities.notion import (
@@ -26,13 +25,19 @@ from airweave.platform.entities.notion import (
 )
 from airweave.platform.file_handling.file_manager import file_manager
 from airweave.platform.sources._base import BaseSource
+from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 
 
 @source(
     name="Notion",
     short_name="notion",
-    auth_type=AuthType.oauth2,
-    auth_config_class="NotionAuthConfig",
+    auth_methods=[
+        AuthenticationMethod.OAUTH_BROWSER,
+        AuthenticationMethod.OAUTH_TOKEN,
+        AuthenticationMethod.AUTH_PROVIDER,
+    ],
+    oauth_type=OAuthType.ACCESS_ONLY,
+    auth_config_class=None,
     config_class="NotionConfig",
     labels=["Knowledge Base", "Productivity"],
 )
@@ -57,11 +62,11 @@ class NotionSource(BaseSource):
     _shared_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
 
     @classmethod
-    async def create(cls, credentials, config: Optional[Dict[str, Any]] = None) -> "NotionSource":
+    async def create(cls, access_token, config: Optional[Dict[str, Any]] = None) -> "NotionSource":
         """Create a new Notion source."""
         logger.info("Creating new Notion source")
         instance = cls()
-        instance.access_token = credentials.access_token
+        instance.access_token = access_token
 
         # ---- per-instance materialization controls (match Drive-style knobs) ----
         config = config or {}

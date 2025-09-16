@@ -5,7 +5,7 @@ import { useTheme } from '@/lib/theme-provider';
 import { Check } from 'lucide-react';
 import { getAuthProviderIconUrl } from '@/lib/utils/icons';
 import { ValidatedInput } from '@/components/ui/validated-input';
-import { authConfigIdValidation, accountIdValidation, workflowIdValidation } from '@/lib/validation/rules';
+import { authConfigIdValidation, accountIdValidation, projectIdValidation, environmentValidation, externalUserIdValidation } from '@/lib/validation/rules';
 
 interface AuthProviderSelectorProps {
   selectedProvider?: string;
@@ -55,8 +55,10 @@ export const AuthProviderSelector: React.FC<AuthProviderSelectorProps> = ({
         ];
       case 'pipedream':
         return [
-          { name: 'workflow_id', label: 'Workflow ID', placeholder: 'p_abc123', required: true, validation: workflowIdValidation },
-          { name: 'account_id', label: 'Account ID', placeholder: 'account_123', required: true, validation: accountIdValidation },
+          { name: 'project_id', label: 'Project ID', placeholder: 'proj_JPsD74a', required: true, validation: projectIdValidation },
+          { name: 'account_id', label: 'Account ID', placeholder: 'apn_gyha5Ky', required: true, validation: accountIdValidation },
+          { name: 'environment', label: 'Environment', placeholder: 'production', required: false, validation: environmentValidation },
+          { name: 'external_user_id', label: 'External User ID', placeholder: 'user_123 (optional)', required: false, validation: externalUserIdValidation },
         ];
       default:
         return [];

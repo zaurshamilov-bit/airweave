@@ -11,12 +11,12 @@ from typing import Any, AsyncGenerator, Dict, Optional, Union
 import asyncpg
 
 from airweave.core.logging import logger
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import CTTIAuthConfig
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb
 from airweave.platform.entities.ctti import CTTIWebEntity
 from airweave.platform.sources._base import BaseSource
+from airweave.schemas.source_connection import AuthenticationMethod
 
 # Global connection pool for CTTI to prevent connection exhaustion
 _ctti_pool: Optional[asyncpg.Pool] = None
@@ -117,7 +117,8 @@ async def _retry_with_backoff(func, *args, max_retries=3, **kwargs):
 @source(
     name="CTTI AACT",
     short_name="ctti",
-    auth_type=AuthType.config_class,
+    auth_methods=[AuthenticationMethod.DIRECT],
+    oauth_type=None,
     auth_config_class="CTTIAuthConfig",
     config_class="CTTIConfig",
     labels=["Clinical Trials", "Database"],

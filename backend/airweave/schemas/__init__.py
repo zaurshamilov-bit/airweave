@@ -105,15 +105,17 @@ from .source import (
     SourceUpdate,
 )
 from .source_connection import (
+    AuthenticationInfo,
+    AuthenticationMethod,
+    EntityState,
+    LastSyncJob,
+    Schedule,
     SourceConnection,
-    SourceConnectionContinuousResponse,
     SourceConnectionCreate,
-    SourceConnectionCreateContinuous,
-    SourceConnectionCreateWithCredential,
-    SourceConnectionInDBBase,
+    SourceConnectionJob,
     SourceConnectionListItem,
-    SourceConnectionMakeContinuous,
     SourceConnectionUpdate,
+    SourceConnectionValidate,
 )
 from .sync import (
     MinuteLevelScheduleConfig,
@@ -133,7 +135,6 @@ from .sync_cursor import (
     SyncCursorUpdate,
 )
 from .sync_job import (
-    SourceConnectionJob,
     SyncJob,
     SyncJobCreate,
     SyncJobInDBBase,

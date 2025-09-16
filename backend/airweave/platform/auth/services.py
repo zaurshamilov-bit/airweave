@@ -19,7 +19,6 @@ from airweave.core.shared_models import ConnectionStatus
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.integration_credential import IntegrationType
 from airweave.platform.auth.schemas import (
-    AuthType,
     BaseAuthSettings,
     OAuth2Settings,
     OAuth2TokenResponse,
@@ -459,7 +458,11 @@ class OAuth2Service:
         """
         oauth2_token_response = OAuth2TokenResponse(**response.json())
 
-        if integration_config.auth_type == "oauth2_with_refresh_rotating":
+        # Check if this is a rotating refresh token OAuth
+        if (
+            hasattr(integration_config, "oauth_type")
+            and integration_config.oauth_type == "with_rotating_refresh"
+        ):
             # Get connection and its credential
             connection = await crud.connection.get(db=db, id=connection_id, ctx=ctx)
             integration_credential = await crud.integration_credential.get(
@@ -601,13 +604,9 @@ class OAuth2Service:
         return OAuth2TokenResponse(**response.json())
 
     @staticmethod
-    def _supports_oauth2(auth_type: AuthType) -> bool:
-        """Check if the auth type supports OAuth2."""
-        return auth_type in (
-            AuthType.oauth2,
-            AuthType.oauth2_with_refresh,
-            AuthType.oauth2_with_refresh_rotating,
-        )
+    def _supports_oauth2(oauth_type: Optional[str]) -> bool:
+        """Check if the integration supports OAuth2 based on oauth_type."""
+        return oauth_type is not None
 
     @staticmethod
     async def _create_connection(
@@ -618,10 +617,12 @@ class OAuth2Service:
         ctx: ApiContext,
     ) -> schemas.Connection:
         """Create a new connection with OAuth2 credentials."""
-        # Prepare credentials based on auth type
+        # Prepare credentials based on oauth type
+        # If it's access_only OAuth, only store access token
+        # Otherwise store both refresh and access tokens
         decrypted_credentials = (
             {"access_token": oauth2_response.access_token}
-            if settings.auth_type == AuthType.oauth2
+            if (hasattr(settings, "oauth_type") and settings.oauth_type == "access_only")
             else {
                 "refresh_token": oauth2_response.refresh_token,
                 "access_token": oauth2_response.access_token,
@@ -637,7 +638,6 @@ class OAuth2Service:
                 description=(f"OAuth2 credentials for {source.name} - {ctx.organization.id}"),
                 integration_short_name=source.short_name,
                 integration_type=IntegrationType.SOURCE,
-                auth_type=source.auth_type,
                 encrypted_credentials=encrypted_credentials,
             )
 
