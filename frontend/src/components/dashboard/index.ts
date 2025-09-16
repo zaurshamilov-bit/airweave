@@ -5,3 +5,4 @@ export { SmallSourceButton } from './SmallSourceButton';
 export { ApiKeyCard } from './ApiKeyCard';
 export { ExampleProjectCard } from './ExampleProjectCard';
 export { AuthProviderButton } from './AuthProviderButton';
+export { RequestConnectorButton } from './RequestConnectorButton';

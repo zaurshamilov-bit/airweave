@@ -9,6 +9,7 @@ import {
   SourceButton,
   ApiKeyCard,
   ExampleProjectCard,
+  RequestConnectorButton,
 } from "@/components/dashboard";
 import { clearStoredErrorDetails, getStoredErrorDetails } from "@/lib/error-utils";
 import { DialogFlow } from "@/components/shared/DialogFlow";
@@ -320,17 +321,21 @@ const Dashboard = () => {
                   No sources found
                 </div>
               ) : (
-                [...sources].sort((a, b) => a.name.localeCompare(b.name)).map((source) => (
-                  <SourceButton
-                    key={source.id}
-                    id={source.id}
-                    name={source.name}
-                    shortName={source.short_name}
-                    onClick={() => handleSourceClick(source)}
-                    disabled={!collectionsAllowed || !sourceConnectionsAllowed || !entitiesAllowed || !syncsAllowed || isCheckingUsage}
-                    usageCheckDetails={usageCheckDetails}
-                  />
-                ))
+                <>
+                  {[...sources].sort((a, b) => a.name.localeCompare(b.name)).map((source) => (
+                    <SourceButton
+                      key={source.id}
+                      id={source.id}
+                      name={source.name}
+                      shortName={source.short_name}
+                      onClick={() => handleSourceClick(source)}
+                      disabled={!collectionsAllowed || !sourceConnectionsAllowed || !entitiesAllowed || !syncsAllowed || isCheckingUsage}
+                      usageCheckDetails={usageCheckDetails}
+                    />
+                  ))}
+                  {/* Request Connector Button */}
+                  <RequestConnectorButton variant="dashboard" />
+                </>
               )}
             </div>
           </section>
