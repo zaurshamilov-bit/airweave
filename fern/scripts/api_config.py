@@ -12,6 +12,7 @@ INCLUDED_ENDPOINTS = {
     "/collections/{readable_id}/refresh_all/": {"post": True},
     # Source Connections
     "/source-connections/": {"get": True, "post": True},
+    "/source-connections/nested/": {"post": True},  # POC nested auth structure
     "/source-connections/{source_connection_id}/": {
         "get": True,
         "put": True,

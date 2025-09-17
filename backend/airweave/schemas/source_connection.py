@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -42,118 +42,87 @@ class ScheduleConfig(BaseModel):
 
 
 # ===========================
-# Input Schema - Single unified create with smart inference
+# Authentication Schemas - Nested structure without explicit type fields
 # ===========================
 
 
-class SourceConnectionCreate(BaseModel):
-    """Unified creation schema with automatic auth method inference.
+class DirectAuthentication(BaseModel):
+    """Direct authentication with API keys or passwords."""
 
-    The authentication method is automatically determined based on which fields are provided:
-    - If `credentials` is provided -> DIRECT auth
-    - If `access_token` is provided -> OAUTH_TOKEN
-    - If `client_id` and `client_secret` are provided -> OAUTH_BYOC
-    - If `provider_id` is provided -> AUTH_PROVIDER
-    - Otherwise -> OAUTH_BROWSER (default OAuth flow)
-    """
+    credentials: Dict[str, Any] = Field(..., description="Authentication credentials")
 
-    # Required fields
-    name: str = Field(..., min_length=4, max_length=42)
-    short_name: str = Field(
-        ..., description="Source short_name identifier (e.g., 'slack', 'github')"
+    @model_validator(mode="after")
+    def validate_credentials(self):
+        """Ensure credentials are not empty."""
+        if not self.credentials:
+            raise ValueError("Credentials cannot be empty")
+        return self
+
+
+class OAuthTokenAuthentication(BaseModel):
+    """OAuth authentication with pre-obtained token."""
+
+    access_token: str = Field(..., description="OAuth access token")
+    refresh_token: Optional[str] = Field(None, description="OAuth refresh token")
+    expires_at: Optional[datetime] = Field(None, description="Token expiry time")
+
+    @model_validator(mode="after")
+    def validate_token(self):
+        """Validate token is not expired."""
+        if self.expires_at and self.expires_at < datetime.utcnow():
+            raise ValueError("Token has already expired")
+        return self
+
+
+class OAuthBrowserAuthentication(BaseModel):
+    """OAuth authentication via browser flow."""
+
+    redirect_uri: Optional[str] = Field(None, description="OAuth redirect URI")
+    # Optional BYOC fields
+    client_id: Optional[str] = Field(None, description="OAuth client ID (for custom apps)")
+    client_secret: Optional[str] = Field(None, description="OAuth client secret (for custom apps)")
+
+    @model_validator(mode="after")
+    def validate_byoc_credentials(self):
+        """Validate BYOC credentials are both provided or neither."""
+        if bool(self.client_id) != bool(self.client_secret):
+            raise ValueError("Custom OAuth requires both client_id and client_secret or neither")
+        return self
+
+
+class AuthProviderAuthentication(BaseModel):
+    """Authentication via external provider."""
+
+    provider_name: str = Field(..., description="Auth provider identifier")
+    provider_config: Optional[Dict[str, Any]] = Field(
+        None, description="Provider-specific configuration"
     )
-    readable_collection_id: str = Field(..., description="Collection readable ID")
 
-    # Optional fields
-    description: Optional[str] = Field(None, max_length=255)
+
+# Authentication configuration without explicit type field
+AuthenticationConfig = Union[
+    DirectAuthentication,
+    OAuthTokenAuthentication,
+    OAuthBrowserAuthentication,
+    AuthProviderAuthentication,
+]
+
+
+# ===========================
+# Input Schema - Nested structure
+
+
+class SourceConnectionCreate(BaseModel):
+    """Create source connection with nested authentication."""
+
+    name: str = Field(..., min_length=4, max_length=42, description="Connection name")
+    short_name: str = Field(..., description="Source identifier (e.g., 'slack', 'github')")
+    readable_collection_id: str = Field(..., description="Collection readable ID")
+    description: Optional[str] = Field(None, max_length=255, description="Connection description")
     config: Optional[Dict[str, Any]] = Field(None, description="Source-specific configuration")
     schedule: Optional[ScheduleConfig] = None
     sync_immediately: bool = Field(True, description="Run initial sync after creation")
-
-    # Auth fields - presence determines method
-    # Direct auth
-    credentials: Optional[Dict[str, Any]] = Field(
-        None, description="Direct auth credentials (API keys, passwords)"
-    )
-
-    # OAuth token injection
-    access_token: Optional[str] = Field(None, description="Pre-obtained OAuth access token")
-    refresh_token: Optional[str] = Field(None, description="OAuth refresh token")
-    token_expires_at: Optional[datetime] = Field(None, description="Token expiration time")
-
-    # OAuth BYOC or custom client for browser flow
-    client_id: Optional[str] = Field(None, description="OAuth client ID")
-    client_secret: Optional[str] = Field(None, description="OAuth client secret")
-
-    # OAuth browser flow
-    redirect_url: Optional[str] = Field(None, description="OAuth callback redirect URL")
-
-    # External auth provider
-    provider_id: Optional[str] = Field(None, description="Auth provider connection ID")
-    provider_config: Optional[Dict[str, Any]] = Field(None, description="Provider-specific config")
-
-    # Computed field - not provided by user
-    _auth_method: Optional[AuthenticationMethod] = None
-
-    @model_validator(mode="after")
-    def infer_auth_method(self):
-        """Automatically determine authentication method from provided fields."""
-        # Priority order for inference:
-        # 1. Direct credentials
-        if self.credentials:
-            self._auth_method = AuthenticationMethod.DIRECT
-
-        # 2. OAuth token injection
-        elif self.access_token:
-            self._auth_method = AuthenticationMethod.OAUTH_TOKEN
-
-        # 3. OAuth BYOC (requires both client credentials)
-        elif self.client_id and self.client_secret:
-            self._auth_method = AuthenticationMethod.OAUTH_BYOC
-
-        # 4. External auth provider
-        elif self.provider_id:
-            self._auth_method = AuthenticationMethod.AUTH_PROVIDER
-
-        # 5. Default to OAuth browser flow
-        else:
-            self._auth_method = AuthenticationMethod.OAUTH_BROWSER
-
-        return self
-
-    @model_validator(mode="after")
-    def validate_auth_fields(self):
-        """Validate that required fields are present for the inferred auth method."""
-        if self._auth_method == AuthenticationMethod.DIRECT:
-            if not self.credentials:
-                raise ValueError("Direct authentication requires credentials")
-
-        elif self._auth_method == AuthenticationMethod.OAUTH_TOKEN:
-            if not self.access_token:
-                raise ValueError("OAuth token authentication requires access_token")
-            # Validate token not expired if expiry provided
-            if self.token_expires_at and self.token_expires_at < datetime.utcnow():
-                raise ValueError("Token has already expired")
-
-        elif self._auth_method == AuthenticationMethod.OAUTH_BYOC:
-            if not self.client_id or not self.client_secret:
-                raise ValueError("BYOC OAuth requires both client_id and client_secret")
-
-        elif self._auth_method == AuthenticationMethod.AUTH_PROVIDER:
-            if not self.provider_id:
-                raise ValueError("Auth provider authentication requires provider_id")
-
-        # OAuth browser has no required fields (redirect_url is optional)
-
-        return self
-
-    @property
-    def auth_method(self) -> AuthenticationMethod:
-        """Get the inferred authentication method."""
-        if self._auth_method is None:
-            # This should not happen after validation, but provide fallback
-            self.infer_auth_method()
-        return self._auth_method
+    authentication: AuthenticationConfig = Field(..., description="Authentication configuration")
 
 
 class SourceConnectionUpdate(BaseModel):
@@ -175,36 +144,6 @@ class SourceConnectionUpdate(BaseModel):
         if not any([self.name, self.description, self.config, self.schedule, self.credentials]):
             raise ValueError("At least one field must be provided for update")
         return self
-
-
-class SourceConnectionValidate(BaseModel):
-    """Schema for validating source connection credentials."""
-
-    short_name: str = Field(..., description="Source short_name identifier")
-    config: Optional[Dict[str, Any]] = Field(None, description="Source-specific configuration")
-
-    # Auth fields - same inference logic as create
-    credentials: Optional[Dict[str, Any]] = None
-    access_token: Optional[str] = None
-
-    # Computed field
-    _auth_method: Optional[AuthenticationMethod] = None
-
-    @model_validator(mode="after")
-    def infer_auth_method(self):
-        """Determine auth method for validation."""
-        if self.credentials:
-            self._auth_method = AuthenticationMethod.DIRECT
-        elif self.access_token:
-            self._auth_method = AuthenticationMethod.OAUTH_TOKEN
-        else:
-            raise ValueError("Either credentials or access_token must be provided for validation")
-        return self
-
-    @property
-    def auth_method(self) -> AuthenticationMethod:
-        """Get the inferred authentication method."""
-        return self._auth_method
 
 
 # ===========================

@@ -54,12 +54,14 @@ async def create(
 ) -> schemas.SourceConnection:
     """Create a new source connection.
 
-    The authentication_method field determines the flow:
-    - direct: Immediate creation with provided credentials
-    - oauth_browser: Returns shell with authentication URL
-    - oauth_token: Immediate creation with provided token
-    - oauth_byoc: OAuth with custom client credentials
-    - auth_provider: Using external auth provider
+    The authentication configuration determines the flow:
+    - DirectAuthentication: Immediate creation with provided credentials
+    - OAuthBrowserAuthentication: Returns shell with authentication URL
+    - OAuthTokenAuthentication: Immediate creation with provided token
+    - AuthProviderAuthentication: Using external auth provider
+
+    BYOC (Bring Your Own Client) is detected when client_id and client_secret
+    are provided in OAuthBrowserAuthentication.
     """
     result = await source_connection_service.create(
         db,
@@ -139,24 +141,6 @@ async def delete(
     return await source_connection_service.delete(
         db,
         id=source_connection_id,
-        ctx=ctx,
-    )
-
-
-@router.post("/validate")
-async def validate(
-    *,
-    db: AsyncSession = Depends(get_db),
-    validation_in: schemas.SourceConnectionValidate,
-    ctx: ApiContext = Depends(deps.get_context),
-) -> dict:
-    """Validate source connection credentials without creating.
-
-    Useful for testing credentials before committing to creation.
-    """
-    return await source_connection_service.validate(
-        db,
-        obj_in=validation_in,
         ctx=ctx,
     )
 

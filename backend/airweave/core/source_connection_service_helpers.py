@@ -855,7 +855,7 @@ class SourceConnectionHelpers:
         overrides = {
             "client_id": client_id,
             "client_secret": client_secret,
-            "redirect_url": obj_in.redirect_url or core_settings.app_url,
+            "redirect_url": getattr(obj_in, "redirect_url", core_settings.app_url),
             "oauth_redirect_uri": f"{core_settings.api_url}/source-connections/callback",
         }
 

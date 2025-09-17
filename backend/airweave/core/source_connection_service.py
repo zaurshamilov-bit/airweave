@@ -1,7 +1,7 @@
 """Clean source connection service with auth method inference."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -23,11 +23,14 @@ from airweave.platform.auth.settings import integration_settings
 from airweave.platform.sources._base import BaseSource
 from airweave.schemas.source_connection import (
     AuthenticationMethod,
+    AuthProviderAuthentication,
+    DirectAuthentication,
+    OAuthBrowserAuthentication,
+    OAuthTokenAuthentication,
     SourceConnection,
     SourceConnectionCreate,
     SourceConnectionListItem,
     SourceConnectionUpdate,
-    SourceConnectionValidate,
 )
 
 
@@ -35,11 +38,39 @@ class SourceConnectionService:
     """Clean service with automatic auth method inference.
 
     Key improvements:
-    - No legacy code or backward compatibility
     - Auth method automatically inferred from request body
     - Uses AuthenticationMethod enum consistently
     - Clean separation of concerns
     """
+
+    def _determine_auth_method(self, obj_in: SourceConnectionCreate) -> AuthenticationMethod:
+        """Determine authentication method from the nested authentication object.
+
+        Args:
+            obj_in: The source connection creation request
+
+        Returns:
+            The determined authentication method
+
+        Raises:
+            HTTPException: If authentication type cannot be determined
+        """
+        auth = obj_in.authentication
+
+        if isinstance(auth, DirectAuthentication):
+            return AuthenticationMethod.DIRECT
+        elif isinstance(auth, OAuthTokenAuthentication):
+            return AuthenticationMethod.OAUTH_TOKEN
+        elif isinstance(auth, OAuthBrowserAuthentication):
+            # Check if BYOC based on presence of client credentials
+            if auth.client_id and auth.client_secret:
+                return AuthenticationMethod.OAUTH_BYOC
+            else:
+                return AuthenticationMethod.OAUTH_BROWSER
+        elif isinstance(auth, AuthProviderAuthentication):
+            return AuthenticationMethod.AUTH_PROVIDER
+        else:
+            raise HTTPException(status_code=400, detail="Invalid authentication configuration")
 
     async def create(
         self,
@@ -48,44 +79,41 @@ class SourceConnectionService:
         obj_in: SourceConnectionCreate,
         ctx: ApiContext,
     ) -> SourceConnection:
-        """Create a source connection with automatic auth method inference.
+        """Create a source connection with nested authentication.
 
-        The authentication method is automatically determined from the provided fields.
+        The authentication method is determined by the type of the authentication field.
         """
+        # Determine auth method from nested authentication type
+        auth_method = self._determine_auth_method(obj_in)
+
         # Get source and validate
         source = await self._get_and_validate_source(db, obj_in.short_name)
         source_class = self._get_source_class(source.class_name)
 
-        # Trigger source-level validation by setting the source class
-        # This will run the validate_source_support validator in the schema
-        try:
-            obj_in._source_class = source_class
-            # Re-run validation with source class set
-            obj_in.model_validate(obj_in.model_dump())
-        except Exception as e:
-            from pydantic import ValidationError
+        # Validate that source supports the auth method
+        if not source_class.supports_auth_method(auth_method):
+            supported = source_class.get_supported_auth_methods()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Source {obj_in.short_name} does not support this authentication method. "
+                f"Supported methods: {[m.value for m in supported]}",
+            )
 
-            if isinstance(e, ValidationError):
-                # Extract the first error message for a cleaner response
-                first_error = e.errors()[0] if e.errors() else {"msg": str(e)}
-                raise HTTPException(status_code=400, detail=first_error.get("msg", str(e)))
-            raise HTTPException(status_code=400, detail=str(e))
-
-        # Route based on inferred auth method
-        if obj_in.auth_method == AuthenticationMethod.DIRECT:
+        # Route based on auth method
+        if auth_method == AuthenticationMethod.DIRECT:
             source_connection = await self._create_with_direct_auth(db, obj_in=obj_in, ctx=ctx)
-        elif obj_in.auth_method == AuthenticationMethod.OAUTH_BROWSER:
+        elif auth_method == AuthenticationMethod.OAUTH_BROWSER:
             source_connection = await self._create_with_oauth_browser(db, obj_in=obj_in, ctx=ctx)
-        elif obj_in.auth_method == AuthenticationMethod.OAUTH_TOKEN:
+        elif auth_method == AuthenticationMethod.OAUTH_TOKEN:
             source_connection = await self._create_with_oauth_token(db, obj_in=obj_in, ctx=ctx)
-        elif obj_in.auth_method == AuthenticationMethod.OAUTH_BYOC:
+        elif auth_method == AuthenticationMethod.OAUTH_BYOC:
             source_connection = await self._create_with_oauth_byoc(db, obj_in=obj_in, ctx=ctx)
-        elif obj_in.auth_method == AuthenticationMethod.AUTH_PROVIDER:
+        elif auth_method == AuthenticationMethod.AUTH_PROVIDER:
             source_connection = await self._create_with_auth_provider(db, obj_in=obj_in, ctx=ctx)
         else:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported authentication method: {obj_in.auth_method.value}",
+                detail=f"Unsupported authentication method: {auth_method.value}",
             )
 
         # Track analytics
@@ -257,51 +285,6 @@ class SourceConnectionService:
 
         return response
 
-    async def validate(
-        self,
-        db: AsyncSession,
-        *,
-        obj_in: SourceConnectionValidate,
-        ctx: ApiContext,
-    ) -> Dict[str, Any]:
-        """Validate source connection credentials without creating."""
-        source = await crud.source.get_by_short_name(db, short_name=obj_in.short_name)
-        if not source:
-            raise HTTPException(status_code=404, detail=f"Source '{obj_in.short_name}' not found")
-
-        # Get source class and trigger validation
-        source_class = self._get_source_class(source.class_name)
-        try:
-            obj_in._source_class = source_class
-            # Re-run validation with source class set
-            obj_in.model_validate(obj_in.model_dump())
-        except Exception as e:
-            from pydantic import ValidationError
-
-            if isinstance(e, ValidationError):
-                first_error = e.errors()[0] if e.errors() else {"msg": str(e)}
-                raise HTTPException(status_code=400, detail=first_error.get("msg", str(e)))
-            raise HTTPException(status_code=400, detail=str(e))
-
-        # Route validation based on inferred method
-        if obj_in.auth_method == AuthenticationMethod.DIRECT:
-            return await self._validate_direct_auth(db, source, obj_in.credentials, ctx)
-        elif obj_in.auth_method == AuthenticationMethod.OAUTH_TOKEN:
-            return await self._validate_oauth_token(db, source, obj_in.access_token, ctx)
-        elif obj_in.auth_method == AuthenticationMethod.OAUTH_BYOC:
-            # For BYOC, we can validate the client credentials format but not test them
-            return {
-                "valid": True,
-                "source": source.short_name,
-                "method": "oauth_byoc",
-                "note": "Client credentials format is valid. OAuth flow required.",
-            }
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Validation not supported for method: {obj_in.auth_method.value}",
-            )
-
     # Private creation handlers
     async def _create_with_direct_auth(
         self,
@@ -310,11 +293,19 @@ class SourceConnectionService:
         ctx: ApiContext,
     ) -> SourceConnection:
         """Create connection with direct authentication credentials."""
+        from airweave.schemas.source_connection import DirectAuthentication
+
         source = await self._get_and_validate_source(db, obj_in.short_name)
+
+        # Extract credentials from nested authentication
+        if not isinstance(obj_in.authentication, DirectAuthentication):
+            raise HTTPException(
+                status_code=400, detail="Invalid authentication type for direct auth"
+            )
 
         # Validate credentials
         validated_auth = await self._validate_auth_fields(
-            db, obj_in.short_name, obj_in.credentials, ctx
+            db, obj_in.short_name, obj_in.authentication.credentials, ctx
         )
         validated_config = await self._validate_config_fields(
             db, obj_in.short_name, obj_in.config, ctx
@@ -389,7 +380,15 @@ class SourceConnectionService:
         ctx: ApiContext,
     ) -> SourceConnection:
         """Create shell connection and start OAuth browser flow."""
+        from airweave.schemas.source_connection import OAuthBrowserAuthentication
+
         source = await self._get_and_validate_source(db, obj_in.short_name)
+
+        # Extract OAuth config from nested authentication
+        if not isinstance(obj_in.authentication, OAuthBrowserAuthentication):
+            raise HTTPException(
+                status_code=400, detail="Invalid authentication type for OAuth browser"
+            )
 
         # Validate config
         validated_config = await self._validate_config_fields(
@@ -410,7 +409,7 @@ class SourceConnectionService:
         api_callback = f"{core_settings.api_url}/source-connections/callback"
 
         # Use custom client if provided
-        client_id = obj_in.client_id if obj_in.client_id else None
+        client_id = obj_in.authentication.client_id if obj_in.authentication.client_id else None
 
         provider_auth_url = await oauth2_service.generate_auth_url_with_redirect(
             oauth_settings,
@@ -463,19 +462,27 @@ class SourceConnectionService:
         ctx: ApiContext,
     ) -> SourceConnection:
         """Create connection with injected OAuth token."""
+        from airweave.schemas.source_connection import OAuthTokenAuthentication
+
         source = await self._get_and_validate_source(db, obj_in.short_name)
+
+        # Extract token from nested authentication
+        if not isinstance(obj_in.authentication, OAuthTokenAuthentication):
+            raise HTTPException(
+                status_code=400, detail="Invalid authentication type for OAuth token"
+            )
 
         # Build OAuth credentials
         oauth_creds = {
-            "access_token": obj_in.access_token,
-            "refresh_token": obj_in.refresh_token,
+            "access_token": obj_in.authentication.access_token,
+            "refresh_token": obj_in.authentication.refresh_token,
             "token_type": "Bearer",
         }
-        if obj_in.token_expires_at:
-            oauth_creds["expires_at"] = obj_in.token_expires_at.isoformat()
+        if obj_in.authentication.expires_at:
+            oauth_creds["expires_at"] = obj_in.authentication.expires_at.isoformat()
 
         # Validate token
-        await self._validate_oauth_token(db, source, obj_in.access_token, ctx)
+        await self._validate_oauth_token(db, source, obj_in.authentication.access_token, ctx)
 
         # Validate config
         validated_config = await self._validate_config_fields(
@@ -548,11 +555,21 @@ class SourceConnectionService:
         ctx: ApiContext,
     ) -> SourceConnection:
         """Create connection with bring-your-own-client OAuth."""
-        # This is similar to OAuth browser but always uses custom client
-        # The client_id and client_secret are guaranteed to be present
-        obj_in_modified = obj_in.model_copy()
-        # Ensure we use the custom client for OAuth flow
-        return await self._create_with_oauth_browser(db, obj_in_modified, ctx)
+        from airweave.schemas.source_connection import OAuthBrowserAuthentication
+
+        # Verify client credentials are present
+        if not isinstance(obj_in.authentication, OAuthBrowserAuthentication):
+            raise HTTPException(
+                status_code=400, detail="Invalid authentication type for OAuth BYOC"
+            )
+
+        if not obj_in.authentication.client_id or not obj_in.authentication.client_secret:
+            raise HTTPException(
+                status_code=400, detail="BYOC OAuth requires client_id and client_secret"
+            )
+
+        # Use the browser flow with custom client
+        return await self._create_with_oauth_browser(db, obj_in, ctx)
 
     async def _create_with_auth_provider(
         self,
@@ -561,23 +578,31 @@ class SourceConnectionService:
         ctx: ApiContext,
     ) -> SourceConnection:
         """Create connection using external auth provider."""
+        from airweave.schemas.source_connection import AuthProviderAuthentication
+
         source = await self._get_and_validate_source(db, obj_in.short_name)
+
+        # Extract provider info from nested authentication
+        if not isinstance(obj_in.authentication, AuthProviderAuthentication):
+            raise HTTPException(
+                status_code=400, detail="Invalid authentication type for auth provider"
+            )
 
         # Validate auth provider exists
         auth_provider_conn = await crud.connection.get_by_readable_id(
-            db, readable_id=obj_in.provider_id, ctx=ctx
+            db, readable_id=obj_in.authentication.provider_name, ctx=ctx
         )
         if not auth_provider_conn:
             raise HTTPException(
                 status_code=404,
-                detail=f"Auth provider '{obj_in.provider_id}' not found",
+                detail=f"Auth provider '{obj_in.authentication.provider_name}' not found",
             )
 
         # Validate provider config
         validated_auth_config = None
-        if obj_in.provider_config:
+        if obj_in.authentication.provider_config:
             validated_auth_config = await auth_provider_service.validate_auth_provider_config(
-                db, auth_provider_conn.short_name, obj_in.provider_config
+                db, auth_provider_conn.short_name, obj_in.authentication.provider_config
             )
 
         # Validate source config

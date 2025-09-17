@@ -272,15 +272,47 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         return;
       }
 
-      // Map frontend auth modes to backend authentication methods
-      let authenticationMethod = 'oauth_browser'; // default
+      // Build nested authentication structure
+      let authentication: any = {};
+
+      // Handle different auth modes
       if (authMode === 'direct_auth') {
-        authenticationMethod = 'direct';
+        // Direct auth (API key, passwords, config)
+        if (Object.keys(authFields).length === 0) {
+          toast.error('Please provide authentication credentials');
+          setIsCreating(false);
+          return;
+        }
+        authentication = {
+          credentials: authFields
+        };
       } else if (authMode === 'oauth2') {
-        // Always use oauth_browser, the backend will check requires_byoc
-        authenticationMethod = 'oauth_browser';
+        // OAuth2 flow
+        authentication = {
+          redirect_uri: customRedirectUrl.trim() || `${window.location.origin}?oauth_return=true`
+        };
+
+        // Add client credentials if BYOC or user chose to use own credentials
+        if (requiresCustomOAuth() || useOwnCredentials) {
+          if (!clientId || !clientSecret) {
+            toast.error('Please provide OAuth client credentials');
+            setIsCreating(false);
+            return;
+          }
+          authentication.client_id = clientId;
+          authentication.client_secret = clientSecret;
+        }
       } else if (authMode === 'external_provider') {
-        authenticationMethod = 'auth_provider';
+        // External provider auth
+        if (!selectedAuthProvider) {
+          toast.error('Please select an auth provider');
+          setIsCreating(false);
+          return;
+        }
+        authentication = {
+          provider_name: selectedAuthProvider,
+          provider_config: authProviderConfig && Object.keys(authProviderConfig).length > 0 ? authProviderConfig : undefined
+        };
       }
 
       const payload: any = {
@@ -288,7 +320,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         description: `${sourceName} connection for ${collectionName}`,
         short_name: selectedSource,
         readable_collection_id: isAddingToExisting ? existingCollectionId : collectionId,
-        authentication_method: authenticationMethod,
+        authentication: authentication,
         // For direct auth, sync immediately since we have credentials
         // For OAuth, don't sync until after authorization is complete
         // For external provider, sync immediately since we're using existing auth
@@ -297,44 +329,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
       // Add config fields if any
       if (Object.keys(configData).length > 0) {
-        payload.config_fields = configData;
-      }
-
-      // Handle different auth modes
-      if (authenticationMethod === 'auth_provider') {
-        // External provider auth
-        if (!selectedAuthProvider) {
-          toast.error('Please select an auth provider');
-          setIsCreating(false);
-          return;
-        }
-        payload.auth_provider = selectedAuthProvider;
-        if (authProviderConfig && Object.keys(authProviderConfig).length > 0) {
-          payload.auth_provider_config = authProviderConfig;
-        }
-      } else if (authenticationMethod === 'direct') {
-        // Direct auth (API key, passwords, config)
-        if (Object.keys(authFields).length === 0) {
-          toast.error('Please provide authentication credentials');
-          setIsCreating(false);
-          return;
-        }
-        payload.auth_fields = authFields;
-      } else if (authenticationMethod === 'oauth_browser') {
-        // OAuth2 flow
-        // Check if source requires BYOC or user chose to use own credentials
-        if (requiresCustomOAuth() || useOwnCredentials) {
-          if (!clientId || !clientSecret) {
-            toast.error('Please provide OAuth client credentials');
-            setIsCreating(false);
-            return;
-          }
-          payload.client_id = clientId;
-          payload.client_secret = clientSecret;
-        }
-        // Use custom redirect URL if provided, otherwise use default
-        const redirectUrl = customRedirectUrl.trim() || `${window.location.origin}?oauth_return=true`;
-        payload.redirect_url = redirectUrl;
+        payload.config = configData;
       }
 
       const response = await apiClient.post('/source-connections', payload);
