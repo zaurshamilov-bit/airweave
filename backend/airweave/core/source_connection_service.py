@@ -912,6 +912,13 @@ class SourceConnectionService:
         """Get source class by name."""
         # Import the source module dynamically
         module_name = class_name.replace("Source", "").lower()
+
+        # Handle google* and outlook* cases - add underscore if there's additional text
+        if module_name.startswith("google") and len(module_name) > 6:
+            module_name = "google_" + module_name[6:]
+        elif module_name.startswith("outlook") and len(module_name) > 7:
+            module_name = "outlook_" + module_name[7:]
+
         module = __import__(f"airweave.platform.sources.{module_name}", fromlist=[class_name])
         return getattr(module, class_name)
 
