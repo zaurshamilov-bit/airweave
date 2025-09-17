@@ -62,19 +62,21 @@ class GuardRailService:
 
     # Plan limits configuration (matching BillingService)
     PLAN_LIMITS = {
-        BillingPlan.DEVELOPER: {
-            "max_syncs": 10,
+        BillingPlan.PRO: {
+            "max_syncs": None,
             "max_entities": 100000,
-            "max_queries": 1000,
-            "max_collections": 5,
-            "max_source_connections": 10,
+            "max_queries": 2000,
+            "max_collections": None,
+            "max_source_connections": 50,
+            "max_team_members": 2,
         },
-        BillingPlan.STARTUP: {
-            "max_syncs": 50,
+        BillingPlan.TEAM: {
+            "max_syncs": None,
             "max_entities": 1000000,
             "max_queries": 10000,
-            "max_collections": 20,
-            "max_source_connections": 50,
+            "max_collections": None,
+            "max_source_connections": 1000,
+            "max_team_members": 10,
         },
         BillingPlan.ENTERPRISE: {
             "max_syncs": None,  # Unlimited
@@ -82,6 +84,7 @@ class GuardRailService:
             "max_queries": None,
             "max_collections": None,
             "max_source_connections": None,
+            "max_team_members": None,
         },
     }
 

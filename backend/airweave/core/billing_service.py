@@ -74,25 +74,31 @@ class BillingService:
             ),
         )
 
-    # Plan limits configuration
+    # Plan limits configuration (matching GuardRailService)
     PLAN_LIMITS = {
-        BillingPlan.DEVELOPER: {
-            "source_connections": 10,
-            "entities_per_month": 100000,
-            "sync_frequency_minutes": 60,  # Hourly
-            "team_members": 5,
+        BillingPlan.PRO: {
+            "max_syncs": None,
+            "max_entities": 100000,
+            "max_queries": 2000,
+            "max_collections": None,
+            "max_source_connections": 50,
+            "max_team_members": 2,
         },
-        BillingPlan.STARTUP: {
-            "source_connections": 50,
-            "entities_per_month": 1000000,
-            "sync_frequency_minutes": 15,
-            "team_members": 20,
+        BillingPlan.TEAM: {
+            "max_syncs": None,
+            "max_entities": 1000000,
+            "max_queries": 10000,
+            "max_collections": None,
+            "max_source_connections": 1000,
+            "max_team_members": 10,
         },
         BillingPlan.ENTERPRISE: {
-            "source_connections": -1,  # Unlimited
-            "entities_per_month": -1,
-            "sync_frequency_minutes": 5,
-            "team_members": -1,
+            "max_syncs": None,  # Unlimited
+            "max_entities": None,
+            "max_queries": None,
+            "max_collections": None,
+            "max_source_connections": None,
+            "max_team_members": None,
         },
     }
 
@@ -130,18 +136,18 @@ class BillingService:
             raise InvalidStateError("Billing record already exists for organization")
 
         # Get plan from organization metadata if available
-        selected_plan = BillingPlan.DEVELOPER  # Default
+        selected_plan = BillingPlan.PRO  # Default
         if hasattr(organization, "org_metadata") and organization.org_metadata:
             onboarding_data = organization.org_metadata.get("onboarding", {})
-            plan_from_metadata = onboarding_data.get("subscriptionPlan", "developer")
+            plan_from_metadata = onboarding_data.get("subscriptionPlan", "pro")
             # Convert to BillingPlan enum
-            if plan_from_metadata in ["developer", "startup", "enterprise"]:
+            if plan_from_metadata in ["pro", "team", "enterprise"]:
                 selected_plan = BillingPlan(plan_from_metadata)
 
         billing_create = OrganizationBillingCreate(
             stripe_customer_id=stripe_customer_id,
             billing_plan=selected_plan,
-            billing_status=BillingStatus.TRIALING,  # New orgs start in trialing state
+            billing_status=BillingStatus.ACTIVE,  # Trials disabled
             billing_email=billing_email,
             # No grace period for new organizations - they need to complete setup
         )
@@ -216,7 +222,7 @@ class BillingService:
 
         Args:
             db: Database session
-            plan: Plan name (developer, startup)
+            plan: Plan name (pro, team)
             success_url: URL to redirect on success
             cancel_url: URL to redirect on cancel
             ctx: Authentication context
@@ -263,11 +269,8 @@ class BillingService:
                         f"Organization already has an active {plan} subscription"
                     )
 
-        # Determine if we should include a trial
-        # Only give trial for developer plan and only if no previous subscription
+        # Trials disabled
         use_trial_period_days = None
-        if plan == "developer" and not billing_model.stripe_subscription_id:
-            use_trial_period_days = 14  # Stripe manages the 14-day trial
 
         # Create checkout session
         session = await stripe_client.create_checkout_session(
@@ -327,19 +330,15 @@ class BillingService:
             Tuple of (is_upgrade, is_trial_to_startup)
         """
         plan_hierarchy = {
-            BillingPlan.DEVELOPER: 1,
-            BillingPlan.STARTUP: 2,
+            BillingPlan.PRO: 1,
+            BillingPlan.TEAM: 2,
             BillingPlan.ENTERPRISE: 3,
         }
 
         is_upgrade = plan_hierarchy.get(new_plan, 0) > plan_hierarchy.get(current_plan, 0)
 
-        is_trial_to_startup = (
-            new_plan == "startup"
-            and current_plan == BillingPlan.DEVELOPER
-            and billing_model.trial_ends_at
-            and billing_model.trial_ends_at > datetime.utcnow()
-        )
+        # Trials disabled
+        is_trial_to_startup = False
 
         return is_upgrade, is_trial_to_startup
 
@@ -543,17 +542,7 @@ class BillingService:
         )
 
         try:
-            # Get subscription details
-            subscription = await stripe_client.get_subscription(
-                billing_model.stripe_subscription_id
-            )
-
-            # Handle trial subscriptions with no items
-            if (
-                subscription.status == "trialing"
-                and len(getattr(subscription.items, "data", [])) == 0
-            ):
-                return await self._handle_trial_subscription_upgrade(billing_model, ctx, new_plan)
+            # Trials disabled: skip trial-only upgrade path
 
             # For downgrades, schedule the change for end of period
             if not is_upgrade:
@@ -814,13 +803,11 @@ class BillingService:
                 # Continue processing even if cancellation fails - the new subscription is active
 
         # Determine plan from metadata or price
-        plan = subscription.metadata.get("plan", "developer")
+        plan = subscription.metadata.get("plan", "pro")
 
-        # Check if subscription has trial
-        has_trial = subscription.trial_end is not None
+        # Trials disabled
+        has_trial = False
         trial_ends_at = None
-        if has_trial:
-            trial_ends_at = datetime.utcfromtimestamp(subscription.trial_end)
 
         # Create system auth context for update
         ctx = await self._create_system_context(db, UUID(org_id), "stripe_webhook")
@@ -861,7 +848,7 @@ class BillingService:
                 else BillingTransition.UPGRADE
             ),
             stripe_subscription_id=subscription.id,
-            status=BillingPeriodStatus.TRIAL if has_trial else BillingPeriodStatus.ACTIVE,
+            status=BillingPeriodStatus.ACTIVE,
             contextual_logger=log,
         )
 
@@ -889,9 +876,17 @@ class BillingService:
         if not items_data:
             return current_plan, False
 
-        for price_id, plan_name in stripe_client.price_ids.items():
-            if items_data[0].price.id == price_id:
-                return plan_name, plan_name != current_plan
+        for plan_key, configured_price_id in stripe_client.price_ids.items():
+            if configured_price_id and items_data[0].price.id == configured_price_id:
+                if plan_key == "pro_monthly":
+                    return BillingPlan.PRO, BillingPlan.PRO != current_plan
+                if plan_key == "team_monthly":
+                    return BillingPlan.TEAM, BillingPlan.TEAM != current_plan
+                try:
+                    normalized = BillingPlan(plan_key)
+                    return normalized, normalized != current_plan
+                except Exception:
+                    pass
 
         return current_plan, False
 
@@ -1099,15 +1094,7 @@ class BillingService:
             if is_canceled_plan_change:
                 log.info(f"Cleared canceled plan change for org {org_id}")
 
-        # Handle trial end updates
-        if hasattr(subscription, "trial_end"):
-            if subscription.trial_end is None:
-                update_data.trial_ends_at = None
-                # Handle trial conversion if needed
-                if previous_attributes and "trial_end" in previous_attributes:
-                    await self._handle_trial_conversion(db, ctx, subscription, new_plan)
-            else:
-                update_data.trial_ends_at = datetime.utcfromtimestamp(subscription.trial_end)
+        # Trials disabled: ignore trial_end updates
 
         # Update billing record
         await crud.organization_billing.update(
@@ -1351,9 +1338,9 @@ class BillingService:
         if not billing_model:
             # Return free/OSS tier info - using developer limits
             return SubscriptionInfo(
-                plan=BillingPlan.DEVELOPER,
+                plan=BillingPlan.PRO,
                 status=BillingStatus.ACTIVE,
-                limits=self.PLAN_LIMITS.get(BillingPlan.DEVELOPER, {}),
+                limits=self.PLAN_LIMITS.get(BillingPlan.PRO, {}),
                 is_oss=True,
                 has_active_subscription=False,
                 in_trial=False,
@@ -1362,12 +1349,8 @@ class BillingService:
                 requires_payment_method=False,
             )
 
-        # Check if in trial (Stripe-managed trial)
-        in_trial = (
-            billing_model.trial_ends_at is not None
-            and billing_model.trial_ends_at > datetime.utcnow()
-            and billing_model.stripe_subscription_id is not None
-        )
+        # Trials disabled
+        in_trial = False
 
         # Check if in grace period (only for existing subscriptions with payment failures)
         in_grace_period = (
@@ -1387,11 +1370,8 @@ class BillingService:
             is not None  # Grace period only applies to existing subscriptions
         )
 
-        # For new organizations without subscriptions, they always need to complete setup
-        needs_initial_setup = (
-            not billing_model.stripe_subscription_id
-            and billing_model.billing_status == BillingStatus.TRIALING
-        )
+        # Needs setup when no subscription (trials disabled)
+        needs_initial_setup = not billing_model.stripe_subscription_id
 
         # Determine if payment method is required now
         requires_payment_method = needs_initial_setup or in_grace_period or grace_period_expired

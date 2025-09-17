@@ -23,8 +23,8 @@ class StripeClient:
 
         # Price IDs from configuration
         self.price_ids = {
-            "developer": settings.STRIPE_DEVELOPER_PRICE_ID,
-            "startup": settings.STRIPE_STARTUP_PRICE_ID,
+            "pro_monthly": settings.STRIPE_PRO_MONTHLY,
+            "team_monthly": settings.STRIPE_TEAM_MONTHLY,
         }
 
     def _sanitize_for_stripe(self, text: str) -> str:
@@ -161,11 +161,7 @@ class StripeClient:
                 },
             }
 
-            # Add trial_end to subscription_data if provided
-            if trial_end:
-                session_params["subscription_data"]["trial_end"] = trial_end
-            elif trial_period_days:
-                session_params["subscription_data"]["trial_period_days"] = trial_period_days
+            # Trials disabled: do not set trial_end or trial_period_days
 
             return await stripe.checkout.Session.create_async(**session_params)
         except StripeError as e:
@@ -356,7 +352,13 @@ class StripeClient:
         Returns:
             Stripe price ID or None if not found
         """
-        return self.price_ids.get(plan_name.lower())
+        normalized = (plan_name or "").lower()
+        alias = {
+            "pro": "pro_monthly",
+            "team": "team_monthly",
+        }
+        key = alias.get(normalized, normalized)
+        return self.price_ids.get(key)
 
 
 # Singleton instance

@@ -527,7 +527,7 @@ const DashboardLayout = () => {
 
                     {/* Get a demo button */}
                     <a
-                      href="https://cal.com/lennert-airweave/airweave-q-a-demo"
+                      href="https://cal.com/lennert-airweave/airweave-demo"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
@@ -535,7 +535,7 @@ const DashboardLayout = () => {
                         variant="outline"
                         className="hidden md:flex border-primary/60 border-[1px] text-primary/90 hover:bg-primary/10 hover:text-foreground/65 h-9 px-4 text-sm rounded-lg transition-all duration-200 hover:shadow-sm"
                       >
-                        Talk to a Founder
+                        Get a Demo
                       </Button>
                     </a>
 

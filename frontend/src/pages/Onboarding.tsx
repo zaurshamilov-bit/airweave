@@ -69,36 +69,56 @@ const ORGANIZATION_TYPES = [
 
 const SUBSCRIPTION_PLANS = [
   {
-    value: 'developer',
-    label: 'Developer',
-    price: '$89',
+    value: 'pro',
+    label: 'Pro',
+    price: '$20',
     period: 'per month',
-    description: 'Perfect for small teams',
+    description: 'Take your agent to the next level',
     features: [
-      '14-day free trial',
-      '10 source connections',
-      '100K entities/month',
-      'Hourly sync',
-      '5 team members',
+      '50 sources',
+      '2K queries / mo',
+      '100K entities synced / mo',
+      '2 team members',
+      'Email support',
     ],
-    teamMemberLimit: 5,
+    teamMemberLimit: 2,
     recommended: true,
-    hasTrial: true,
+    hasTrial: false,
   },
   {
-    value: 'startup',
-    label: 'Startup',
+    value: 'team',
+    label: 'Team',
     price: '$299',
     period: 'per month',
-    description: 'For growing companies',
+    description: 'For fast-moving teams that need scale and control',
     features: [
-      '50 source connections',
-      '1M entities/month',
-      '15-min sync',
-      '20 team members',
-      'Priority support',
+      '1000 sources',
+      '10K queries / mo',
+      '1M entities synced / mo',
+      '10 team members',
+      'Dedicated Slack support',
+      'Dedicated onboarding',
     ],
-    teamMemberLimit: 20,
+    teamMemberLimit: 10,
+    recommended: false,
+    hasTrial: false,
+  },
+  {
+    value: 'enterprise',
+    label: 'Enterprise',
+    price: 'Custom',
+    period: '',
+    description: 'Tailored solutions for large organizations',
+    features: [
+      'Unlimited sources',
+      'Custom usage limits',
+      'Tailored onboarding',
+      'Dedicated priority support',
+      'Custom integrations (Optional)',
+      'On-premise deployment (Optional)',
+      'SLAs (Optional)'
+    ],
+    teamMemberLimit: 1000,
     recommended: false,
     hasTrial: false,
   },
@@ -118,7 +138,7 @@ export const Onboarding = () => {
     organizationSize: '',
     userRole: '',
     organizationType: '',
-    subscriptionPlan: 'developer', // Default to developer plan
+    subscriptionPlan: 'pro', // Default to pro plan
     teamEmails: [],
   });
 
@@ -672,7 +692,13 @@ export const Onboarding = () => {
               {SUBSCRIPTION_PLANS.map((plan) => (
                 <button
                   key={plan.value}
-                  onClick={() => handleSelection('subscriptionPlan', plan.value)}
+                  onClick={() => {
+                    if (plan.value === 'enterprise') {
+                      window.open('https://cal.com/lennert-airweave/airweave-demo', '_blank', 'noopener,noreferrer');
+                      return;
+                    }
+                    handleSelection('subscriptionPlan', plan.value);
+                  }}
                   className={cn(
                     "relative p-6 rounded-lg border text-left transition-all",
                     "hover:border-primary/50",
@@ -685,11 +711,7 @@ export const Onboarding = () => {
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-medium text-lg">{plan.label}</h3>
-                        {plan.hasTrial && (
-                          <span className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">
-                            14-day free trial
-                          </span>
-                        )}
+                        {/* Trials disabled */}
                       </div>
                       <p className="text-sm text-muted-foreground">{plan.description}</p>
                     </div>
@@ -722,6 +744,8 @@ export const Onboarding = () => {
                 </button>
               ))}
             </div>
+
+            {/* Enterprise now included as a plan card above */}
           </div>
         );
 

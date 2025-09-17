@@ -12,8 +12,8 @@ class BillingPlan(str, Enum):
     """Billing plan tiers."""
 
     TRIAL = "trial"
-    DEVELOPER = "developer"
-    STARTUP = "startup"
+    PRO = "pro"
+    TEAM = "team"
     ENTERPRISE = "enterprise"
 
 

@@ -224,7 +224,7 @@ async def _build_previous_periods(
         period_usage = await crud.usage.get_by_billing_period(db, billing_period_id=period.id)
 
         period_limits = GuardRailService.PLAN_LIMITS.get(
-            period.plan, GuardRailService.PLAN_LIMITS[BillingPlan.DEVELOPER]
+            period.plan, GuardRailService.PLAN_LIMITS[BillingPlan.PRO]
         )
 
         status_str, plan_str = _get_status_and_plan_strings(period)
@@ -270,7 +270,7 @@ async def get_usage_dashboard(
             db, billing_period_id=target_period.id
         )
         plan_limits = GuardRailService.PLAN_LIMITS.get(
-            target_period.plan, GuardRailService.PLAN_LIMITS[BillingPlan.DEVELOPER]
+            target_period.plan, GuardRailService.PLAN_LIMITS[BillingPlan.PRO]
         )
 
         # Create usage snapshot

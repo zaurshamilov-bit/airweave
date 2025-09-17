@@ -38,7 +38,12 @@ import {
   Slack,
   CalendarDays,
   Receipt,
-  HelpCircle
+  HelpCircle,
+  Settings,
+  UserCheck,
+  Puzzle,
+  Server,
+  Shield
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
@@ -70,28 +75,29 @@ interface BillingSettingsProps {
 }
 
 const plans = {
-  developer: {
-    name: 'Developer',
-    price: 89,
-    description: 'Perfect for small teams and projects',
+  pro: {
+    name: 'Pro',
+    price: 20,
+    description: 'Take your agent to the next level',
     features: [
-      { icon: Database, label: '10 source connections' },
-      { icon: Zap, label: '100K entities/month' },
-      { icon: RefreshCw, label: 'Hourly sync' },
-      { icon: Users, label: '5 team members' },
-      { icon: MessageCircle, label: 'Community support' }
+      { icon: Database, label: '50 sources' },
+      { icon: Zap, label: '2K queries / month' },
+      { icon: Zap, label: '100K entities synced / month' },
+      { icon: Users, label: '2 team members' },
+      { icon: MessageCircle, label: 'Email support' }
     ]
   },
-  startup: {
-    name: 'Startup',
+  team: {
+    name: 'Team',
     price: 299,
-    description: 'For growing teams with higher demands',
+    description: 'For fast-moving teams that need scale and control',
     features: [
-      { icon: Database, label: '50 source connections' },
-      { icon: Zap, label: '1M entities/month' },
-      { icon: RefreshCw, label: '15-min sync' },
-      { icon: Users, label: '20 team members' },
-      { icon: MessageCircle, label: 'Community support' }
+      { icon: Database, label: '1000 sources' },
+      { icon: Zap, label: '10K queries / month' },
+      { icon: Zap, label: '1M entities synced / month' },
+      { icon: Users, label: '10 team members' },
+      { icon: MessageCircle, label: 'Dedicated Slack support' },
+      { icon: MessageCircle, label: 'Dedicated onboarding' }
     ]
   },
   enterprise: {
@@ -99,11 +105,13 @@ const plans = {
     price: 'Custom',
     description: 'Tailored solutions for large organizations',
     features: [
-      { icon: Database, label: 'Unlimited connections' },
-      { icon: Zap, label: 'Unlimited entities' },
-      { icon: RefreshCw, label: 'Instant sync' },
-      { icon: Users, label: 'Unlimited team' },
-      { icon: Slack, label: 'Slack channel support' }
+      { icon: Database, label: 'Unlimited sources' },
+      { icon: Settings, label: 'Custom usage limits' },
+      { icon: UserCheck, label: 'Tailored onboarding' },
+      { icon: Headphones, label: 'Dedicated priority support' },
+      { icon: Puzzle, label: 'Custom integrations (Optional)' },
+      { icon: Server, label: 'On-premise deployment (Optional)' },
+      { icon: Shield, label: 'SLAs (Optional)' }
     ]
   }
 };
@@ -148,11 +156,11 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
     }
   };
 
-  const handleUpgrade = async (plan: 'developer' | 'startup') => {
+  const handleUpgrade = async (plan: 'pro' | 'team') => {
     try {
       setIsCheckoutLoading(true);
 
-      if (subscription?.has_active_subscription && subscription.plan !== 'trial') {
+      if (subscription?.has_active_subscription) {
         const response = await apiClient.post('/billing/update-plan', { plan });
 
         if (response.ok) {
@@ -607,16 +615,16 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
                     </Button>
                   ) : isEnterprise ? (
                     <Button
-                      onClick={() => window.open('https://cal.com/lennert-airweave/airweave-q-a-demo', '_blank')}
+                      onClick={() => window.open('https://cal.com/lennert-airweave/airweave-demo', '_blank')}
                       variant="outline"
                       className="w-full h-9 text-sm border-border"
                     >
                       <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
-                      Talk to Founder
+                      Book a Call
                     </Button>
                   ) : (
                     <Button
-                      onClick={() => handleUpgrade(key as 'developer' | 'startup')}
+                      onClick={() => handleUpgrade(key as 'pro' | 'team')}
                       disabled={isCheckoutLoading || (isDowngrade && subscription.pending_plan_change === 'developer')}
                       variant={isUpgrade ? "default" : "outline"}
                       className={cn(
