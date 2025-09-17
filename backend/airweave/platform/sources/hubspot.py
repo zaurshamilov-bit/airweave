@@ -27,6 +27,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
         AuthenticationMethod.AUTH_PROVIDER,
     ],
     oauth_type=OAuthType.WITH_REFRESH,
+    config_class="HubspotConfig",
     labels=["CRM", "Marketing"],
 )
 class HubspotSource(BaseSource):

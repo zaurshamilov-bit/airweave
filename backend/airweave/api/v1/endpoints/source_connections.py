@@ -30,14 +30,14 @@ async def oauth_callback(
     This endpoint does not require authentication as it's accessed by users
     who are connecting their source.
     """
-    source_conn = await source_connection_service.complete_oauth_callback_no_auth(
+    source_conn = await source_connection_service.complete_oauth_callback(
         db,
         state=state,
         code=code,
     )
 
     # Redirect to the app with success
-    redirect_url = source_conn.authentication.redirect_url
+    redirect_url = source_conn.auth.redirect_url
     connection_id = source_conn.id
     return Response(
         status_code=303,
@@ -46,7 +46,7 @@ async def oauth_callback(
 
 
 @router.post("/", response_model=schemas.SourceConnection)
-async def create_source_connection(
+async def create(
     *,
     db: AsyncSession = Depends(get_db),
     source_connection_in: schemas.SourceConnectionCreate,
@@ -70,7 +70,7 @@ async def create_source_connection(
 
 
 @router.get("/", response_model=List[schemas.SourceConnectionListItem])
-async def list_source_connections(
+async def list(
     *,
     db: AsyncSession = Depends(get_db),
     ctx: ApiContext = Depends(deps.get_context),
@@ -82,26 +82,20 @@ async def list_source_connections(
     return await source_connection_service.list(
         db,
         ctx=ctx,
-        collection=collection,
+        readable_collection_id=collection,
         skip=skip,
         limit=limit,
     )
 
 
 @router.get("/{source_connection_id}", response_model=schemas.SourceConnection)
-async def get_source_connection(
+async def get(
     *,
     db: AsyncSession = Depends(get_db),
     source_connection_id: UUID,
     ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SourceConnection:
-    """Get a source connection with optional depth expansion.
-
-    Depth levels:
-    - 0: Basic fields + config + schedule + last_sync_job
-    - 1: Above + authentication details
-    - 2: Above + entity states
-    """
+    """Get a source connection with optional depth expansion."""
     result = await source_connection_service.get(
         db,
         id=source_connection_id,
@@ -111,7 +105,7 @@ async def get_source_connection(
 
 
 @router.patch("/{source_connection_id}", response_model=schemas.SourceConnection)
-async def update_source_connection(
+async def update(
     *,
     db: AsyncSession = Depends(get_db),
     source_connection_id: UUID,
@@ -135,7 +129,7 @@ async def update_source_connection(
 
 
 @router.delete("/{source_connection_id}", response_model=schemas.SourceConnection)
-async def delete_source_connection(
+async def delete(
     *,
     db: AsyncSession = Depends(get_db),
     source_connection_id: UUID,
@@ -150,7 +144,7 @@ async def delete_source_connection(
 
 
 @router.post("/validate")
-async def validate_source_connection(
+async def validate(
     *,
     db: AsyncSession = Depends(get_db),
     validation_in: schemas.SourceConnectionValidate,
@@ -168,7 +162,7 @@ async def validate_source_connection(
 
 
 @router.post("/{source_connection_id}/run", response_model=schemas.SourceConnectionJob)
-async def run_source_connection(
+async def run(
     *,
     db: AsyncSession = Depends(get_db),
     source_connection_id: UUID,
@@ -206,7 +200,7 @@ async def get_source_connection_jobs(
 @router.post(
     "/{source_connection_id}/jobs/{job_id}/cancel", response_model=schemas.SourceConnectionJob
 )
-async def cancel_source_connection_job(
+async def cancel_job(
     *,
     db: AsyncSession = Depends(get_db),
     source_connection_id: UUID,
@@ -227,7 +221,7 @@ async def cancel_source_connection_job(
 
 
 @router.post("/{source_connection_id}/make-continuous", response_model=schemas.SourceConnection)
-async def make_source_connection_continuous(
+async def make_continuous(
     *,
     db: AsyncSession = Depends(get_db),
     source_connection_id: UUID,

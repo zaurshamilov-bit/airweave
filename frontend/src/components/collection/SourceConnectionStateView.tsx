@@ -48,22 +48,26 @@ interface Schedule {
 
 interface AuthenticationInfo {
   method?: string;
-  is_authenticated?: boolean;
+  authenticated?: boolean;  // Backend uses 'authenticated', not 'is_authenticated'
   authenticated_at?: string;
   expires_at?: string;
-  authentication_url?: string;
-  authentication_url_expiry?: string;
-  auth_provider_id?: string;
-  auth_provider_name?: string;
+  auth_url?: string;  // Backend uses 'auth_url', not 'authentication_url'
+  auth_url_expires?: string;  // Backend uses 'auth_url_expires'
+  provider_id?: string;  // Backend uses 'provider_id'
+  provider_name?: string;  // Backend uses 'provider_name'
   redirect_url?: string;
 }
 
-interface EntityState {
-  entity_type: string;
-  total_count: number;
-  last_updated_at?: string;
-  sync_status: 'pending' | 'syncing' | 'synced' | 'failed';
-  error?: string;
+interface EntityTypeStats {
+  count: number;
+  last_updated?: string;
+  sync_status: string;
+}
+
+interface EntitySummary {
+  total_entities: number;
+  by_type: Record<string, EntityTypeStats>;
+  last_updated?: string;
 }
 
 interface SourceConnection {
@@ -71,17 +75,16 @@ interface SourceConnection {
   name: string;
   description?: string;
   short_name: string;
-  collection: string;
+  readable_collection_id: string;
   status?: string;
   created_at: string;
   modified_at: string;
-  is_authenticated?: boolean;
-  auth_method?: string;
-  config_fields?: Record<string, any>;
+  // Authentication is now in the auth object
+  auth?: AuthenticationInfo;  // Contains authenticated, method, etc.
+  config?: Record<string, any>;  // Changed from config_fields
   schedule?: Schedule;
   last_sync_job?: LastSyncJob;
-  authentication?: AuthenticationInfo;
-  entity_states?: EntityState[];
+  entities?: EntitySummary;  // Changed from entity_states array to entities object
   // Legacy fields that may still exist
   sync_id?: string;
   organization_id?: string;
@@ -302,7 +305,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
   }, [fetchSourceConnection]);
 
   useEffect(() => {
-    const isNotAuthorized = sourceConnectionData?.status === 'not_yet_authorized' || !sourceConnectionData?.is_authenticated;
+    const isNotAuthorized = sourceConnectionData?.status === 'not_yet_authorized' || !sourceConnectionData?.auth?.authenticated;
 
     // Only initialize mediator if authenticated
     if (!isNotAuthorized) {
@@ -314,15 +317,21 @@ const SourceConnectionStateView: React.FC<Props> = ({
           id: sourceConnectionData.id,
           name: sourceConnectionData.name,
           short_name: sourceConnectionData.short_name,
-          collection: sourceConnectionData.collection,
+          collection: sourceConnectionData.readable_collection_id,
           status: (sourceConnectionData.status as any) || 'active',  // Cast to bypass type check
-          is_authenticated: sourceConnectionData.is_authenticated ?? true,
+          is_authenticated: sourceConnectionData.auth?.authenticated ?? true,
           last_sync_job: sourceConnectionData.last_sync_job ? {
             ...sourceConnectionData.last_sync_job,
             id: sourceConnectionData.last_sync_job.id!  // Ensure id is not undefined
           } : undefined,
           schedule: sourceConnectionData.schedule,
-          entity_states: sourceConnectionData.entity_states,
+          entity_states: sourceConnectionData.entities ?
+            Object.entries(sourceConnectionData.entities.by_type).map(([type, stats]) => ({
+              entity_type: type,
+              total_count: stats.count,
+              last_updated_at: stats.last_updated,
+              sync_status: stats.sync_status as any
+            })) : [],
           lastUpdated: new Date()
         };
         useEntityStateStore.getState().setSourceConnection(storeState as any);
@@ -331,8 +340,18 @@ const SourceConnectionStateView: React.FC<Props> = ({
       Promise.all([
         mediator.current.initialize(),
         fetchSourceConnection()
-      ]).then(() => {
+      ]).then(async () => {
         setIsInitializing(false);
+
+        // Check the store for active sync job after initialization
+        const currentState = useEntityStateStore.getState().getConnection(sourceConnectionId);
+        if (currentState?.last_sync_job?.id &&
+            (currentState.last_sync_job.status === 'in_progress' ||
+             currentState.last_sync_job.status === 'pending' ||
+             currentState.last_sync_job.status === 'created')) {
+          console.log('Subscribing to active sync job:', currentState.last_sync_job.id);
+          await mediator.current.subscribeToJobUpdates(currentState.last_sync_job.id);
+        }
       }).catch(error => {
         console.error('Failed to initialize:', error);
         setIsInitializing(false);
@@ -350,7 +369,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
     return () => {
       mediator.current?.cleanup();
     };
-  }, [sourceConnectionId, sourceConnectionData?.status, sourceConnectionData?.is_authenticated]); // Add auth status to deps
+  }, [sourceConnectionId, sourceConnectionData?.status, sourceConnectionData?.auth?.authenticated]); // Add auth status to deps
 
   // Update source connection when prop changes
   useEffect(() => {
@@ -506,7 +525,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
 
   // Get sync status display
   const getSyncStatusDisplay = () => {
-    if (sourceConnection?.status === 'not_yet_authorized' || !sourceConnection?.is_authenticated) {
+    if (sourceConnection?.status === 'not_yet_authorized' || !sourceConnection?.auth?.authenticated) {
       return { text: 'Not Authenticated', color: 'bg-cyan-500', icon: null };
     }
     if (currentSyncJob?.status === 'failed') return { text: 'Failed', color: 'bg-red-500', icon: null };
@@ -517,7 +536,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
   };
 
   const syncStatus = getSyncStatusDisplay();
-  const isNotAuthorized = sourceConnection?.status === 'not_yet_authorized' || !sourceConnection?.is_authenticated;
+  const isNotAuthorized = sourceConnection?.status === 'not_yet_authorized' || !sourceConnection?.auth?.authenticated;
 
   return (
     <div className={cn("space-y-4", DESIGN_SYSTEM.typography.sizes.body)}>
@@ -525,7 +544,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
       {isNotAuthorized && sourceConnection && (
         <SourceAuthenticationView
           sourceName={sourceConnection.name}
-          authenticationUrl={sourceConnection.authentication?.authentication_url}
+          authenticationUrl={sourceConnection.auth?.auth_url}
           onRefreshUrl={handleRefreshAuthUrl}
           isRefreshing={isRefreshingAuth}
           showBorder={true}
@@ -540,8 +559,8 @@ const SourceConnectionStateView: React.FC<Props> = ({
           <div className={cn("h-8 px-3 py-1.5 border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[90px]", isDark ? "bg-gray-900" : "bg-white")}>
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">ENTITIES</span>
             <span className="text-xs font-semibold text-foreground">
-              {/* Use store connection for real-time updates during sync, fallback to source connection */}
-              {(storeConnection?.entity_states || sourceConnection?.entity_states)?.reduce((sum, e) => sum + e.total_count, 0).toLocaleString() || 0}
+              {/* Use entities.total_entities from source connection */}
+              {(sourceConnection?.entities?.total_entities || 0).toLocaleString()}
             </span>
           </div>
 
@@ -714,7 +733,13 @@ const SourceConnectionStateView: React.FC<Props> = ({
         onStartSync={handleRunSync}
         isRunning={isRunning}
         isPending={isPending}
-        entityStates={sourceConnection?.entity_states}  // Use entity_states from source connection
+        entityStates={sourceConnection?.entities ?
+          Object.entries(sourceConnection.entities.by_type).map(([type, stats]) => ({
+            entity_type: type,
+            total_count: stats.count,
+            last_updated_at: stats.last_updated,
+            sync_status: stats.sync_status as 'pending' | 'syncing' | 'synced' | 'failed'
+          })) : undefined}  // Convert entities to entity_states format for EntityStateList
       />
         </>
       )}

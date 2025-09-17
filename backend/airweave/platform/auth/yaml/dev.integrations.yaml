@@ -149,7 +149,7 @@ integrations:
     backend_url: "https://api.notion.com/v1/oauth/token"
     grant_type: "authorization_code"
     client_id: "1ddd872b-594c-8084-afbb-00370ba0a33c"
-    client_secret: "secret_myqNCVIEIxbUlbPxJzNAVXjYHKqGRewuXNtqmCQbJnD"
+    client_secret: "secret_f1nsOVnJG3Ni8GnqzYeNjh863oVDWUS15JUXPiIFBAe"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "header"
     additional_frontend_params:

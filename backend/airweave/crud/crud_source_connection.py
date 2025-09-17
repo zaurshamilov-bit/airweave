@@ -14,8 +14,6 @@ from airweave.models.source_connection import SourceConnection
 from airweave.models.sync import Sync
 from airweave.models.sync_job import SyncJob
 from airweave.schemas.source_connection import (
-    LastSyncJob,
-    Schedule,
     SourceConnectionUpdate,
 )
 
@@ -135,23 +133,23 @@ class CRUDSourceConnection(
 
         # Map sync_id to last job info
         last_jobs = {
-            row.sync_id: LastSyncJob(
-                id=row.id,
-                status=row.status,
-                started_at=row.started_at,
-                completed_at=row.completed_at,
-                duration_seconds=(
+            row.sync_id: {
+                "id": row.id,
+                "status": row.status,
+                "started_at": row.started_at,
+                "completed_at": row.completed_at,
+                "duration_seconds": (
                     (row.completed_at - row.started_at).total_seconds()
                     if row.completed_at and row.started_at
                     else None
                 ),
-                entities_inserted=row.entities_inserted or 0,
-                entities_updated=row.entities_updated or 0,
-                entities_deleted=row.entities_deleted or 0,
-                entities_kept=row.entities_kept or 0,
-                entities_skipped=row.entities_skipped or 0,
-                error=row.error,
-            )
+                "entities_inserted": row.entities_inserted or 0,
+                "entities_updated": row.entities_updated or 0,
+                "entities_deleted": row.entities_deleted or 0,
+                "entities_kept": row.entities_kept or 0,
+                "entities_skipped": row.entities_skipped or 0,
+                "error": row.error,
+            }
             for row in result
         }
 
@@ -163,9 +161,9 @@ class CRUDSourceConnection(
                 # Update status based on last job
                 if not sc.is_authenticated:
                     sc.status = SourceConnectionStatus.PENDING_AUTH
-                elif sc._last_sync_job.status == SyncJobStatus.FAILED:
+                elif sc._last_sync_job["status"] == SyncJobStatus.FAILED:
                     sc.status = SourceConnectionStatus.ERROR
-                elif sc._last_sync_job.status == SyncJobStatus.RUNNING:
+                elif sc._last_sync_job["status"] == SyncJobStatus.RUNNING:
                     sc.status = SourceConnectionStatus.SYNCING
                 else:
                     sc.status = SourceConnectionStatus.ACTIVE
@@ -249,7 +247,7 @@ class CRUDSourceConnection(
         self,
         db: AsyncSession,
         source_connection: SourceConnection,
-    ) -> Optional[Schedule]:
+    ) -> Optional[Dict[str, Any]]:
         """Get schedule information for a source connection."""
         if not source_connection.sync_id:
             return None
@@ -258,13 +256,13 @@ class CRUDSourceConnection(
         if not sync:
             return None
 
-        return Schedule(
-            cron_expression=sync.cron_schedule,
-            next_run_at=sync.next_scheduled_run,
-            is_continuous=getattr(sync, "is_continuous", False),
-            cursor_field=getattr(sync, "cursor_field", None),
-            cursor_value=getattr(sync, "cursor_value", None),
-        )
+        return {
+            "cron_expression": sync.cron_schedule,
+            "next_run_at": sync.next_scheduled_run,
+            "is_continuous": getattr(sync, "is_continuous", False),
+            "cursor_field": getattr(sync, "cursor_field", None),
+            "cursor_value": getattr(sync, "cursor_value", None),
+        }
 
     async def get_entity_states(
         self,

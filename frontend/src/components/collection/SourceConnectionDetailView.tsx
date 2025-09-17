@@ -1607,7 +1607,7 @@ const SourceConnectionDetailView = ({
             // Emit event to notify parent components about the update
             emitCollectionEvent(SOURCE_CONNECTION_UPDATED, {
                 id: updatedConnection.id,
-                collectionId: updatedConnection.collection,
+                collectionId: updatedConnection.readable_collection_id,
                 updatedConnection
             });
 
@@ -2000,7 +2000,7 @@ const SourceConnectionDetailView = ({
                                         // Emit event to notify parent components
                                         emitCollectionEvent(SOURCE_CONNECTION_UPDATED, {
                                             id: sourceConnection.id,
-                                            collectionId: sourceConnection.collection,
+                                            collectionId: sourceConnection.readable_collection_id,
                                             deleted: true
                                         });
 

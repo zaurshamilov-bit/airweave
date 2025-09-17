@@ -6,8 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from airweave.platform.configs._base import Fields
-from airweave.schemas.source_connection import ConfigValues
+from airweave.platform.configs._base import ConfigValues, Fields
 
 
 class AuthProviderBase(BaseModel):

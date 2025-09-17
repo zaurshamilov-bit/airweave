@@ -1,28 +1,23 @@
-"""Refactored source connection schemas with cleaner abstractions and explicit auth paths."""
+"""Clean source connection schemas with automatic auth method inference."""
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
 from airweave.core.shared_models import SourceConnectionStatus, SyncJobStatus
-from airweave.platform.configs._base import ConfigValues
-
-# ===========================
-# Authentication Enumerations
-# ===========================
 
 
 class AuthenticationMethod(str, Enum):
-    """Explicit authentication methods for source connections."""
+    """Authentication methods for source connections."""
 
-    DIRECT = "direct"  # Direct credentials (API keys, passwords, etc.)
-    OAUTH_BROWSER = "oauth_browser"  # OAuth flow with browser redirect
-    OAUTH_TOKEN = "oauth_token"  # Direct OAuth token injection
-    OAUTH_BYOC = "oauth_byoc"  # Bring Your Own Client OAuth - MUST if set
-    AUTH_PROVIDER = "auth_provider"  # External auth provider (e.g., Composio)
+    DIRECT = "direct"
+    OAUTH_BROWSER = "oauth_browser"
+    OAUTH_TOKEN = "oauth_token"
+    OAUTH_BYOC = "oauth_byoc"
+    AUTH_PROVIDER = "auth_provider"
 
 
 class OAuthType(str, Enum):
@@ -34,171 +29,131 @@ class OAuthType(str, Enum):
 
 
 # ===========================
-# Nested Response Objects
+# Schedule Configuration
 # ===========================
 
 
-class LastSyncJob(BaseModel):
-    """Nested object for last sync job information."""
+class ScheduleConfig(BaseModel):
+    """Schedule configuration for syncs."""
 
-    id: Optional[UUID] = None
-    status: Optional[SyncJobStatus] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    duration_seconds: Optional[float] = None
-
-    # Entity metrics
-    entities_processed: int = 0
-    entities_inserted: int = 0
-    entities_updated: int = 0
-    entities_deleted: int = 0
-    entities_failed: int = 0
-
-    # Error information
-    error: Optional[str] = None
-    error_details: Optional[Dict[str, Any]] = None
-
-    @property
-    def success_rate(self) -> Optional[float]:
-        """Calculate success rate of entity processing."""
-        if self.entities_processed == 0:
-            return None
-        return (self.entities_processed - self.entities_failed) / self.entities_processed
-
-
-class Schedule(BaseModel):
-    """Nested object for schedule information."""
-
-    cron_expression: Optional[str] = Field(None, description="Cron schedule expression")
-    next_run_at: Optional[datetime] = Field(None, description="Next scheduled run time")
-    is_continuous: bool = Field(False, description="Whether sync runs continuously")
-    cursor_field: Optional[str] = Field(None, description="Field used for incremental sync")
-    cursor_value: Optional[Any] = Field(None, description="Current cursor position")
-
-
-class AuthenticationInfo(BaseModel):
-    """Nested object for authentication information (when depth > 0)."""
-
-    method: AuthenticationMethod
-    is_authenticated: bool
-    authenticated_at: Optional[datetime] = None
-    expires_at: Optional[datetime] = None
-
-    # OAuth-specific
-    authentication_url: Optional[str] = Field(None, description="URL to complete OAuth flow")
-    authentication_url_expiry: Optional[datetime] = None
-
-    # Auth provider specific
-    auth_provider_id: Optional[str] = None
-    auth_provider_name: Optional[str] = None
-
-    # Redirect URL
-    redirect_url: Optional[str] = None
-
-
-class EntityState(BaseModel):
-    """Nested object for entity state information (when depth > 1)."""
-
-    entity_type: str
-    total_count: int
-    last_updated_at: Optional[datetime]
-    sync_status: Literal["pending", "syncing", "synced", "failed"]
-    error: Optional[str] = None
+    cron: Optional[str] = Field(None, description="Cron expression for scheduled syncs")
+    continuous: bool = Field(False, description="Enable continuous sync mode")
+    cursor_field: Optional[str] = Field(None, description="Field for incremental sync")
 
 
 # ===========================
-# Input Schemas
+# Input Schema - Single unified create with smart inference
 # ===========================
 
 
 class SourceConnectionCreate(BaseModel):
-    """Unified creation schema with explicit authentication routing."""
+    """Unified creation schema with automatic auth method inference.
 
-    # Required field
+    The authentication method is automatically determined based on which fields are provided:
+    - If `credentials` is provided -> DIRECT auth
+    - If `access_token` is provided -> OAUTH_TOKEN
+    - If `client_id` and `client_secret` are provided -> OAUTH_BYOC
+    - If `provider_id` is provided -> AUTH_PROVIDER
+    - Otherwise -> OAUTH_BROWSER (default OAuth flow)
+    """
+
+    # Required fields
     name: str = Field(..., min_length=4, max_length=42)
-    short_name: str = Field(..., description="Source type identifier")
-    authentication_method: AuthenticationMethod
-    collection: str = Field(..., description="Collection readable ID")
+    short_name: str = Field(
+        ..., description="Source short_name identifier (e.g., 'slack', 'github')"
+    )
+    readable_collection_id: str = Field(..., description="Collection readable ID")
 
     # Optional fields
     description: Optional[str] = Field(None, max_length=255)
-    config_fields: Optional[ConfigValues] = None
-    cron_schedule: Optional[str] = None
+    config: Optional[Dict[str, Any]] = Field(None, description="Source-specific configuration")
+    schedule: Optional[ScheduleConfig] = None
     sync_immediately: bool = Field(True, description="Run initial sync after creation")
 
-    # Authentication fields (exactly one group must be provided based on method)
-
-    # For DIRECT auth
-    auth_fields: Optional[ConfigValues] = Field(
-        None, description="Direct authentication credentials (for method=direct)"
+    # Auth fields - presence determines method
+    # Direct auth
+    credentials: Optional[Dict[str, Any]] = Field(
+        None, description="Direct auth credentials (API keys, passwords)"
     )
 
-    # For OAUTH_BROWSER
-    redirect_url: Optional[str] = Field(
-        None, description="URL to redirect after OAuth completion (for method=oauth_browser)"
-    )
+    # OAuth token injection
+    access_token: Optional[str] = Field(None, description="Pre-obtained OAuth access token")
+    refresh_token: Optional[str] = Field(None, description="OAuth refresh token")
+    token_expires_at: Optional[datetime] = Field(None, description="Token expiration time")
 
-    # For OAUTH_TOKEN
-    access_token: Optional[str] = Field(
-        None,
-        description="OAuth access token (for method=oauth_token)",
-        json_schema_extra={"writeOnly": True},
-    )
-    refresh_token: Optional[str] = Field(
-        None,
-        description="OAuth refresh token (for method=oauth_token)",
-        json_schema_extra={"writeOnly": True},
-    )
-    token_expires_at: Optional[datetime] = Field(
-        None, description="Token expiration time (for method=oauth_token)"
-    )
+    # OAuth BYOC or custom client for browser flow
+    client_id: Optional[str] = Field(None, description="OAuth client ID")
+    client_secret: Optional[str] = Field(None, description="OAuth client secret")
 
-    # For OAUTH_BYOC
-    client_id: Optional[str] = Field(
-        None,
-        description="OAuth client ID (for method=oauth_byoc)",
-        json_schema_extra={"writeOnly": True},
-    )
-    client_secret: Optional[str] = Field(
-        None,
-        description="OAuth client secret (for method=oauth_byoc)",
-        json_schema_extra={"writeOnly": True},
-    )
+    # OAuth browser flow
+    redirect_url: Optional[str] = Field(None, description="OAuth callback redirect URL")
 
-    # For AUTH_PROVIDER
-    auth_provider: Optional[str] = Field(
-        None, description="Auth provider readable ID (for method=auth_provider)"
-    )
-    auth_provider_config: Optional[ConfigValues] = Field(
-        None, description="Auth provider configuration (for method=auth_provider)"
-    )
+    # External auth provider
+    provider_id: Optional[str] = Field(None, description="Auth provider connection ID")
+    provider_config: Optional[Dict[str, Any]] = Field(None, description="Provider-specific config")
+
+    # Computed field - not provided by user
+    _auth_method: Optional[AuthenticationMethod] = None
 
     @model_validator(mode="after")
-    def validate_auth_fields_for_method(self):
-        """Ensure correct fields are provided for the authentication method."""
-        method = self.authentication_method
+    def infer_auth_method(self):
+        """Automatically determine authentication method from provided fields."""
+        # Priority order for inference:
+        # 1. Direct credentials
+        if self.credentials:
+            self._auth_method = AuthenticationMethod.DIRECT
 
-        if method == AuthenticationMethod.DIRECT:
-            if not self.auth_fields:
-                raise ValueError("auth_fields required for direct authentication")
+        # 2. OAuth token injection
+        elif self.access_token:
+            self._auth_method = AuthenticationMethod.OAUTH_TOKEN
 
-        elif method == AuthenticationMethod.OAUTH_BROWSER:
-            # redirect_url is optional, will use default if not provided
-            pass
+        # 3. OAuth BYOC (requires both client credentials)
+        elif self.client_id and self.client_secret:
+            self._auth_method = AuthenticationMethod.OAUTH_BYOC
 
-        elif method == AuthenticationMethod.OAUTH_TOKEN:
-            if not self.access_token:
-                raise ValueError("access_token required for oauth_token method")
+        # 4. External auth provider
+        elif self.provider_id:
+            self._auth_method = AuthenticationMethod.AUTH_PROVIDER
 
-        elif method == AuthenticationMethod.OAUTH_BYOC:
-            if not self.client_id or not self.client_secret:
-                raise ValueError("client_id and client_secret required for oauth_byoc method")
-
-        elif method == AuthenticationMethod.AUTH_PROVIDER:
-            if not self.auth_provider:
-                raise ValueError("auth_provider required for auth_provider method")
+        # 5. Default to OAuth browser flow
+        else:
+            self._auth_method = AuthenticationMethod.OAUTH_BROWSER
 
         return self
+
+    @model_validator(mode="after")
+    def validate_auth_fields(self):
+        """Validate that required fields are present for the inferred auth method."""
+        if self._auth_method == AuthenticationMethod.DIRECT:
+            if not self.credentials:
+                raise ValueError("Direct authentication requires credentials")
+
+        elif self._auth_method == AuthenticationMethod.OAUTH_TOKEN:
+            if not self.access_token:
+                raise ValueError("OAuth token authentication requires access_token")
+            # Validate token not expired if expiry provided
+            if self.token_expires_at and self.token_expires_at < datetime.utcnow():
+                raise ValueError("Token has already expired")
+
+        elif self._auth_method == AuthenticationMethod.OAUTH_BYOC:
+            if not self.client_id or not self.client_secret:
+                raise ValueError("BYOC OAuth requires both client_id and client_secret")
+
+        elif self._auth_method == AuthenticationMethod.AUTH_PROVIDER:
+            if not self.provider_id:
+                raise ValueError("Auth provider authentication requires provider_id")
+
+        # OAuth browser has no required fields (redirect_url is optional)
+
+        return self
+
+    @property
+    def auth_method(self) -> AuthenticationMethod:
+        """Get the inferred authentication method."""
+        if self._auth_method is None:
+            # This should not happen after validation, but provide fallback
+            self.infer_auth_method()
+        return self._auth_method
 
 
 class SourceConnectionUpdate(BaseModel):
@@ -206,28 +161,63 @@ class SourceConnectionUpdate(BaseModel):
 
     name: Optional[str] = Field(None, min_length=4, max_length=42)
     description: Optional[str] = Field(None, max_length=255)
-    config_fields: Optional[ConfigValues] = None
-    cron_schedule: Optional[str] = None
+    config: Optional[Dict[str, Any]] = Field(None, description="Source-specific configuration")
+    schedule: Optional[ScheduleConfig] = None
 
-    # Re-authentication (only for certain methods)
-    auth_fields: Optional[ConfigValues] = Field(
-        None, description="Update authentication credentials (direct auth only)"
+    # Re-authentication only for direct auth
+    credentials: Optional[Dict[str, Any]] = Field(
+        None, description="Update credentials (direct auth only)"
     )
+
+    @model_validator(mode="after")
+    def validate_minimal_change(self):
+        """Ensure at least one field is being updated."""
+        if not any([self.name, self.description, self.config, self.schedule, self.credentials]):
+            raise ValueError("At least one field must be provided for update")
+        return self
 
 
 class SourceConnectionValidate(BaseModel):
     """Schema for validating source connection credentials."""
 
-    short_name: str
-    authentication_method: AuthenticationMethod
-    auth_fields: Optional[ConfigValues] = None
-    access_token: Optional[str] = Field(None, json_schema_extra={"writeOnly": True})
-    config_fields: Optional[ConfigValues] = None
+    short_name: str = Field(..., description="Source short_name identifier")
+    config: Optional[Dict[str, Any]] = Field(None, description="Source-specific configuration")
+
+    # Auth fields - same inference logic as create
+    credentials: Optional[Dict[str, Any]] = None
+    access_token: Optional[str] = None
+
+    # Computed field
+    _auth_method: Optional[AuthenticationMethod] = None
+
+    @model_validator(mode="after")
+    def infer_auth_method(self):
+        """Determine auth method for validation."""
+        if self.credentials:
+            self._auth_method = AuthenticationMethod.DIRECT
+        elif self.access_token:
+            self._auth_method = AuthenticationMethod.OAUTH_TOKEN
+        else:
+            raise ValueError("Either credentials or access_token must be provided for validation")
+        return self
+
+    @property
+    def auth_method(self) -> AuthenticationMethod:
+        """Get the inferred authentication method."""
+        return self._auth_method
 
 
 # ===========================
 # Output Schemas
 # ===========================
+
+
+class SyncSummary(BaseModel):
+    """Sync summary for list views."""
+
+    last_run: Optional[datetime] = None
+    next_run: Optional[datetime] = None
+    success_rate: Optional[float] = None
 
 
 class SourceConnectionListItem(BaseModel):
@@ -236,54 +226,109 @@ class SourceConnectionListItem(BaseModel):
     id: UUID
     name: str
     short_name: str
-    collection: str
+    readable_collection_id: str
     status: SourceConnectionStatus
-    is_authenticated: bool
+    auth_method: AuthenticationMethod
     created_at: datetime
     modified_at: datetime
 
     # Summary fields
-    last_sync_at: Optional[datetime] = None
-    next_sync_at: Optional[datetime] = None
-    entities_count: int = 0
+    last_sync: Optional[SyncSummary] = None
+    entity_count: int = 0
+
+
+class AuthenticationDetails(BaseModel):
+    """Authentication information."""
+
+    method: AuthenticationMethod
+    authenticated: bool
+    authenticated_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+
+    # OAuth-specific
+    auth_url: Optional[str] = Field(None, description="For pending OAuth flows")
+    auth_url_expires: Optional[datetime] = None
+    redirect_url: Optional[str] = None
+
+    # Provider-specific
+    provider_name: Optional[str] = None
+    provider_id: Optional[str] = None
+
+
+class ScheduleDetails(BaseModel):
+    """Schedule information."""
+
+    cron: Optional[str] = None
+    next_run: Optional[datetime] = None
+    continuous: bool = False
+    cursor_field: Optional[str] = None
+    cursor_value: Optional[Any] = None
+
+
+class SyncJobDetails(BaseModel):
+    """Sync job details."""
+
+    id: UUID
+    status: SyncJobStatus
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
+    entities_processed: int = 0
+    entities_inserted: int = 0
+    entities_updated: int = 0
+    entities_deleted: int = 0
+    entities_failed: int = 0
+    error: Optional[str] = None
+
+
+class SyncDetails(BaseModel):
+    """Sync execution details."""
+
+    total_runs: int = 0
+    successful_runs: int = 0
+    failed_runs: int = 0
+    last_job: Optional[SyncJobDetails] = None
+
+
+class EntityTypeStats(BaseModel):
+    """Statistics for a specific entity type."""
+
+    count: int
+    last_updated: Optional[datetime] = None
+
+
+class EntitySummary(BaseModel):
+    """Entity state summary."""
+
+    total_entities: int = 0
+    by_type: Dict[str, EntityTypeStats] = Field(default_factory=dict)
+    last_updated: Optional[datetime] = None
 
 
 class SourceConnection(BaseModel):
-    """Source connection with optional depth expansion."""
+    """Complete source connection details."""
 
-    # Core fields (always present)
     id: UUID
     name: str
     description: Optional[str]
     short_name: str
-    collection: str
+    readable_collection_id: str
     status: SourceConnectionStatus
     created_at: datetime
     modified_at: datetime
 
-    # Authentication status (always present)
-    is_authenticated: bool
-    auth_method: Optional[AuthenticationMethod] = Field(
-        None, description="Authentication method used"
-    )
+    # Authentication
+    auth: AuthenticationDetails
 
-    # Config (depth 0+)
-    config_fields: Optional[ConfigValues] = None
+    # Configuration
+    config: Optional[Dict[str, Any]] = None
+    schedule: Optional[ScheduleDetails] = None
 
-    # Schedule info (depth 0+)
-    schedule: Optional[Schedule] = None
+    # Sync information
+    sync: Optional[SyncDetails] = None
 
-    # Last sync job (depth 0+)
-    last_sync_job: Optional[LastSyncJob] = None
-
-    # Expanded fields (depth 1+)
-    authentication: Optional[AuthenticationInfo] = None
-
-    # Entity states (depth 2+)
-    entity_states: Optional[List[EntityState]] = None
-
-    # Never expose these
-    model_config = {"exclude": {"sync_id", "connection_id", "credential_id"}}
+    # Entity information
+    entities: Optional[EntitySummary] = None
 
 
 class SourceConnectionJob(BaseModel):
@@ -297,11 +342,11 @@ class SourceConnectionJob(BaseModel):
     duration_seconds: Optional[float] = None
 
     # Metrics
-    entities_processed: Optional[int] = 0
-    entities_inserted: Optional[int] = 0
-    entities_updated: Optional[int] = 0
-    entities_deleted: Optional[int] = 0
-    entities_failed: Optional[int] = 0
+    entities_processed: int = 0
+    entities_inserted: int = 0
+    entities_updated: int = 0
+    entities_deleted: int = 0
+    entities_failed: int = 0
 
     # Error info
     error: Optional[str] = None

@@ -287,7 +287,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         name: connectionName.trim(),
         description: `${sourceName} connection for ${collectionName}`,
         short_name: selectedSource,
-        collection: isAddingToExisting ? existingCollectionId : collectionId,  // Changed from collection_id to collection
+        readable_collection_id: isAddingToExisting ? existingCollectionId : collectionId,
         authentication_method: authenticationMethod,
         // For direct auth, sync immediately since we have credentials
         // For OAuth, don't sync until after authorization is complete
@@ -349,8 +349,8 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       const result = await response.json();
 
       // Check if OAuth flow is needed
-      // The authentication_url is now inside the authentication object (depth 1)
-      const authUrl = result.authentication?.authentication_url;
+      // The authentication_url is now inside the auth object
+      const authUrl = result.auth?.authentication_url || result.auth?.auth_url;
       if (authUrl) {
         setOAuthData(
           result.id,

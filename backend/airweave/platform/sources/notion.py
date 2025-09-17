@@ -82,7 +82,6 @@ class NotionSource(BaseSource):
             pass
         # Rebuild the gate in case batch_size changed
         instance._materialize_semaphore = asyncio.Semaphore(instance.batch_size)
-        # ------------------------------------------------------------------------
 
         return instance
 

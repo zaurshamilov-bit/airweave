@@ -69,12 +69,18 @@ export class EntityStateMediator {
         id: connection.id,
         name: connection.name,
         short_name: connection.short_name,
-        collection: connection.collection,
+        collection: connection.readable_collection_id,  // Changed from connection.collection
         status: connection.status || 'active',
-        is_authenticated: connection.is_authenticated ?? true,
-        last_sync_job: connection.last_sync_job,
+        is_authenticated: connection.auth?.authenticated ?? true,  // Changed from connection.is_authenticated
+        last_sync_job: connection.sync?.last_job || connection.last_sync_job,  // Try new structure first
         schedule: connection.schedule,
-        entity_states: connection.entity_states,
+        entity_states: connection.entities ?  // Convert entities object to entity_states array
+          Object.entries(connection.entities.by_type || {}).map(([type, stats]: [string, any]) => ({
+            entity_type: type,
+            total_count: stats.count,
+            last_updated_at: stats.last_updated,
+            sync_status: stats.sync_status
+          })) : [],
         lastUpdated: new Date()
       };
 

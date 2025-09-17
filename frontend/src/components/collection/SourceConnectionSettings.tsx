@@ -288,7 +288,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
 
       emitCollectionEvent(SOURCE_CONNECTION_UPDATED, {
         id: updatedConnection.id,
-        collectionId: updatedConnection.collection,
+        collectionId: updatedConnection.readable_collection_id,
         updatedConnection
       });
 
@@ -333,7 +333,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
 
       emitCollectionEvent(SOURCE_CONNECTION_UPDATED, {
         id: sourceConnection.id,
-        collectionId: sourceConnection.collection,
+        collectionId: sourceConnection.readable_collection_id,
         deleted: true
       });
 

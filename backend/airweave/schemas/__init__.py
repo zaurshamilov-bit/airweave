@@ -105,17 +105,19 @@ from .source import (
     SourceUpdate,
 )
 from .source_connection import (
-    AuthenticationInfo,
+    AuthenticationDetails,
     AuthenticationMethod,
-    EntityState,
-    LastSyncJob,
-    Schedule,
+    EntitySummary,
+    EntityTypeStats,
+    ScheduleDetails,
     SourceConnection,
     SourceConnectionCreate,
     SourceConnectionJob,
     SourceConnectionListItem,
     SourceConnectionUpdate,
     SourceConnectionValidate,
+    SyncDetails,
+    SyncJobDetails,
 )
 from .sync import (
     MinuteLevelScheduleConfig,

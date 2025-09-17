@@ -12,7 +12,10 @@ from airweave import crud, schemas
 from airweave.api.context import ApiContext
 from airweave.core import credentials
 from airweave.core.config import settings as core_settings
-from airweave.core.constants.reserved_ids import NATIVE_QDRANT_UUID, NATIVE_TEXT2VEC_UUID
+from airweave.core.constants.reserved_ids import (
+    NATIVE_QDRANT_UUID,
+    NATIVE_TEXT2VEC_UUID,
+)
 from airweave.core.shared_models import (
     ConnectionStatus,
     SourceConnectionStatus,
@@ -21,7 +24,10 @@ from airweave.core.shared_models import (
 )
 from airweave.crud import connection_init_session, redirect_session
 from airweave.db.unit_of_work import UnitOfWork
-from airweave.models.connection_init_session import ConnectionInitSession, ConnectionInitStatus
+from airweave.models.connection_init_session import (
+    ConnectionInitSession,
+    ConnectionInitStatus,
+)
 from airweave.models.integration_credential import IntegrationType
 from airweave.models.sync import Sync
 from airweave.models.sync_job import SyncJob
@@ -31,7 +37,6 @@ from airweave.platform.locator import resource_locator
 from airweave.platform.temporal.schedule_service import temporal_schedule_service
 from airweave.schemas.source_connection import (
     AuthenticationMethod,
-    SourceConnectionCreate,
     SourceConnectionJob,
 )
 
@@ -119,73 +124,6 @@ class SourceConnectionHelpers:
 
         raise TypeError(f"config_fields must be mapping-like; got {type(value).__name__}")
 
-    def validate_authentication_method(  # noqa: C901
-        self, source_class: Any, obj_in: SourceConnectionCreate
-    ) -> None:
-        """Validate authentication method and required fields.
-
-        Args:
-            source_class: The source class with auth metadata
-            obj_in: The source connection creation request
-
-        Raises:
-            HTTPException: If validation fails
-        """
-        # Check if auth method is supported
-        if not source_class.supports_auth_method(obj_in.authentication_method):
-            supported = source_class.get_supported_auth_methods()
-            raise HTTPException(
-                status_code=400,
-                detail=f"Source {obj_in.short_name} does not support "
-                f"{obj_in.authentication_method}. "
-                f"Supported methods: {[m.value for m in supported]}",
-            )
-
-        # Validate OAuth-specific requirements
-        if obj_in.authentication_method in [
-            AuthenticationMethod.OAUTH_BROWSER,
-            AuthenticationMethod.OAUTH_TOKEN,
-        ]:
-            # Check if source requires BYOC (Bring Your Own Credentials)
-            if source_class.requires_byoc():
-                # BYOC sources REQUIRE client credentials
-                if not obj_in.client_id or not obj_in.client_secret:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            f"Source {obj_in.short_name} requires you to provide your own "
-                            "OAuth application credentials (client_id and client_secret)"
-                        ),
-                    )
-            else:
-                # For non-BYOC OAuth sources, client credentials are optional
-                # But if one is provided, both must be provided
-                if obj_in.client_id or obj_in.client_secret:
-                    if not (obj_in.client_id and obj_in.client_secret):
-                        raise HTTPException(
-                            status_code=400,
-                            detail=(
-                                "If providing custom OAuth credentials, both client_id "
-                                "and client_secret are required"
-                            ),
-                        )
-
-        # Validate DIRECT auth has required fields
-        elif obj_in.authentication_method == AuthenticationMethod.DIRECT:
-            if not obj_in.auth_fields:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Direct authentication requires auth_fields",
-                )
-
-        # Validate AUTH_PROVIDER has required fields
-        elif obj_in.authentication_method == AuthenticationMethod.AUTH_PROVIDER:
-            if not obj_in.auth_provider:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Auth provider authentication requires auth_provider ID",
-                )
-
     async def validate_auth_fields(
         self, db: AsyncSession, short_name: str, auth_fields: Any, ctx: ApiContext
     ) -> AuthConfig:
@@ -196,7 +134,8 @@ class SourceConnectionHelpers:
 
         if not source.auth_config_class:
             raise HTTPException(
-                status_code=422, detail=f"Source {source.name} does not support direct auth"
+                status_code=422,
+                detail=f"Source {source.name} does not support direct auth",
             )
 
         try:
@@ -269,7 +208,11 @@ class SourceConnectionHelpers:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
     async def validate_direct_auth(
-        self, db: AsyncSession, source: schemas.Source, auth_fields: AuthConfig, ctx: ApiContext
+        self,
+        db: AsyncSession,
+        source: schemas.Source,
+        auth_fields: AuthConfig,
+        ctx: ApiContext,
     ) -> Dict[str, Any]:
         """Validate direct authentication credentials."""
         try:
@@ -285,7 +228,8 @@ class SourceConnectionHelpers:
                     )
             else:
                 raise HTTPException(
-                    status_code=400, detail=f"No validate method found for {source.short_name}"
+                    status_code=400,
+                    detail=f"No validate method found for {source.short_name}",
                 )
             return {"valid": True, "source": source.short_name}
         except HTTPException:
@@ -294,7 +238,11 @@ class SourceConnectionHelpers:
             raise HTTPException(status_code=400, detail=f"Validation failed: {str(e)}") from e
 
     async def validate_oauth_token(
-        self, db: AsyncSession, source: schemas.Source, access_token: str, ctx: ApiContext
+        self,
+        db: AsyncSession,
+        source: schemas.Source,
+        access_token: str,
+        ctx: ApiContext,
     ) -> Dict[str, Any]:
         """Validate OAuth access token."""
         try:
@@ -427,7 +375,7 @@ class SourceConnectionHelpers:
     async def create_source_connection(
         self,
         db: AsyncSession,
-        obj_in: SourceConnectionCreate,
+        obj_in: Any,  # Can be legacy SourceConnectionCreate or discriminated union
         connection_id: Optional[UUID],
         collection_id: str,
         sync_id: Optional[UUID],
@@ -439,10 +387,13 @@ class SourceConnectionHelpers:
         auth_provider_config: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """Create source connection record."""
+        # Get source type - handle both field names
+        source_type = getattr(obj_in, "source_type", None) or getattr(obj_in, "short_name", None)
+
         sc_data = {
             "name": obj_in.name,
             "description": obj_in.description,
-            "short_name": obj_in.short_name,
+            "short_name": source_type,
             "config_fields": config_fields,
             "connection_id": connection_id,
             "readable_collection_id": collection_id,
@@ -536,16 +487,14 @@ class SourceConnectionHelpers:
             "name": source_conn.name,
             "description": source_conn.description,
             "short_name": source_conn.short_name,
-            "collection": source_conn.readable_collection_id,
+            "readable_collection_id": source_conn.readable_collection_id,
             "created_at": source_conn.created_at,
             "modified_at": source_conn.modified_at,
-            "is_authenticated": source_conn.is_authenticated,
-            "auth_method": auth_method,
         }
 
         # Config fields (safely check for presence and non-None)
         if hasattr(source_conn, "config_fields") and source_conn.config_fields:
-            response["config_fields"] = source_conn.config_fields
+            response["config"] = source_conn.config_fields
 
         # Schedule info and last sync job (only if sync_id exists)
         if hasattr(source_conn, "sync_id") and source_conn.sync_id:
@@ -553,7 +502,13 @@ class SourceConnectionHelpers:
                 # Get schedule info - handle potential None return
                 schedule_info = await crud.source_connection.get_schedule_info(db, source_conn)
                 if schedule_info:
-                    response["schedule"] = schedule_info
+                    response["schedule"] = schemas.ScheduleDetails(
+                        cron=schedule_info.get("cron_expression"),
+                        next_run=schedule_info.get("next_run_at"),
+                        continuous=schedule_info.get("is_continuous", False),
+                        cursor_field=schedule_info.get("cursor_field"),
+                        cursor_value=schedule_info.get("cursor_value"),
+                    )
             except Exception as e:
                 ctx.logger.warning(f"Failed to get schedule info: {e}")
 
@@ -600,16 +555,16 @@ class SourceConnectionHelpers:
                         }
                     )
 
-                    # Create the LastSyncJob schema object
-                    response["last_sync_job"] = schemas.LastSyncJob(**last_sync_job_data)
+                    # Store for later use in SyncDetails
+                    response["_last_sync_job"] = last_sync_job_data
 
             except Exception as e:
                 ctx.logger.warning(f"Failed to get last sync job: {e}")
 
         # Compute status based on authentication and last sync job
         last_job_status = None
-        if "last_sync_job" in response and response["last_sync_job"]:
-            last_job_status = response["last_sync_job"].status
+        if "_last_sync_job" in response and response["_last_sync_job"]:
+            last_job_status = response["_last_sync_job"]["status"]
 
         response["status"] = self.compute_status_from_data(
             is_authenticated=source_conn.is_authenticated,
@@ -620,7 +575,7 @@ class SourceConnectionHelpers:
         # Authentication details (build safely)
         auth_info = {
             "method": auth_method,
-            "is_authenticated": source_conn.is_authenticated,
+            "authenticated": source_conn.is_authenticated,
         }
 
         # Add optional authentication fields if they exist
@@ -629,13 +584,13 @@ class SourceConnectionHelpers:
 
         auth_provider_id = getattr(source_conn, "readable_auth_provider_id", None)
         if auth_provider_id:
-            auth_info["auth_provider_id"] = auth_provider_id
+            auth_info["provider_id"] = auth_provider_id
 
         # Add OAuth-specific fields if pending
         if hasattr(source_conn, "authentication_url") and source_conn.authentication_url:
-            auth_info["authentication_url"] = source_conn.authentication_url
+            auth_info["auth_url"] = source_conn.authentication_url
             if hasattr(source_conn, "authentication_url_expiry"):
-                auth_info["authentication_url_expiry"] = source_conn.authentication_url_expiry
+                auth_info["auth_url_expires"] = source_conn.authentication_url_expiry
 
         # Add redirect URL from connection init session if available
         if (
@@ -651,7 +606,21 @@ class SourceConnectionHelpers:
                 if redirect_url:
                     auth_info["redirect_url"] = redirect_url
 
-        response["authentication"] = schemas.AuthenticationInfo(**auth_info)
+        response["auth"] = schemas.AuthenticationDetails(**auth_info)
+
+        # Build SyncDetails if we have sync information
+        if "_last_sync_job" in response:
+            last_job_data = response.pop("_last_sync_job")
+            # Convert to SyncJobDetails
+            last_job = schemas.SyncJobDetails(**last_job_data)
+
+            # Create SyncDetails (we don't have total/successful/failed counts readily available)
+            response["sync"] = schemas.SyncDetails(
+                total_runs=1 if last_job else 0,  # Simplified - we only have last job
+                successful_runs=1 if last_job and last_job.status == SyncJobStatus.COMPLETED else 0,
+                failed_runs=1 if last_job and last_job.status == SyncJobStatus.FAILED else 0,
+                last_job=last_job,
+            )
 
         # Entity states - get counts per entity type
         if hasattr(source_conn, "sync_id") and source_conn.sync_id:
@@ -661,19 +630,21 @@ class SourceConnectionHelpers:
                     db, source_conn.sync_id
                 )
 
-                # Convert to EntityState objects
+                # Convert to EntitySummary
                 if entity_counts:
-                    entity_states = []
+                    total_entities = sum(count_data.count for count_data in entity_counts)
+                    by_type = {}
                     for count_data in entity_counts:
-                        entity_state = schemas.EntityState(
-                            entity_type=count_data.entity_definition_name,
-                            total_count=count_data.count,
-                            last_updated_at=source_conn.modified_at,
-                            sync_status="synced" if source_conn.is_authenticated else "pending",
+                        by_type[count_data.entity_definition_name] = schemas.EntityTypeStats(
+                            count=count_data.count,
+                            last_updated=count_data.modified_at,
                         )
-                        entity_states.append(entity_state)
 
-                    response["entity_states"] = entity_states
+                    response["entities"] = schemas.EntitySummary(
+                        total_entities=total_entities,
+                        by_type=by_type,
+                        last_updated=source_conn.modified_at,
+                    )
             except Exception as e:
                 ctx.logger.warning(f"Failed to get entity states: {e}")
 
@@ -754,7 +725,12 @@ class SourceConnectionHelpers:
         return {row.sync_id: row.total_count or 0 for row in result}
 
     async def update_sync_schedule(
-        self, db: AsyncSession, sync_id: UUID, cron_schedule: str, ctx: ApiContext, uow: Any
+        self,
+        db: AsyncSession,
+        sync_id: UUID,
+        cron_schedule: str,
+        ctx: ApiContext,
+        uow: Any,
     ) -> None:
         """Update sync schedule."""
         sync = await crud.sync.get(db, id=sync_id, ctx=ctx)
@@ -763,7 +739,12 @@ class SourceConnectionHelpers:
             await crud.sync.update(db, db_obj=sync, obj_in=sync_update, ctx=ctx, uow=uow)
 
     async def update_auth_fields(
-        self, db: AsyncSession, source_conn: Any, auth_fields: Any, ctx: ApiContext, uow: Any
+        self,
+        db: AsyncSession,
+        source_conn: Any,
+        auth_fields: Any,
+        ctx: ApiContext,
+        uow: Any,
     ) -> None:
         """Update authentication fields."""
         validated_auth = await self.validate_auth_fields(
@@ -837,20 +818,43 @@ class SourceConnectionHelpers:
     async def create_init_session(
         self,
         db: AsyncSession,
-        obj_in: SourceConnectionCreate,
+        obj_in: Any,  # Can be OAuthBrowserCreate or legacy SourceConnectionCreate
         state: str,
         ctx: ApiContext,
         uow: Any,
     ) -> Any:
         """Create connection init session for OAuth flow."""
+        # Handle both new and legacy schemas
+        source_type = getattr(obj_in, "source_type", None) or getattr(obj_in, "short_name", None)
+
+        # Build payload - exclude OAuth-specific fields
+        exclude_fields = {
+            "client_id",
+            "client_secret",
+            "token_inject",
+            "redirect_url",
+            "auth_mode",
+            "custom_client",
+            "auth_method",
+        }
         payload = obj_in.model_dump(
-            exclude={"client_id", "client_secret", "token_inject", "redirect_url", "auth_mode"},
+            exclude=exclude_fields,
             exclude_none=True,
         )
 
+        # Get client credentials from either custom_client or direct fields
+        client_id = None
+        client_secret = None
+        if hasattr(obj_in, "custom_client") and obj_in.custom_client:
+            client_id = obj_in.custom_client.client_id
+            client_secret = obj_in.custom_client.client_secret
+        elif hasattr(obj_in, "client_id"):
+            client_id = obj_in.client_id
+            client_secret = obj_in.client_secret
+
         overrides = {
-            "client_id": obj_in.client_id,
-            "client_secret": obj_in.client_secret,
+            "client_id": client_id,
+            "client_secret": client_secret,
             "redirect_url": obj_in.redirect_url or core_settings.app_url,
             "oauth_redirect_uri": f"{core_settings.api_url}/source-connections/callback",
         }
@@ -861,7 +865,7 @@ class SourceConnectionHelpers:
             db,
             obj_in={
                 "organization_id": ctx.organization.id,
-                "short_name": obj_in.short_name,
+                "short_name": source_type,
                 "payload": payload,
                 "overrides": overrides,
                 "state": state,
@@ -1072,12 +1076,19 @@ class SourceConnectionHelpers:
                 "is_authenticated": True,
             }
             source_conn = await crud.source_connection.update(
-                uow.session, db_obj=source_conn_shell, obj_in=sc_update, ctx=ctx, uow=uow
+                uow.session,
+                db_obj=source_conn_shell,
+                obj_in=sc_update,
+                ctx=ctx,
+                uow=uow,
             )
 
             # Mark init session complete
             await connection_init_session.mark_completed(
-                uow.session, session_id=init_session.id, final_connection_id=connection.id, ctx=ctx
+                uow.session,
+                session_id=init_session.id,
+                final_connection_id=connection.id,
+                ctx=ctx,
             )
 
             await uow.commit()
