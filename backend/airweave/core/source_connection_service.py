@@ -636,7 +636,7 @@ class SourceConnectionService:
         provider_auth_url = await oauth2_service.generate_auth_url_with_redirect(
             oauth_settings,
             redirect_uri=api_callback,
-            client_id=None,
+            client_id=obj_in.client_id or None,
             state=state,
         )
 
