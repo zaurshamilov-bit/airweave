@@ -50,13 +50,17 @@ class ComposioBroker(BaseAuthBroker):
     ) -> None:
         self.logger = get_logger("composio_broker")
         self.api_key = api_key or os.getenv("DM_AUTH_PROVIDER_API_KEY")
-        self.auth_config_id = auth_config_id or os.getenv("DM_AUTH_PROVIDER_AUTH_CONFIG_ID")
+        self.auth_config_id = auth_config_id or os.getenv(
+            "DM_AUTH_PROVIDER_AUTH_CONFIG_ID"
+        )
         self.account_id = account_id or os.getenv("DM_AUTH_PROVIDER_ACCOUNT_ID")
 
         if not self.api_key:
             raise ValueError("Missing Composio api key (DM_AUTH_PROVIDER_API_KEY)")
 
-    async def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def _get(
+        self, path: str, params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             r = await client.get(
                 f"{self.BASE_URL}{path}",
@@ -103,13 +107,31 @@ class ComposioBroker(BaseAuthBroker):
             selected = matching[0]
 
         creds = selected.get("state", {}).get("val") or {}
+
+        # Log credential resolution safely without exposing sensitive data
+        sensitive_fields = [
+            k
+            for k in creds.keys()
+            if any(
+                sensitive in k.lower()
+                for sensitive in ["token", "key", "secret", "password"]
+            )
+        ]
+        non_sensitive_fields = [k for k in creds.keys() if k not in sensitive_fields]
+
         self.logger.info(
-            f"Resolved credentials from Composio for slug='{slug}' (fields: {list(creds.keys())})"
+            f"Resolved credentials from Composio for slug='{slug}' - "
+            f"Total fields: {len(creds)}, Sensitive: {len(sensitive_fields)}, "
+            f"Non-sensitive: {non_sensitive_fields if non_sensitive_fields else 'none'}"
         )
 
         if required_fields:
             # Keep only required fields if specified, plus common tokens if present
-            allowed = set(required_fields) | {"access_token", "token", "generic_api_key"}
+            allowed = set(required_fields) | {
+                "access_token",
+                "token",
+                "generic_api_key",
+            }
             creds = {k: v for k, v in creds.items() if k in allowed}
 
         return creds
