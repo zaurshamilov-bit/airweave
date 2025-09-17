@@ -21,7 +21,7 @@ from airweave.core.shared_models import (
 )
 from airweave.crud import connection_init_session, redirect_session
 from airweave.db.unit_of_work import UnitOfWork
-from airweave.models.connection_init_session import ConnectionInitStatus
+from airweave.models.connection_init_session import ConnectionInitSession, ConnectionInitStatus
 from airweave.models.integration_credential import IntegrationType
 from airweave.models.sync import Sync
 from airweave.models.sync_job import SyncJob
@@ -38,6 +38,53 @@ from airweave.schemas.source_connection import (
 
 class SourceConnectionHelpers:
     """Helper methods for source connection service."""
+
+    async def reconstruct_context_from_session(
+        self, db: AsyncSession, init_session: ConnectionInitSession
+    ) -> ApiContext:
+        """Reconstruct ApiContext from stored session data.
+
+        Used for OAuth callbacks where the user is not authenticated with the platform.
+
+        Args:
+            db: Database session
+            init_session: The ConnectionInitSession containing org and user info
+
+        Returns:
+            Reconstructed ApiContext for the session's organization
+        """
+        import uuid
+
+        from airweave.core.logging import logger
+
+        # Get the organization from the session
+        organization = await crud.organization.get(
+            db, id=init_session.organization_id, skip_access_validation=True
+        )
+        organization_schema = schemas.Organization.model_validate(
+            organization, from_attributes=True
+        )
+
+        # Generate a request ID for tracking
+        request_id = str(uuid.uuid4())
+
+        # Create logger with context
+        base_logger = logger.with_context(
+            request_id=request_id,
+            organization_id=str(organization_schema.id),
+            organization_name=organization_schema.name,
+            auth_method="oauth_callback",  # Special auth method for OAuth callbacks
+            context_base="oauth",
+        )
+
+        return ApiContext(
+            request_id=request_id,
+            organization=organization_schema,
+            user=None,  # No user context for OAuth callbacks
+            auth_method="oauth_callback",
+            auth_metadata={"session_id": str(init_session.id)},
+            logger=base_logger,
+        )
 
     @staticmethod
     def _as_mapping(value: Any) -> Dict[str, Any]:
@@ -222,7 +269,7 @@ class SourceConnectionHelpers:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
     async def validate_direct_auth(
-        self, db: AsyncSession, source: Any, auth_fields: AuthConfig, ctx: ApiContext
+        self, db: AsyncSession, source: schemas.Source, auth_fields: AuthConfig, ctx: ApiContext
     ) -> Dict[str, Any]:
         """Validate direct authentication credentials."""
         try:
@@ -247,7 +294,7 @@ class SourceConnectionHelpers:
             raise HTTPException(status_code=400, detail=f"Validation failed: {str(e)}") from e
 
     async def validate_oauth_token(
-        self, db: AsyncSession, source: Any, access_token: str, ctx: ApiContext
+        self, db: AsyncSession, source: schemas.Source, access_token: str, ctx: ApiContext
     ) -> Dict[str, Any]:
         """Validate OAuth access token."""
         try:
@@ -268,7 +315,7 @@ class SourceConnectionHelpers:
     async def create_integration_credential(
         self,
         db: AsyncSession,
-        source: Any,
+        source: schemas.Source,
         auth_fields: Dict[str, Any],
         ctx: ApiContext,
         uow: Any,
@@ -317,7 +364,7 @@ class SourceConnectionHelpers:
         self,
         db: AsyncSession,
         name: str,
-        source: Any,
+        source: schemas.Source,
         credential_id: Optional[UUID],
         ctx: ApiContext,
         uow: Any,
@@ -332,7 +379,9 @@ class SourceConnectionHelpers:
         )
         return await crud.connection.create(db, obj_in=conn_in, ctx=ctx, uow=uow)
 
-    async def get_collection(self, db: AsyncSession, collection_id: str, ctx: ApiContext) -> Any:
+    async def get_collection(
+        self, db: AsyncSession, collection_id: str, ctx: ApiContext
+    ) -> schemas.Collection:
         """Get or validate collection exists."""
         if not collection_id:
             # This should never happen with proper typing, but kept for safety
@@ -355,7 +404,7 @@ class SourceConnectionHelpers:
         run_immediately: bool,
         ctx: ApiContext,
         uow: Any,
-    ) -> Tuple[Any, Optional[Any]]:
+    ) -> Tuple[schemas.Sync, Optional[schemas.SyncJob]]:
         """Create sync and optionally trigger initial run.
 
         Connection ID here is the model.connection.id, not the model.source_connection.id
@@ -439,7 +488,7 @@ class SourceConnectionHelpers:
         # Cannot determine authentication method
         return None
 
-    def compute_status(self, source_conn: Any) -> SourceConnectionStatus:
+    def compute_status(self, source_conn: schemas.SourceConnection) -> SourceConnectionStatus:
         """Compute status from current state."""
         from airweave.core.shared_models import SourceConnectionStatus
 

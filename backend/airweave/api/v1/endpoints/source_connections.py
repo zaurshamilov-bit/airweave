@@ -23,17 +23,17 @@ async def oauth_callback(
     db: AsyncSession = Depends(get_db),
     state: str = Query(..., description="OAuth state parameter"),
     code: str = Query(..., description="OAuth authorization code"),
-    ctx: ApiContext = Depends(deps.get_context),
 ) -> Response:
-    """Handle OAuth callback from provider.
+    """Handle OAuth callback from user after they have authenticated with an OAuth provider.
 
     Completes the OAuth flow and redirects to the configured URL.
+    This endpoint does not require authentication as it's accessed by users
+    who are connecting their source.
     """
-    source_conn = await source_connection_service.complete_oauth_callback(
+    source_conn = await source_connection_service.complete_oauth_callback_no_auth(
         db,
         state=state,
         code=code,
-        ctx=ctx,
     )
 
     # Redirect to the app with success
@@ -251,12 +251,13 @@ async def authorize_redirect(
     *,
     db: AsyncSession = Depends(get_db),
     code: str,
-    ctx: ApiContext = Depends(deps.get_context),
 ) -> Response:
     """Proxy redirect to OAuth provider.
 
     This endpoint is used to provide a short-lived, user-friendly URL
     that redirects to the actual OAuth provider authorization page.
+    This endpoint does not require authentication as it's accessed by users
+    who are not yet authenticated with the platform.
     """
     from airweave.crud import redirect_session
 

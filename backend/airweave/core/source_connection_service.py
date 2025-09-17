@@ -398,6 +398,32 @@ class SourceConnectionService:
         sync_job_schema = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
         return sync_job_schema.to_source_connection_job(source_connection_id)
 
+    async def complete_oauth_callback_no_auth(
+        self,
+        db: AsyncSession,
+        *,
+        state: str,
+        code: str,
+    ) -> schemas.SourceConnection:
+        """Complete OAuth flow from callback without requiring authentication.
+
+        This method reconstructs the ApiContext from the stored session data
+        since OAuth callbacks come from external providers without platform auth.
+
+        Returns:
+            Source connection with authentication details
+        """
+        # Find init session without auth validation
+        init_session = await connection_init_session.get_by_state_no_auth(db, state=state)
+        if not init_session:
+            raise HTTPException(status_code=404, detail="OAuth session not found or expired")
+
+        # Reconstruct ApiContext from session data
+        ctx = await self._reconstruct_context_from_session(db, init_session)
+
+        # Now call the regular complete_oauth_callback with the reconstructed context
+        return await self.complete_oauth_callback(db, state=state, code=code, ctx=ctx)
+
     async def complete_oauth_callback(
         self,
         db: AsyncSession,
@@ -927,7 +953,7 @@ class SourceConnectionService:
         module = __import__(f"airweave.platform.sources.{module_name}", fromlist=[class_name])
         return getattr(module, class_name)
 
-    # Import all helper methods
+    # Import helper instance and all helper methods
     from airweave.core.source_connection_service_helpers import source_connection_helpers
 
     _validate_authentication_method = source_connection_helpers.validate_authentication_method
@@ -952,6 +978,7 @@ class SourceConnectionService:
     _create_proxy_url = source_connection_helpers.create_proxy_url
     _exchange_oauth_code = source_connection_helpers.exchange_oauth_code
     _complete_oauth_connection = source_connection_helpers.complete_oauth_connection
+    _reconstruct_context_from_session = source_connection_helpers.reconstruct_context_from_session
 
 
 # Singleton instance

@@ -187,7 +187,7 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
             <div className="relative flex justify-center">
               <span className={cn(
                 "px-3 text-[11px] font-medium uppercase tracking-wider",
-                isDark ? "text-gray-600 bg-gray-900/5" : "text-gray-400 bg-gray-50/30"
+                isDark ? "text-gray-600 bg-gray-900" : "text-gray-400 bg-white"
               )}>
                 or
               </span>

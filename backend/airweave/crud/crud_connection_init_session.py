@@ -76,6 +76,22 @@ class CRUDConnectionInitSession(CRUDBaseOrganization[ConnectionInitSession, Base
         res = await db.execute(q)
         return res.scalar_one_or_none()
 
+    async def get_by_state_no_auth(
+        self,
+        db: AsyncSession,
+        *,
+        state: str,
+    ) -> Optional[ConnectionInitSession]:
+        """Fetch a session by its state without auth validation.
+
+        Used for OAuth callbacks where the user is not yet authenticated.
+        """
+        q = select(self.model).where(
+            self.model.state == state,
+        )
+        res = await db.execute(q)
+        return res.scalar_one_or_none()
+
     async def mark_completed(
         self,
         db: AsyncSession,
