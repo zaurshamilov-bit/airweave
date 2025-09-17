@@ -1,4 +1,4 @@
-"""Module for data synchronization with improved architecture."""
+"""Module for data synchronization with improved architecture + toggleable batching."""
 
 import asyncio
 from typing import Optional
@@ -23,6 +23,10 @@ class SyncOrchestrator:
 
     Uses a pull-based approach where entities are only pulled from the
     stream when a worker is available to process them immediately.
+
+    Behavior is controlled by SyncContext.should_batch:
+      - True  -> micro-batched pipeline (batches entities together for better performance)
+      - False -> legacy per-entity pipeline (exact same as original, one task per entity)
     """
 
     def __init__(
@@ -44,7 +48,12 @@ class SyncOrchestrator:
 
         # Queue size provides buffering for bursty sources
         # Workers pull from this queue when ready
-        self.stream_buffer_size = 1000
+        self.stream_buffer_size = 10000
+
+        # Batching configuration (read from context, with defaults)
+        self.should_batch = sync_context.should_batch
+        self.batch_size = sync_context.batch_size
+        self.max_batch_latency_ms = sync_context.max_batch_latency_ms
 
     async def run(self) -> schemas.Sync:
         """Execute the synchronization process.
@@ -96,8 +105,16 @@ class SyncOrchestrator:
             collection_id=self.sync_context.collection.id,
         )
 
-    async def _process_entities(self) -> None:  # noqa: C901
-        """Process entities with explicit stream lifecycle management."""
+    async def _process_entities(self) -> None:
+        """Dispatch to batched or unbatched processing depending on context configuration."""
+        if self.should_batch:
+            await self._process_entities_batched()
+        else:
+            await self._process_entities_unbatched()
+
+    # ------------------------------ Original unbatched path (EXACT copy) ----------------------
+    async def _process_entities_unbatched(self) -> None:  # noqa: C901
+        """Process entities with explicit stream lifecycle management (ORIGINAL LOGIC)."""
         source_node = self.sync_context.dag.get_source_node()
 
         self.sync_context.logger.info(
@@ -153,90 +170,126 @@ class SyncOrchestrator:
             self.sync_context.logger.error(f"Error during entity streaming: {get_error_message(e)}")
 
         finally:
-            # Always clean up the stream first
-            if stream:
-                await stream.stop()
+            await self._finalize_stream_and_cleanup(stream, stream_error, pending_tasks)
 
-            # Then handle pending tasks
-            if stream_error:
-                # Cancel all pending tasks if there was an error
-                self.sync_context.logger.info(f"Cancelling {len(pending_tasks)} pending tasks...")
-                for task in pending_tasks:
-                    task.cancel()
+    # ------------------------------ NEW batched path ------------------------------
+    async def _process_entities_batched(self) -> None:  # noqa: C901
+        """Process entities using micro-batching with controlled concurrency."""
+        source_node = self.sync_context.dag.get_source_node()
 
-            # Wait for all tasks to complete
-            await self._wait_for_remaining_tasks(pending_tasks)
-            await self.sync_context.progress.finalize(is_complete=(stream_error is None))
+        self.sync_context.logger.info(
+            f"Starting batched pull-based processing from source {self.sync_context.source._name} "
+            f"(buffer: {self.stream_buffer_size}, max workers: {self.worker_pool.max_workers}, "
+            f"batch_size: {self.batch_size}, max_batch_latency_ms: {self.max_batch_latency_ms})"
+        )
 
-            # NEW: Finalize entity state tracker if present
-            if self.sync_context.entity_state_tracker:
-                error_message = get_error_message(stream_error) if stream_error else None
-                await self.sync_context.entity_state_tracker.finalize(
-                    is_complete=(stream_error is None), error=error_message
-                )
+        stream = None
+        stream_error: Optional[Exception] = None
+        pending_tasks: set[asyncio.Task] = set()
 
-            # Clean up orphaned entities after all processing is complete
-            #
-            # ⚠️ IMPORTANT: ORPHANED ENTITY CLEANUP IS DISABLED FOR INCREMENTAL SYNCS ⚠️
-            #
-            # The orphaned entity cleanup was designed for full syncs where ALL entities
-            # from the source are processed. In incremental syncs, only CHANGED entities
-            # are yielded, so unchanged entities would incorrectly appear as "orphaned"
-            # and get deleted.
-            #
-            # For incremental syncs, deletions should only happen through:
-            # 1. Explicit deletion entities (e.g., GitHubFileDeletionEntity)
-            # 2. NOT through orphaned cleanup
-            #
-            # TODO: Future improvement could track which entities are expected to be
-            # unchanged vs. truly orphaned, allowing cleanup even in incremental syncs.
-            #
-            # Detection logic:
-            # - If cursor data exists, this is an incremental sync (we've synced before)
-            # - If no cursor data, this is the first/full sync
+        # Micro-batch aggregation state
+        batch_buffer: list = []
+        flush_deadline: Optional[float] = None  # event-loop time when we must flush
 
-            # Check if we should do cleanup
-            # Cleanup happens if:
-            # 1. force_full_sync is True (daily cleanup run), OR
-            # 2. No cursor data exists (first sync or reset)
-            has_cursor_data = bool(
-                hasattr(self.sync_context, "cursor")
-                and self.sync_context.cursor
-                and self.sync_context.cursor.cursor_data
+        try:
+            stream = AsyncSourceStream(
+                self.sync_context.source.generate_entities(),
+                queue_size=self.stream_buffer_size,
+                logger=self.sync_context.logger,
             )
+            await stream.start()
 
-            should_cleanup = self.sync_context.force_full_sync or not has_cursor_data
-
-            if not stream_error and should_cleanup:
+            async for entity in stream.get_entities():
                 try:
-                    if self.sync_context.force_full_sync:
-                        self.sync_context.logger.info(
-                            "🧹 Starting orphaned entity cleanup phase (FORCED FULL SYNC - "
-                            "daily cleanup schedule). All source entities were fetched to "
-                            "accurately identify orphaned entities."
-                        )
-                    else:
-                        self.sync_context.logger.info(
-                            "🧹 Starting orphaned entity cleanup phase "
-                            "(first sync - no cursor data)"
-                        )
-                    await self.entity_processor.cleanup_orphaned_entities(self.sync_context)
-                except Exception as cleanup_error:
+                    # Check guard rail
+                    await self.sync_context.guard_rail.is_allowed(ActionType.ENTITIES)
+                except (UsageLimitExceededException, PaymentRequiredException) as guard_error:
                     self.sync_context.logger.error(
-                        f"💥 Orphaned entity cleanup failed: {get_error_message(cleanup_error)}",
-                        exc_info=True,
+                        f"Guard rail check failed: {type(guard_error).__name__}: {str(guard_error)}"
                     )
-                    raise cleanup_error
-            elif has_cursor_data and not self.sync_context.force_full_sync:
-                self.sync_context.logger.info(
-                    "⏩ Skipping orphaned entity cleanup for INCREMENTAL sync "
-                    "(cursor data exists, only changed entities are processed)"
+                    stream_error = guard_error
+                    # Before breaking, flush any buffered work so we don't drop it
+                    if batch_buffer:
+                        pending_tasks = await self._submit_batch_and_trim(
+                            batch_buffer, pending_tasks, source_node
+                        )
+                        batch_buffer = []
+                        flush_deadline = None
+                    break
+
+                # Handle skipped entities without using a worker
+                if entity.airweave_system_metadata.should_skip:
+                    self.sync_context.logger.debug(f"Skipping entity: {entity.entity_id}")
+                    await self.sync_context.progress.increment("skipped")
+                    continue
+
+                # Accumulate into batch
+                batch_buffer.append(entity)
+
+                # Set a latency-based flush deadline on first element
+                if flush_deadline is None and self.max_batch_latency_ms > 0:
+                    flush_deadline = (
+                        asyncio.get_event_loop().time() + self.max_batch_latency_ms / 1000.0
+                    )
+
+                # Size-based flush
+                if len(batch_buffer) >= self.batch_size:
+                    pending_tasks = await self._submit_batch_and_trim(
+                        batch_buffer, pending_tasks, source_node
+                    )
+                    batch_buffer = []
+                    flush_deadline = None
+                    continue
+
+                # Time-based flush (checked when new items arrive)
+                if flush_deadline is not None and asyncio.get_event_loop().time() >= flush_deadline:
+                    pending_tasks = await self._submit_batch_and_trim(
+                        batch_buffer, pending_tasks, source_node
+                    )
+                    batch_buffer = []
+                    flush_deadline = None
+
+            # End-of-stream: flush any remaining buffered entities
+            if batch_buffer:
+                pending_tasks = await self._submit_batch_and_trim(
+                    batch_buffer, pending_tasks, source_node
                 )
+                batch_buffer = []
+                flush_deadline = None
 
-            # Re-raise the error after cleanup
-            if stream_error:
-                raise stream_error
+        except Exception as e:
+            stream_error = e
+            self.sync_context.logger.error(f"Error during entity streaming: {get_error_message(e)}")
 
+        finally:
+            await self._finalize_stream_and_cleanup(stream, stream_error, pending_tasks)
+
+    async def _submit_batch_and_trim(
+        self,
+        batch: list,
+        pending_tasks: set[asyncio.Task],
+        source_node: schemas.DagNode,
+    ) -> set[asyncio.Task]:
+        """Submit a micro-batch to the worker pool and trim to max parallelism if needed."""
+        if not batch:
+            return pending_tasks
+
+        # Submit batch to EntityProcessor.process_batch (which internally uses original logic)
+        task = await self.worker_pool.submit(
+            self.entity_processor.process_batch,
+            entities=list(batch),
+            source_node=source_node,
+            sync_context=self.sync_context,
+        )
+        pending_tasks.add(task)
+
+        # Clean up completed tasks when we hit the parallelism limit
+        if len(pending_tasks) >= self.worker_pool.max_workers:
+            pending_tasks = await self._handle_completed_tasks(pending_tasks)
+
+        return pending_tasks
+
+    # ------------------------------ Shared helpers (from original) ------------------------------
     async def _handle_completed_tasks(self, pending_tasks: set[asyncio.Task]) -> set[asyncio.Task]:
         """Handle completed tasks and check for exceptions.
 
@@ -272,6 +325,98 @@ class SyncOrchestrator:
                     self.sync_context.logger.warning(
                         f"Task failed with exception: {task.exception()}"
                     )
+
+    async def _finalize_stream_and_cleanup(
+        self,
+        stream: Optional[AsyncSourceStream],
+        stream_error: Optional[Exception],
+        pending_tasks: set[asyncio.Task],
+    ) -> None:
+        """Finalize stream and perform cleanup (ORIGINAL LOGIC PRESERVED)."""
+        # Always clean up the stream first
+        self.sync_context.logger.info("Finalizing stream and cleaning up")
+        self.sync_context.logger.info(f"Stream error: {stream_error}")
+        if stream:
+            await stream.stop()
+
+        # Then handle pending tasks
+        if stream_error:
+            # Cancel all pending tasks if there was an error
+            self.sync_context.logger.info(f"Cancelling {len(pending_tasks)} pending tasks...")
+            for task in pending_tasks:
+                task.cancel()
+
+        # Wait for all tasks to complete
+        await self._wait_for_remaining_tasks(pending_tasks)
+        await self.sync_context.progress.finalize(is_complete=(stream_error is None))
+
+        # NEW: Finalize entity state tracker if present
+        if self.sync_context.entity_state_tracker:
+            error_message = get_error_message(stream_error) if stream_error else None
+            await self.sync_context.entity_state_tracker.finalize(
+                is_complete=(stream_error is None), error=error_message
+            )
+
+        # Clean up orphaned entities after all processing is complete
+        #
+        # ⚠️ IMPORTANT: ORPHANED ENTITY CLEANUP IS DISABLED FOR INCREMENTAL SYNCS ⚠️
+        #
+        # The orphaned entity cleanup was designed for full syncs where ALL entities
+        # from the source are processed. In incremental syncs, only CHANGED entities
+        # are yielded, so unchanged entities would incorrectly appear as "orphaned"
+        # and get deleted.
+        #
+        # For incremental syncs, deletions should only happen through:
+        # 1. Explicit deletion entities (e.g., GitHubFileDeletionEntity)
+        # 2. NOT through orphaned cleanup
+        #
+        # TODO: Future improvement could track which entities are expected to be
+        # unchanged vs. truly orphaned, allowing cleanup even in incremental syncs.
+        #
+        # Detection logic:
+        # - If cursor data exists, this is an incremental sync (we've synced before)
+        # - If no cursor data, this is the first/full sync
+
+        # Check if we should do cleanup
+        # Cleanup happens if:
+        # 1. force_full_sync is True (daily cleanup run), OR
+        # 2. No cursor data exists (first sync or reset)
+        has_cursor_data = bool(
+            hasattr(self.sync_context, "cursor")
+            and self.sync_context.cursor
+            and self.sync_context.cursor.cursor_data
+        )
+
+        should_cleanup = self.sync_context.force_full_sync or not has_cursor_data
+
+        if not stream_error and should_cleanup:
+            try:
+                if self.sync_context.force_full_sync:
+                    self.sync_context.logger.info(
+                        "🧹 Starting orphaned entity cleanup phase (FORCED FULL SYNC - "
+                        "daily cleanup schedule). All source entities were fetched to "
+                        "accurately identify orphaned entities."
+                    )
+                else:
+                    self.sync_context.logger.info(
+                        "🧹 Starting orphaned entity cleanup phase (first sync - no cursor data)"
+                    )
+                await self.entity_processor.cleanup_orphaned_entities(self.sync_context)
+            except Exception as cleanup_error:
+                self.sync_context.logger.error(
+                    f"💥 Orphaned entity cleanup failed: {get_error_message(cleanup_error)}",
+                    exc_info=True,
+                )
+                raise cleanup_error
+        elif has_cursor_data and not self.sync_context.force_full_sync:
+            self.sync_context.logger.info(
+                "⏩ Skipping orphaned entity cleanup for INCREMENTAL sync "
+                "(cursor data exists, only changed entities are processed)"
+            )
+
+        # Re-raise the error after cleanup
+        if stream_error:
+            raise stream_error
 
     async def _complete_sync(self) -> None:
         """Mark sync job as completed with final statistics."""

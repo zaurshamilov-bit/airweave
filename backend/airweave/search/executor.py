@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airweave.analytics.search_analytics import build_search_properties, track_search_event
 from airweave.api.context import ApiContext
 from airweave.core.config import settings
 from airweave.core.pubsub import core_pubsub
@@ -240,6 +241,29 @@ class SearchExecutor:
                 },
             )
         finally:
+            # Track search completion analytics
+            if ctx:
+                # Extract search context from the execution context
+                query = context.get("query", "")
+                collection_slug = context.get("collection_slug", "")
+                search_duration_ms = (time.time() - start_time) * 1000
+
+                # Determine search type
+                search_type = "streaming" if request_id else "regular"
+
+                # Build analytics properties using shared utility
+                properties = build_search_properties(
+                    ctx=ctx,
+                    query=query,
+                    collection_slug=collection_slug,
+                    duration_ms=search_duration_ms,
+                    search_type=search_type,
+                    results=context.get("final_results"),
+                )
+
+                # Track unified search event
+                track_search_event(ctx, properties, "search_query")
+
             # Always emit done so clients can close streams reliably
             await emit("done", {"request_id": request_id})
 

@@ -11,6 +11,7 @@ from airweave import crud, schemas
 from airweave.api.context import ApiContext
 from airweave.core import credentials
 from airweave.core.config import settings
+from airweave.core.constants.reserved_ids import RESERVED_TABLE_ENTITY_ID
 from airweave.core.exceptions import NotFoundException
 from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import ContextualLogger, LoggerConfigurator, logger
@@ -883,6 +884,8 @@ class SyncFactory:
 
         entity_definition_map = {}
         for entity_definition in entity_definitions:
+            if entity_definition.id == RESERVED_TABLE_ENTITY_ID:
+                continue
             full_module_name = f"airweave.platform.entities.{entity_definition.module_name}"
             module = importlib.import_module(full_module_name)
             entity_class = getattr(module, entity_definition.class_name)

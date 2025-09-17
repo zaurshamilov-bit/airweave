@@ -107,8 +107,8 @@ class BaseDatabaseAuthConfig(AuthConfig):
         default="*",
         title="Tables",
         description=(
-            "Comma separated list of tables to sync. For example, 'users,orders'. "
-            "For all tables, use '*'"
+            "Comma separated list of tables and views to sync. For example, 'users,orders'. "
+            "For all tables (not views), use '*'."
         ),
     )
 

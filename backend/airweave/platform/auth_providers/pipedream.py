@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from fastapi import HTTPException
 
+from airweave.core.credential_sanitizer import safe_log_credentials
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.auth_providers._base import BaseAuthProvider
 from airweave.platform.decorators import auth_provider
@@ -263,7 +264,11 @@ class PipedreamAuthProvider(BaseAuthProvider):
                 account_data, source_auth_config_fields, source_short_name
             )
 
-            self.logger.info(f"\n🔑 [Pipedream] Found credentials: {found_credentials}\n")
+            safe_log_credentials(
+                found_credentials,
+                self.logger.info,
+                f"\n🔑 [Pipedream] Retrieved credentials for '{source_short_name}':",
+            )
             return found_credentials
 
     async def _get_account_with_credentials(

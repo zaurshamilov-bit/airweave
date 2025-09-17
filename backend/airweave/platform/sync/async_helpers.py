@@ -31,9 +31,6 @@ async def get_cpu_executor() -> ThreadPoolExecutor:
             _cpu_executor = ThreadPoolExecutor(
                 max_workers=max_workers, thread_name_prefix="airweave-cpu"
             )
-            logger.debug(
-                f"🔧 CPU_EXECUTOR_INIT Created shared CPU executor with {max_workers} workers"
-            )
 
     return _cpu_executor
 
@@ -94,7 +91,7 @@ def stable_serialize(obj: Any) -> Any:
         return str(obj)
 
 
-async def compute_entity_hash_async(entity: Any) -> str:
+async def compute_entity_hash_async(entity: Any) -> str:  # noqa: C901
     """Compute entity hash asynchronously.
 
     Args:
@@ -130,14 +127,9 @@ async def compute_entity_hash_async(entity: Any) -> str:
                     else None
                 )
                 if local_path and os.path.exists(local_path):
-                    logger.debug(f"HASH_FILE Branch: Using file content hash | path={local_path}")
                     content_hash = await compute_file_hash_async(local_path)
                     # Cache the content hash in system metadata for reuse in this run
                     entity.airweave_system_metadata.hash = content_hash
-                    logger.debug(
-                        f"🔢 HASH_FILE Result: sha256={content_hash} | "
-                        f"size={getattr(entity.airweave_system_metadata, 'total_size', 'n/a')}"
-                    )
 
             # Fallbacks if we couldn't compute content hash now (e.g., temp file cleaned up)
             if content_hash is None:
@@ -147,22 +139,15 @@ async def compute_entity_hash_async(entity: Any) -> str:
                     else None
                 )
                 if checksum:
-                    logger.debug(
-                        "🔢 HASH_FILE Fallback: using cached checksum from system metadata"
-                    )
                     content_hash = checksum
 
             if content_hash is None:
                 md5 = getattr(entity, "md5_checksum", None)
                 if md5:
-                    logger.debug("🔢 HASH_FILE Fallback: using md5_checksum field from entity")
                     content_hash = md5
 
             # Last-resort content hash when nothing else available
             if content_hash is None:
-                logger.debug(
-                    "🔢 HASH_FILE Fallback: no content data; using pseudo-content sentinel"
-                )
                 content_hash = "no-content"
 
             # Compose a final action hash from content hash PLUS selected stable metadata
@@ -181,16 +166,12 @@ async def compute_entity_hash_async(entity: Any) -> str:
 
             import json as _json
 
-            logger.debug(
-                "🔢 HASH_FILE_COMPOSITE Using content hash + metadata subset: "
-                f"keys={list(composite.keys())}"
-            )
             return hashlib.sha256(
                 _json.dumps(stable_serialize(composite), sort_keys=True).encode()
             ).hexdigest()
         except Exception:
             # Fall through to generic content hashing below
-            logger.exception("🔢 HASH_FILE error; falling back to generic content hashing")
+            logger.exception("HASH_FILE error; falling back to generic content hashing")
 
     # For regular entities, compute hash from content fields
     def _compute_entity_hash(entity_obj) -> str:
@@ -232,46 +213,12 @@ async def compute_entity_hash_async(entity: Any) -> str:
         # Ensure nested system metadata doesn't leak volatile fields into the hash
         # (we already excluded 'airweave_system_metadata' entirely above)
 
-        # LOGGING: show exactly which fields are included/excluded
-        try:
-            import json as _json
-
-            logger.debug(
-                "\n\n🔢 HASH_FIELDS "
-                f"all={sorted(all_fields)} "
-                f"excluded_meta={sorted(all_fields & metadata_fields)} "
-                f"included={sorted(content_fields)}\n\n"
-            )
-
-            # Explicitly log if system metadata was excluded
-            if (
-                "airweave_system_metadata" not in content_data
-                and "airweave_system_metadata" in data
-            ):
-                logger.debug("🔢 HASH_NESTED_EXCLUDED airweave_system_metadata excluded from hash")
-
-            logger.debug(
-                "\n\n🔢 HASH_CONTENT_DATA "
-                f"payload={_json.dumps(content_data, sort_keys=True, default=str)}\n\n"
-            )
-        except Exception as log_err:
-            logger.warning(f"🔢 HASH_LOG_FAIL Could not log hash payload: {log_err}")
-
         # Use stable serialization
         stable_data = stable_serialize(content_data)
         import json as _json2
 
         json_str = _json2.dumps(stable_data, sort_keys=True, separators=(",", ":"))
-
         digest = hashlib.sha256(json_str.encode()).hexdigest()
-        try:
-            logger.debug(
-                f"🔢 HASH_JSON len={len(json_str)} sha256={digest} "
-                f"preview={json_str[:500]}{'...' if len(json_str) > 500 else ''}"
-            )
-        except Exception:
-            pass
-
         return digest
 
     hash_value = await run_in_thread_pool(_compute_entity_hash, entity)

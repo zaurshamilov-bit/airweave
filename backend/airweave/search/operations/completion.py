@@ -39,7 +39,6 @@ When the user asks to FIND/LIST/SHOW entities with constraints:
     decisive evidence (role/company/location, etc.). Add an inline source reference [[entity_id]].
   - Do not cap the number of items; list all matches present in the provided context.
   - Start with a line like: "Matches found: N" where N is the number of items you list.
-  - If no items match, respond: "No matching items found in the provided context."
 
 For general explanatory/text questions (summaries, how-tos, overviews):
 - Synthesize a concise, direct answer using the most relevant snippets.

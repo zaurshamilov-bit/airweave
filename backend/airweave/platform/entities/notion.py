@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional
 from airweave.core.datetime_utils import utc_now_naive
 from airweave.platform.entities._airweave_field import AirweaveField
 from airweave.platform.entities._base import ChunkEntity, FileEntity
-from airweave.platform.entities._lazy import LazyEntity
 
 
 class NotionDatabaseEntity(ChunkEntity):
@@ -37,7 +36,7 @@ class NotionDatabaseEntity(ChunkEntity):
     )
 
 
-class NotionPageEntity(ChunkEntity, LazyEntity):
+class NotionPageEntity(ChunkEntity):
     """Schema for a Notion page with aggregated content."""
 
     page_id: str = AirweaveField(..., description="The ID of the page")
@@ -72,30 +71,7 @@ class NotionPageEntity(ChunkEntity, LazyEntity):
         None, description="When the page was last edited", is_updated_at=True
     )
 
-    def __init__(self, **data):
-        """Initialize NotionPageEntity ensuring LazyEntity setup."""
-        super().__init__(**data)
-        # Ensure LazyEntity initialization
-        if not hasattr(self, "_lazy_operations"):
-            self._lazy_operations = {}
-        if not hasattr(self, "_lazy_results"):
-            self._lazy_results = {}
-        if not hasattr(self, "_is_materialized"):
-            self._is_materialized = False
-
-    async def _apply_results(self) -> None:
-        """Apply lazy operation results to entity fields."""
-        if "aggregate_content" in self._lazy_results:
-            result = self._lazy_results["aggregate_content"]
-            self.content = result.get("content", "")
-            self.content_blocks_count = result.get("blocks_count", 0)
-            self.max_depth = result.get("max_depth", 0)
-            # Don't populate files - they should be yielded separately,
-            # not included in the page entity
-            # self.files = result.get('files', [])
-
-        if "extract_properties" in self._lazy_results:
-            self.property_entities = self._lazy_results["extract_properties"]
+    # Lazy mechanics removed; eager-only entity
 
 
 class NotionPropertyEntity(ChunkEntity):

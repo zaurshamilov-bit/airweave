@@ -1,6 +1,6 @@
 {
   "name": "airweave-mcp-search",
-  "version": "1.0.7",
+  "version": "0.5.7",
   "description": "MCP server for searching Airweave collections",
   "type": "module",
   "main": "build/index.js",
