@@ -39,6 +39,39 @@ from airweave.schemas.source_connection import (
 class SourceConnectionHelpers:
     """Helper methods for source connection service."""
 
+    @staticmethod
+    def _as_mapping(value: Any) -> Dict[str, Any]:
+        """Coerce various shapes (ConfigValues, Pydantic models, plain dicts, etc.) into a dict."""
+        from collections.abc import Mapping
+
+        if value is None:
+            return {}
+
+        # Already a mapping
+        if isinstance(value, Mapping):
+            return dict(value)
+
+        # Pydantic v2 / v1 models
+        if hasattr(value, "model_dump"):
+            return value.model_dump()
+        if hasattr(value, "dict"):
+            return value.dict()
+
+        # Common FE wrapper like ConfigValues(values=...)
+        if hasattr(value, "values"):
+            v = value.values
+            if isinstance(v, Mapping):
+                return dict(v)
+            return v  # hope it's already a plain mapping-like
+
+        # Optional: list-of-pairs [{key, value}, ...]
+        if isinstance(value, list) and all(
+            isinstance(x, dict) and "key" in x and "value" in x for x in value
+        ):
+            return {x["key"]: x["value"] for x in value}
+
+        raise TypeError(f"config_fields must be mapping-like; got {type(value).__name__}")
+
     def validate_authentication_method(  # noqa: C901
         self, source_class: Any, obj_in: SourceConnectionCreate
     ) -> None:
@@ -131,29 +164,58 @@ class SourceConnectionHelpers:
                 raise HTTPException(status_code=422, detail=f"Invalid auth fields: {errors}") from e
             raise HTTPException(status_code=422, detail=str(e)) from e
 
-    async def validate_config_fields(
-        self, db: AsyncSession, short_name: str, config_fields: Any, ctx: ApiContext
+    async def validate_config_fields(  # noqa: C901
+        self,
+        db: AsyncSession,
+        short_name: str,
+        config_fields: Any,
+        ctx: ApiContext,
     ) -> Dict[str, Any]:
-        """Validate configuration fields against source schema."""
+        """Validate configuration fields against source schema, returning a plain dict."""
         source = await crud.source.get_by_short_name(db, short_name=short_name)
         if not source:
             raise HTTPException(status_code=404, detail=f"Source '{short_name}' not found")
 
+        # Nothing provided
         if not config_fields:
             return {}
 
+        # If the source doesn't declare a config class, still normalize to a dict for consistency
         if not source.config_class:
-            return config_fields if isinstance(config_fields, dict) else {}
+            try:
+                return self._as_mapping(config_fields)
+            except Exception:
+                return {}
 
+        # Source declares a config class -> unwrap then validate with Pydantic
         try:
+            payload = self._as_mapping(config_fields)
             config_class = resource_locator.get_config(source.config_class)
-            config = config_class(**config_fields)
-            return config.model_dump()
+
+            # Pydantic v2 first, fall back to v1 constructor
+            if hasattr(config_class, "model_validate"):
+                model = config_class.model_validate(payload)
+            else:
+                model = config_class(**payload)
+
+            # Always return a plain dict
+            if hasattr(model, "model_dump"):
+                return model.model_dump()
+            if hasattr(model, "dict"):
+                return model.dict()
+            # As a last resort
+            return dict(model) if isinstance(model, dict) else payload
+
         except Exception as e:
             from pydantic import ValidationError
 
             if isinstance(e, ValidationError):
-                errors = "; ".join([f"{err['loc'][0]}: {err['msg']}" for err in e.errors()])
+                # Make FastAPI-friendly error details
+                def _loc(err):
+                    loc = err.get("loc", [])
+                    return ".".join(str(x) for x in loc) if loc else "<root>"
+
+                errors = "; ".join([f"{_loc(err)}: {err.get('msg')}" for err in e.errors()])
                 raise HTTPException(
                     status_code=422, detail=f"Invalid config fields: {errors}"
                 ) from e

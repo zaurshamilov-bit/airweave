@@ -123,7 +123,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
     // Check for OAuth browser flow
     if (sourceDetails.auth_methods.includes('oauth_browser') ||
-        sourceDetails.auth_methods.includes('oauth_token')) {
+      sourceDetails.auth_methods.includes('oauth_token')) {
       methods.push('oauth2');
     }
 
@@ -340,7 +340,9 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       const response = await apiClient.post('/source-connections', payload);
 
       if (!response.ok) {
-        const error = await response.json();
+        // const error = await response.json();
+        const error = await response.text();
+        console.error(error)
         throw new Error(error.detail || 'Failed to create connection');
       }
 
@@ -395,332 +397,224 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       <div className="px-8 py-8 flex-1 overflow-auto">
         <div className="min-h-full flex flex-col">
           <div className="space-y-6 flex-1">
-          {/* Header */}
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-              Create Source Connection
-            </h2>
-            <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
-              Connect your {sourceName || 'data source'} to sync and search its content
-            </p>
-          </div>
+            {/* Header */}
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                Create Source Connection
+              </h2>
+              <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
+                Connect your {sourceName || 'data source'} to sync and search its content
+              </p>
+            </div>
 
-          {/* Connection created state - Use shared component */}
-          {connectionUrl ? (
-            <SourceAuthenticationView
-              sourceName={sourceName}
-              authenticationUrl={connectionUrl}
-              showBorder={false}
-            />
-          ) : (
-            <>
-              {/* Form fields - Clean minimal design */}
-              <div className="space-y-5">
-                <div>
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-                    Name
-                  </label>
-                  <ValidatedInput
-                    type="text"
-                    value={connectionName}
-                    onChange={(value) => {
-                      setConnectionName(value);
-                      setSourceConnectionName(value);
-                    }}
-                    placeholder="Enter connection name"
-                    validation={sourceConnectionNameValidation}
-                    className={cn(
-                      "focus:border-gray-400 dark:focus:border-gray-600",
-                      isDark
-                        ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
-                        : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
-                    )}
-                  />
-                </div>
-
-                {/* Auth Method Selection */}
-                {sourceDetails && (
-                  <AuthMethodSelector
-                    selectedMethod={authMode}
-                    onMethodChange={setAuthMode}
-                    availableAuthMethods={getAvailableAuthMethods()}
-                  />
-                )}
-
-                {/* Auth Provider Selection */}
-                {authMode === 'external_provider' && (
-                  <AuthProviderSelector
-                    selectedProvider={selectedAuthProvider}
-                    onProviderSelect={setSelectedAuthProvider}
-                    onConfigChange={setAuthProviderConfig}
-                  />
-                )}
-
-                {/* Direct auth fields (API keys, passwords, config) */}
-                {authMode === 'direct_auth' && sourceDetails?.auth_fields?.fields && (
-                  <div className="space-y-3">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Configuration
-                    </label>
-                    {sourceDetails.auth_fields.fields.map((field) => (
-                      <div key={field.name}>
-                        <label className="block text-sm font-medium mb-1">
-                          {field.title || field.name}
-                          {field.required && <span className="text-red-500 ml-1">*</span>}
-                        </label>
-                        {field.description && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-                            {field.description}
-                          </p>
-                        )}
-                        <ValidatedInput
-                          type={field.name.includes('password') || field.name.includes('token') ? 'password' : 'text'}
-                          placeholder=""
-                          value={authFields[field.name] || ''}
-                          onChange={(value) => setAuthFields({ ...authFields, [field.name]: value })}
-                          validation={getAuthFieldValidation(field.name)}
-                          className={cn(
-                            "focus:border-gray-400 dark:focus:border-gray-600",
-                            isDark
-                              ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
-                              : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
-                          )}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Config fields (optional additional configuration) */}
-                {sourceDetails?.config_fields?.fields && sourceDetails.config_fields.fields.length > 0 && (
-                  <div className="space-y-3">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Additional Configuration (optional)
-                    </label>
-                    {sourceDetails.config_fields.fields.map((field) => (
-                      <div key={field.name}>
-                        <label className="block text-sm font-medium mb-1">
-                          {field.title || field.name}
-                        </label>
-                        {field.description && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-                            {field.description}
-                          </p>
-                        )}
-                        <input
-                          type="text"
-                          placeholder=""
-                          value={configData[field.name] || ''}
-                          onChange={(e) => setConfigData({ ...configData, [field.name]: e.target.value })}
-                          className={cn(
-                            "w-full px-4 py-2 rounded-lg text-sm",
-                            "border bg-transparent",
-                            "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
-                            isDark
-                              ? "border-gray-800 text-white placeholder:text-gray-600"
-                              : "border-gray-200 text-gray-900 placeholder:text-gray-400"
-                          )}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* OAuth option - Sleek toggle or always on for BYOC sources */}
-                {authMode === 'oauth2' && (
+            {/* Connection created state - Use shared component */}
+            {connectionUrl ? (
+              <SourceAuthenticationView
+                sourceName={sourceName}
+                authenticationUrl={connectionUrl}
+                showBorder={false}
+              />
+            ) : (
+              <>
+                {/* Form fields - Clean minimal design */}
+                <div className="space-y-5">
                   <div>
-                    {requiresCustomOAuth() ? (
-                      // For BYOC sources, show info and fields directly
-                      <div className="space-y-4">
-                        <div className={cn(
-                          "flex items-start gap-2 p-3 rounded-lg",
-                          isDark ? "bg-blue-900/20 text-blue-400" : "bg-blue-50 text-blue-600"
-                        )}>
-                          <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                          <p className="text-sm">
-                            {sourceName} requires you to provide your own OAuth application credentials.
-                            You'll need to create an OAuth app in {sourceName}'s developer console.
-                          </p>
-                        </div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                      Name
+                    </label>
+                    <ValidatedInput
+                      type="text"
+                      value={connectionName}
+                      onChange={(value) => {
+                        setConnectionName(value);
+                        setSourceConnectionName(value);
+                      }}
+                      placeholder="Enter connection name"
+                      validation={sourceConnectionNameValidation}
+                      className={cn(
+                        "focus:border-gray-400 dark:focus:border-gray-600",
+                        isDark
+                          ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                          : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                      )}
+                    />
+                  </div>
 
-                        {/* Help section with hover info */}
-                        <div className="flex items-start gap-2 group">
-                          <div className="relative">
-                            <HelpCircle className={cn(
-                              "h-4 w-4 mt-0.5 flex-shrink-0 transition-all cursor-help",
-                              isDark
-                                ? "text-gray-500 group-hover:text-blue-400"
-                                : "text-gray-400 group-hover:text-blue-600"
-                            )} />
+                  {/* Auth Method Selection */}
+                  {sourceDetails && (
+                    <AuthMethodSelector
+                      selectedMethod={authMode}
+                      onMethodChange={setAuthMode}
+                      availableAuthMethods={getAvailableAuthMethods()}
+                    />
+                  )}
 
-                            {/* Hover tooltip */}
-                            <div className={cn(
-                              "absolute left-0 top-6 z-50 w-80 p-4 rounded-lg shadow-xl",
-                              "opacity-0 invisible group-hover:opacity-100 group-hover:visible",
-                              "transition-all duration-200 transform group-hover:translate-y-0 translate-y-1",
-                              isDark
-                                ? "bg-gray-800 border border-gray-700"
-                                : "bg-white border border-gray-200"
-                            )}>
-                              <div className="space-y-3">
-                                <p className={cn(
-                                  "text-sm font-medium",
-                                  isDark ? "text-white" : "text-gray-900"
-                                )}>
-                                  What are OAuth credentials?
-                                </p>
-                                <p className={cn(
-                                  "text-xs leading-relaxed",
-                                  isDark ? "text-gray-400" : "text-gray-600"
-                                )}>
-                                  OAuth credentials (Client ID and Client Secret) are like a special key that allows Airweave to securely access your {sourceName} data on your behalf. You create these in {sourceName}'s developer settings, and they ensure only authorized applications can connect to your account.
-                                </p>
-                                <div className={cn(
-                                  "text-xs space-y-1 pt-2 border-t",
-                                  isDark ? "border-gray-700" : "border-gray-200"
-                                )}>
-                                  <p className={cn(isDark ? "text-gray-500" : "text-gray-500")}>
-                                    <span className="font-medium">Client ID:</span> Public identifier for your app
-                                  </p>
-                                  <p className={cn(isDark ? "text-gray-500" : "text-gray-500")}>
-                                    <span className="font-medium">Client Secret:</span> Private key (keep this secure!)
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+                  {/* Auth Provider Selection */}
+                  {authMode === 'external_provider' && (
+                    <AuthProviderSelector
+                      selectedProvider={selectedAuthProvider}
+                      onProviderSelect={setSelectedAuthProvider}
+                      onConfigChange={setAuthProviderConfig}
+                    />
+                  )}
 
-                          <div className="text-sm">
-                            <span className={cn(
-                              "font-medium",
-                              isDark ? "text-gray-400" : "text-gray-600"
-                            )}>
-                              Need help setting up OAuth?
-                            </span>
-                            <a
-                              href="https://docs.airweave.ai/integrations/oauth-setup"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={cn(
-                                "ml-2 inline-flex items-center gap-1 font-medium hover:underline",
-                                isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"
-                              )}
-                            >
-                              View documentation
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2.5">
-                          <ValidatedInput
-                            type="text"
-                            placeholder="Client ID"
-                            value={clientId}
-                            onChange={setClientId}
-                            validation={clientIdValidation}
-                            className={cn(
-                              "focus:border-gray-400 dark:focus:border-gray-600",
-                              isDark
-                                ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
-                                : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
-                            )}
-                          />
-                          <ValidatedInput
-                            type="password"
-                            placeholder="Client Secret"
-                            value={clientSecret}
-                            onChange={setClientSecret}
-                            validation={clientSecretValidation}
-                            className={cn(
-                              "focus:border-gray-400 dark:focus:border-gray-600",
-                              isDark
-                                ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
-                                : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
-                            )}
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      // For optional OAuth sources, show toggle
-                      <>
-                        <div className="space-y-3">
-                          <label className="flex items-center gap-3 cursor-pointer group">
-                            <div className="relative">
-                              <input
-                                type="checkbox"
-                                checked={useOwnCredentials}
-                                onChange={(e) => setUseOwnCredentials(e.target.checked)}
-                                className="sr-only"
-                              />
-                              <div className={cn(
-                                "w-10 h-6 rounded-full transition-colors",
-                                useOwnCredentials
-                                  ? "bg-blue-600"
-                                  : isDark ? "bg-gray-800" : "bg-gray-200"
-                              )}>
-                                <div className={cn(
-                                  "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform",
-                                  useOwnCredentials && "translate-x-4"
-                                )} />
-                              </div>
-                            </div>
-                            <span className="text-sm text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200">
-                              Use custom OAuth credentials
-                            </span>
+                  {/* Direct auth fields (API keys, passwords, config) */}
+                  {authMode === 'direct_auth' && sourceDetails?.auth_fields?.fields && (
+                    <div className="space-y-3">
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Configuration
+                      </label>
+                      {sourceDetails.auth_fields.fields.map((field) => (
+                        <div key={field.name}>
+                          <label className="block text-sm font-medium mb-1">
+                            {field.title || field.name}
+                            {field.required && <span className="text-red-500 ml-1">*</span>}
                           </label>
+                          {field.description && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                              {field.description}
+                            </p>
+                          )}
+                          <ValidatedInput
+                            type={field.name.includes('password') || field.name.includes('token') ? 'password' : 'text'}
+                            placeholder=""
+                            value={authFields[field.name] || ''}
+                            onChange={(value) => setAuthFields({ ...authFields, [field.name]: value })}
+                            validation={getAuthFieldValidation(field.name)}
+                            className={cn(
+                              "focus:border-gray-400 dark:focus:border-gray-600",
+                              isDark
+                                ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                                : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                            )}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                          {/* Help text with hover for optional OAuth */}
-                          <div className="flex items-start gap-2 group ml-13">
+                  {/* Config fields (optional additional configuration) */}
+                  {sourceDetails?.config_fields?.fields && sourceDetails.config_fields.fields.length > 0 && (
+                    <div className="space-y-3">
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Additional Configuration (optional)
+                      </label>
+                      {sourceDetails.config_fields.fields.map((field) => (
+                        <div key={field.name}>
+                          <label className="block text-sm font-medium mb-1">
+                            {field.title || field.name}
+                          </label>
+                          {field.description && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                              {field.description}
+                            </p>
+                          )}
+                          <input
+                            type="text"
+                            placeholder=""
+                            value={configData[field.name] || ''}
+                            onChange={(e) => setConfigData({ ...configData, [field.name]: e.target.value })}
+                            className={cn(
+                              "w-full px-4 py-2 rounded-lg text-sm",
+                              "border bg-transparent",
+                              "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                              isDark
+                                ? "border-gray-800 text-white placeholder:text-gray-600"
+                                : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                            )}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* OAuth option - Sleek toggle or always on for BYOC sources */}
+                  {authMode === 'oauth2' && (
+                    <div>
+                      {requiresCustomOAuth() ? (
+                        // For BYOC sources, show info and fields directly
+                        <div className="space-y-4">
+                          <div className={cn(
+                            "flex items-start gap-2 p-3 rounded-lg",
+                            isDark ? "bg-blue-900/20 text-blue-400" : "bg-blue-50 text-blue-600"
+                          )}>
+                            <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm">
+                              {sourceName} requires you to provide your own OAuth application credentials.
+                              You'll need to create an OAuth app in {sourceName}'s developer console.
+                            </p>
+                          </div>
+
+                          {/* Help section with hover info */}
+                          <div className="flex items-start gap-2 group">
                             <div className="relative">
                               <HelpCircle className={cn(
-                                "h-3.5 w-3.5 mt-0.5 flex-shrink-0 transition-all cursor-help",
+                                "h-4 w-4 mt-0.5 flex-shrink-0 transition-all cursor-help",
                                 isDark
-                                  ? "text-gray-600 group-hover:text-blue-400"
+                                  ? "text-gray-500 group-hover:text-blue-400"
                                   : "text-gray-400 group-hover:text-blue-600"
                               )} />
 
                               {/* Hover tooltip */}
                               <div className={cn(
-                                "absolute left-0 top-5 z-50 w-72 p-3 rounded-lg shadow-xl",
+                                "absolute left-0 top-6 z-50 w-80 p-4 rounded-lg shadow-xl",
                                 "opacity-0 invisible group-hover:opacity-100 group-hover:visible",
                                 "transition-all duration-200 transform group-hover:translate-y-0 translate-y-1",
                                 isDark
                                   ? "bg-gray-800 border border-gray-700"
                                   : "bg-white border border-gray-200"
                               )}>
-                                <p className={cn(
-                                  "text-xs leading-relaxed",
-                                  isDark ? "text-gray-400" : "text-gray-600"
-                                )}>
-                                  By default, Airweave uses its own OAuth app to connect. Enable this if you want to use your own OAuth application to show your own name and logo.
-                                </p>
+                                <div className="space-y-3">
+                                  <p className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}>
+                                    What are OAuth credentials?
+                                  </p>
+                                  <p className={cn(
+                                    "text-xs leading-relaxed",
+                                    isDark ? "text-gray-400" : "text-gray-600"
+                                  )}>
+                                    OAuth credentials (Client ID and Client Secret) are like a special key that allows Airweave to securely access your {sourceName} data on your behalf. You create these in {sourceName}'s developer settings, and they ensure only authorized applications can connect to your account.
+                                  </p>
+                                  <div className={cn(
+                                    "text-xs space-y-1 pt-2 border-t",
+                                    isDark ? "border-gray-700" : "border-gray-200"
+                                  )}>
+                                    <p className={cn(isDark ? "text-gray-500" : "text-gray-500")}>
+                                      <span className="font-medium">Client ID:</span> Public identifier for your app
+                                    </p>
+                                    <p className={cn(isDark ? "text-gray-500" : "text-gray-500")}>
+                                      <span className="font-medium">Client Secret:</span> Private key (keep this secure!)
+                                    </p>
+                                  </div>
+                                </div>
                               </div>
                             </div>
 
-                            <p className={cn(
-                              "text-xs",
-                              isDark ? "text-gray-500" : "text-gray-500"
-                            )}>
-                              Optional: Use your own OAuth app for enhanced control.{' '}
+                            <div className="text-sm">
+                              <span className={cn(
+                                "font-medium",
+                                isDark ? "text-gray-400" : "text-gray-600"
+                              )}>
+                                Need help setting up OAuth?
+                              </span>
                               <a
-                                href="https://docs.airweave.ai/integrations/custom-oauth"
+                                href="https://docs.airweave.ai/integrations/oauth-setup"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className={cn(
-                                  "inline-flex items-center gap-0.5 font-medium hover:underline",
+                                  "ml-2 inline-flex items-center gap-1 font-medium hover:underline",
                                   isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"
                                 )}
                               >
-                                Learn more
-                                <ExternalLink className="h-2.5 w-2.5" />
+                                View documentation
+                                <ExternalLink className="h-3 w-3" />
                               </a>
-                            </p>
+                            </div>
                           </div>
-                        </div>
 
-                        {useOwnCredentials && (
-                          <div className="mt-3 space-y-2.5 pl-13">
+                          <div className="space-y-2.5">
                             <ValidatedInput
                               type="text"
                               placeholder="Client ID"
@@ -748,14 +642,122 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                               )}
                             />
                           </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+                        </div>
+                      ) : (
+                        // For optional OAuth sources, show toggle
+                        <>
+                          <div className="space-y-3">
+                            <label className="flex items-center gap-3 cursor-pointer group">
+                              <div className="relative">
+                                <input
+                                  type="checkbox"
+                                  checked={useOwnCredentials}
+                                  onChange={(e) => setUseOwnCredentials(e.target.checked)}
+                                  className="sr-only"
+                                />
+                                <div className={cn(
+                                  "w-10 h-6 rounded-full transition-colors",
+                                  useOwnCredentials
+                                    ? "bg-blue-600"
+                                    : isDark ? "bg-gray-800" : "bg-gray-200"
+                                )}>
+                                  <div className={cn(
+                                    "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform",
+                                    useOwnCredentials && "translate-x-4"
+                                  )} />
+                                </div>
+                              </div>
+                              <span className="text-sm text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200">
+                                Use custom OAuth credentials
+                              </span>
+                            </label>
+
+                            {/* Help text with hover for optional OAuth */}
+                            <div className="flex items-start gap-2 group ml-13">
+                              <div className="relative">
+                                <HelpCircle className={cn(
+                                  "h-3.5 w-3.5 mt-0.5 flex-shrink-0 transition-all cursor-help",
+                                  isDark
+                                    ? "text-gray-600 group-hover:text-blue-400"
+                                    : "text-gray-400 group-hover:text-blue-600"
+                                )} />
+
+                                {/* Hover tooltip */}
+                                <div className={cn(
+                                  "absolute left-0 top-5 z-50 w-72 p-3 rounded-lg shadow-xl",
+                                  "opacity-0 invisible group-hover:opacity-100 group-hover:visible",
+                                  "transition-all duration-200 transform group-hover:translate-y-0 translate-y-1",
+                                  isDark
+                                    ? "bg-gray-800 border border-gray-700"
+                                    : "bg-white border border-gray-200"
+                                )}>
+                                  <p className={cn(
+                                    "text-xs leading-relaxed",
+                                    isDark ? "text-gray-400" : "text-gray-600"
+                                  )}>
+                                    By default, Airweave uses its own OAuth app to connect. Enable this if you want to use your own OAuth application to show your own name and logo.
+                                  </p>
+                                </div>
+                              </div>
+
+                              <p className={cn(
+                                "text-xs",
+                                isDark ? "text-gray-500" : "text-gray-500"
+                              )}>
+                                Optional: Use your own OAuth app for enhanced control.{' '}
+                                <a
+                                  href="https://docs.airweave.ai/integrations/custom-oauth"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={cn(
+                                    "inline-flex items-center gap-0.5 font-medium hover:underline",
+                                    isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"
+                                  )}
+                                >
+                                  Learn more
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                </a>
+                              </p>
+                            </div>
+                          </div>
+
+                          {useOwnCredentials && (
+                            <div className="mt-3 space-y-2.5 pl-13">
+                              <ValidatedInput
+                                type="text"
+                                placeholder="Client ID"
+                                value={clientId}
+                                onChange={setClientId}
+                                validation={clientIdValidation}
+                                className={cn(
+                                  "focus:border-gray-400 dark:focus:border-gray-600",
+                                  isDark
+                                    ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                                    : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                                )}
+                              />
+                              <ValidatedInput
+                                type="password"
+                                placeholder="Client Secret"
+                                value={clientSecret}
+                                onChange={setClientSecret}
+                                validation={clientSecretValidation}
+                                className={cn(
+                                  "focus:border-gray-400 dark:focus:border-gray-600",
+                                  isDark
+                                    ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                                    : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                                )}
+                              />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* OAuth Redirect URL - At the absolute bottom, right above button border */}

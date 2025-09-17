@@ -616,6 +616,11 @@ class SourceConnectionService:
         """Create shell connection and start OAuth browser flow."""
         source = await self._get_and_validate_source(db, obj_in.short_name)
 
+        # 🔧 Normalize/validate config to a plain dict so we can store it as JSON
+        normalized_config = await self._validate_config_fields(
+            db, obj_in.short_name, obj_in.config_fields, ctx
+        )
+
         # Generate OAuth URL
         oauth_settings = await integration_settings.get_by_short_name(source.short_name)
         if not oauth_settings:
@@ -645,7 +650,7 @@ class SourceConnectionService:
                 connection_id=None,
                 collection_id=obj_in.collection,
                 sync_id=None,
-                config_fields=obj_in.config_fields,
+                config_fields=normalized_config,
                 is_authenticated=False,
                 ctx=ctx,
                 uow=uow,
