@@ -57,6 +57,7 @@ interface SubscriptionInfo {
   current_period_start?: string;
   current_period_end?: string;
   cancel_at_period_end: boolean;
+  payment_method_added?: boolean;
   limits: {
     source_connections: number;
     entities_per_month: number;
@@ -75,12 +76,24 @@ interface BillingSettingsProps {
 }
 
 const plans = {
+  developer: {
+    name: 'Developer',
+    price: 'Free',
+    description: 'Perfect for personal agents and side projects.',
+    features: [
+      { icon: Database, label: '10 source connections' },
+      { icon: Zap, label: '500 queries / month' },
+      { icon: Zap, label: '50K entities synced / month' },
+      { icon: Users, label: '1 team member' },
+      { icon: MessageCircle, label: 'Community support' }
+    ]
+  },
   pro: {
     name: 'Pro',
     price: 20,
-    description: 'Take your agent to the next level',
+    description: 'Take your agent to the next level.',
     features: [
-      { icon: Database, label: '50 sources' },
+      { icon: Database, label: '50 source connections' },
       { icon: Zap, label: '2K queries / month' },
       { icon: Zap, label: '100K entities synced / month' },
       { icon: Users, label: '2 team members' },
@@ -90,9 +103,9 @@ const plans = {
   team: {
     name: 'Team',
     price: 299,
-    description: 'For fast-moving teams that need scale and control',
+    description: 'For fast-moving teams that need scale and control.',
     features: [
-      { icon: Database, label: '1000 sources' },
+      { icon: Database, label: '1000 source connections' },
       { icon: Zap, label: '10K queries / month' },
       { icon: Zap, label: '1M entities synced / month' },
       { icon: Users, label: '10 team members' },
@@ -102,10 +115,10 @@ const plans = {
   },
   enterprise: {
     name: 'Enterprise',
-    price: 'Custom',
-    description: 'Tailored solutions for large organizations',
+    price: 'Custom Pricing',
+    description: 'Tailored solutions for large organizations.',
     features: [
-      { icon: Database, label: 'Unlimited sources' },
+      { icon: Database, label: 'Unlimited source connections' },
       { icon: Settings, label: 'Custom usage limits' },
       { icon: UserCheck, label: 'Tailored onboarding' },
       { icon: Headphones, label: 'Dedicated priority support' },
@@ -156,11 +169,14 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
     }
   };
 
-  const handleUpgrade = async (plan: 'pro' | 'team') => {
+  const handleUpgrade = async (plan: 'developer' | 'pro' | 'team') => {
     try {
       setIsCheckoutLoading(true);
 
-      if (subscription?.has_active_subscription) {
+      const isTargetPaid = plan === 'pro' || plan === 'team';
+      const needsCheckoutForPaid = isTargetPaid && !subscription?.payment_method_added;
+
+      if (isTargetPaid && !needsCheckoutForPaid) {
         const response = await apiClient.post('/billing/update-plan', { plan });
 
         if (response.ok) {
@@ -180,18 +196,28 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
           const error = await response.json();
           throw new Error(error.detail || 'Failed to update plan');
         }
-      } else {
+      } else if (isTargetPaid && needsCheckoutForPaid) {
         const response = await apiClient.post('/billing/checkout-session', {
           plan,
           success_url: `${window.location.origin}/organization/settings?tab=billing&success=true`,
           cancel_url: `${window.location.origin}/organization/settings?tab=billing`
         });
-
         if (response.ok) {
           const { checkout_url } = await response.json();
           window.location.href = checkout_url;
         } else {
           throw new Error('Failed to create checkout session');
+        }
+      } else {
+        // Downgrade to free developer or switch from no sub to developer
+        const response = await apiClient.post('/billing/update-plan', { plan: 'developer' });
+        if (response.ok) {
+          const data = await response.json();
+          toast.success(data.message || 'Switched to Developer plan');
+          await fetchSubscription();
+        } else {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.detail || 'Failed to switch to Developer plan');
         }
       }
     } catch (error) {
@@ -518,17 +544,8 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
         </div>
       )}
 
-      {/* Alerts for cancellation and plan changes */}
-      {subscription.cancel_at_period_end && subscription.current_period_end && (
-        <Alert className="border-amber-200 bg-amber-50">
-          <AlertCircle className="h-4 w-4 text-amber-600" />
-          <AlertDescription className="text-amber-800">
-            Subscription will cancel on {format(new Date(subscription.current_period_end), 'MMMM d, yyyy')}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {subscription.pending_plan_change && subscription.pending_plan_change_at && !subscription.cancel_at_period_end && (
+      {/* Alerts for plan changes and cancellation */}
+      {subscription.pending_plan_change && subscription.pending_plan_change_at && (
         <Alert className="border-blue-200 bg-blue-50">
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-2">
@@ -553,22 +570,34 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
         </Alert>
       )}
 
+      {!subscription.pending_plan_change && subscription.cancel_at_period_end && subscription.current_period_end && (
+        <Alert className="border-amber-200 bg-amber-50">
+          <AlertCircle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800">
+            Subscription will cancel on {format(new Date(subscription.current_period_end), 'MMMM d, yyyy')}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Available Plans */}
-      {!subscription.cancel_at_period_end && (
+      {(!subscription.cancel_at_period_end || subscription.pending_plan_change) && (
         <div>
           <h3 className="text-sm font-medium mb-4">Available Plans</h3>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             {Object.entries(plans).map(([key, plan]) => {
               const isCurrentPlan = key === subscription.plan;
-              const isUpgrade = key === 'startup' && subscription.plan === 'developer';
-              const isDowngrade = key === 'developer' && subscription.plan === 'startup';
+              const planRank: Record<string, number> = { developer: 0, pro: 1, team: 2, enterprise: 3 };
+              const currentRank = planRank[subscription.plan] ?? -1;
+              const targetRank = planRank[key] ?? -1;
+              const isUpgrade = targetRank > currentRank;
+              const isDowngrade = targetRank < currentRank;
               const isEnterprise = key === 'enterprise';
 
               return (
                 <div
                   key={key}
                   className={cn(
-                    "relative border rounded-lg p-6 transition-all",
+                    "relative border rounded-lg p-6 transition-all h-full flex flex-col",
                     isCurrentPlan ? "border-primary/50 bg-primary/5" : "border-border hover:border-border/80"
                   )}
                 >
@@ -591,8 +620,7 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-lg font-semibold">Custom Pricing</span>
+                        <span className="text-lg font-semibold">{plan.price}</span>
                       </div>
                     )}
                   </div>
@@ -610,32 +638,32 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
                   </ul>
 
                   {isCurrentPlan ? (
-                    <Button variant="outline" disabled className="w-full h-9 text-sm border-border">
+                    <Button variant="outline" disabled className="w-full h-9 text-xs border-border mt-auto">
                       Current Plan
                     </Button>
                   ) : isEnterprise ? (
                     <Button
                       onClick={() => window.open('https://cal.com/lennert-airweave/airweave-demo', '_blank')}
                       variant="outline"
-                      className="w-full h-9 text-sm border-border"
+                      className="w-full h-9 text-xs border-border mt-auto hover:border-primary/80 hover:bg-primary/10 hover:text-primary"
                     >
-                      <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
+                      <MessageSquare className="w-3 h-3 mr-1" />
                       Book a Call
                     </Button>
                   ) : (
                     <Button
-                      onClick={() => handleUpgrade(key as 'pro' | 'team')}
-                      disabled={isCheckoutLoading || (isDowngrade && subscription.pending_plan_change === 'developer')}
-                      variant={isUpgrade ? "default" : "outline"}
+                      onClick={() => handleUpgrade(key as 'developer' | 'pro' | 'team')}
+                      disabled={isCheckoutLoading}
+                      variant="outline"
                       className={cn(
-                        "w-full h-9 text-sm",
-                        isUpgrade ? "bg-primary hover:bg-primary/90 text-white border-0" : "border-border"
+                        "w-full h-9 text-xs mt-auto",
+                        isUpgrade ? "border-primary text-primary hover:border-primary/80 hover:bg-primary/10" : "border-border"
                       )}
                     >
-                      {isCheckoutLoading && <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-                      {isUpgrade && <ArrowUpCircle className="w-3.5 h-3.5 mr-1.5" />}
-                      {isDowngrade && <ArrowDownCircle className="w-3.5 h-3.5 mr-1.5" />}
-                      {isUpgrade ? 'Upgrade' : isDowngrade ? 'Downgrade' : 'Switch'} to {plan.name}
+                      {isCheckoutLoading && <RefreshCw className="w-3 h-3 mr-1 animate-spin" />}
+                      {isUpgrade && <ArrowUpCircle className="w-3 h-3 mr-1" />}
+                      {isDowngrade && <ArrowDownCircle className="w-3 h-3 mr-1" />}
+                      {isUpgrade ? 'Upgrade' : isDowngrade ? 'Downgrade' : 'Switch'}
                     </Button>
                   )}
                 </div>
@@ -644,9 +672,6 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
           </div>
         </div>
       )}
-
-      {/* Usage Dashboard */}
-      <UsageDashboard organizationId={organizationId} />
 
       {/* Support Contact */}
       <div className="border-t border-border pt-6">

@@ -13,6 +13,7 @@ export default function BillingSetup() {
   const { currentOrganization, billingInfo, fetchBillingInfo } = useOrganizationStore();
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
+  const [isPolling, setIsPolling] = useState(false);
 
   const isDark = resolvedTheme === 'dark';
 
@@ -26,10 +27,32 @@ export default function BillingSetup() {
     try {
       const info = await fetchBillingInfo();
 
-      // If they have an active subscription and payment method, redirect to settings
-      if (info && info.has_active_subscription && info.payment_method_added && info.status === 'active') {
-        toast.info('You already have an active subscription');
-        navigate('/organization/settings?tab=billing');
+      // If subscription is active (paid or developer), go to success page
+      if (info && info.has_active_subscription && info.status === 'active') {
+        toast.success('Subscription activated');
+        navigate('/billing/success');
+        return;
+      }
+
+      // If not active yet, start a short poll to wait for Stripe webhooks
+      if (info && !info.has_active_subscription && !isPolling) {
+        setIsPolling(true);
+        const startedAt = Date.now();
+        const poll = async () => {
+          const refreshed = await fetchBillingInfo();
+          if (refreshed && refreshed.has_active_subscription && refreshed.status === 'active') {
+            toast.success('Subscription activated');
+            setIsPolling(false);
+            navigate('/billing/success');
+            return;
+          }
+          if (Date.now() - startedAt < 30000) {
+            setTimeout(poll, 2000);
+          } else {
+            setIsPolling(false);
+          }
+        };
+        setTimeout(poll, 1500);
       }
     } catch (error) {
       console.error('Failed to check billing status:', error);
@@ -46,6 +69,13 @@ export default function BillingSetup() {
 
     setIsLoading(true);
     try {
+      // If current plan is developer, do not go to checkout. Require webhook activation.
+      if (billingInfo?.plan === 'developer') {
+        toast.error('Stripe listener error: awaiting activation for Developer plan. Please ensure webhooks are configured.');
+        setIsLoading(false);
+        return;
+      }
+
       const response = await apiClient.post('/billing/checkout-session', {
         plan: billingInfo?.plan || 'pro', // Use their selected plan or default to pro
         success_url: `${window.location.origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -243,6 +273,13 @@ export default function BillingSetup() {
               </div>
             )}
           </div>
+
+          {/* Polling state */}
+          {isPolling && (
+            <p className="text-center text-xs text-muted-foreground mt-2">
+              Waiting for Stripe confirmation... this may take a few seconds.
+            </p>
+          )}
 
           {/* Additional Info */}
           <p className="text-center text-xs text-muted-foreground">

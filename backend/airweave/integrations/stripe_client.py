@@ -23,6 +23,7 @@ class StripeClient:
 
         # Price IDs from configuration
         self.price_ids = {
+            "developer_monthly": settings.STRIPE_DEVELOPER_MONTHLY,
             "pro_monthly": settings.STRIPE_PRO_MONTHLY,
             "team_monthly": settings.STRIPE_TEAM_MONTHLY,
         }
@@ -169,6 +170,51 @@ class StripeClient:
             raise ExternalServiceError(
                 service_name="Stripe",
                 message=f"Failed to create checkout session: {str(e)}",
+            ) from e
+
+    async def create_subscription(
+        self,
+        customer_id: str,
+        price_id: str,
+        metadata: Optional[Dict[str, str]] = None,
+        cancel_at_period_end: Optional[bool] = None,
+    ) -> stripe.Subscription:
+        """Create a subscription directly (no Checkout).
+
+        Args:
+            customer_id: Stripe customer ID
+            price_id: Stripe price ID for the plan
+            metadata: Optional metadata to tag subscription
+            cancel_at_period_end: Optional cancel flag
+
+        Returns:
+            Stripe Subscription
+
+        Raises:
+            ExternalServiceError on failure
+        """
+        try:
+            clean_metadata = {}
+            if metadata:
+                for key, value in metadata.items():
+                    clean_metadata[self._sanitize_for_stripe(str(key))] = self._sanitize_for_stripe(
+                        str(value)
+                    )
+
+            params = {
+                "customer": customer_id,
+                "items": [{"price": price_id}],
+                "metadata": clean_metadata,
+            }
+            if cancel_at_period_end is not None:
+                params["cancel_at_period_end"] = cancel_at_period_end
+
+            return await stripe.Subscription.create_async(**params)
+        except StripeError as e:
+            logger.error(f"Failed to create subscription: {e}")
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=f"Failed to create subscription: {str(e)}",
             ) from e
 
     async def create_portal_session(
@@ -354,6 +400,7 @@ class StripeClient:
         """
         normalized = (plan_name or "").lower()
         alias = {
+            "developer": "developer_monthly",
             "pro": "pro_monthly",
             "team": "team_monthly",
         }

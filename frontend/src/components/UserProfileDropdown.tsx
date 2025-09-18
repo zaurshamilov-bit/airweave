@@ -201,6 +201,7 @@ export function UserProfileDropdown() {
     if (!billingInfo || isLoadingBilling) return null;
 
     const planDisplayName = {
+      developer: 'Developer',
       pro: 'Pro',
       team: 'Team',
       enterprise: 'Enterprise'

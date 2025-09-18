@@ -31,7 +31,7 @@ async def check_action(
     action: str = Query(
         ...,
         description="The action type to check",
-        examples=["queries", "syncs", "entities", "collections", "source_connections"],
+        examples=["queries", "entities", "source_connections"],
     ),
     amount: int = Query(1, ge=1, description="Number of units to check (default 1)"),
     ctx: ApiContext = Depends(deps.get_context),
@@ -90,19 +90,18 @@ def _create_usage_snapshot(
     usage_record: Optional[Usage],
     plan_limits: dict,
     billing_period_id: UUID,
+    team_members: int,
 ) -> UsageSnapshot:
     """Create a usage snapshot from usage record and plan limits."""
     return UsageSnapshot(
-        syncs=usage_record.syncs if usage_record else 0,
         entities=usage_record.entities if usage_record else 0,
         queries=usage_record.queries if usage_record else 0,
-        collections=usage_record.collections if usage_record else 0,
         source_connections=usage_record.source_connections if usage_record else 0,
-        max_syncs=plan_limits.get("max_syncs"),
+        team_members=team_members,
         max_entities=plan_limits.get("max_entities"),
         max_queries=plan_limits.get("max_queries"),
-        max_collections=plan_limits.get("max_collections"),
         max_source_connections=plan_limits.get("max_source_connections"),
+        max_team_members=plan_limits.get("max_team_members"),
         timestamp=datetime.utcnow(),
         billing_period_id=billing_period_id,
     )
@@ -133,16 +132,14 @@ def _create_default_dashboard() -> UsageDashboard:
             status="legacy",
             plan="legacy",
             usage=UsageSnapshot(
-                syncs=0,
                 entities=0,
                 queries=0,
-                collections=0,
                 source_connections=0,
-                max_syncs=None,
+                team_members=0,
                 max_entities=None,
                 max_queries=None,
-                max_collections=None,
                 max_source_connections=None,
+                max_team_members=None,
                 timestamp=datetime.utcnow(),
                 billing_period_id=UUID("00000000-0000-0000-0000-000000000000"),
             ),
@@ -185,7 +182,7 @@ def _calculate_trends(
     metrics = [
         ("entities", current_usage.entities, prev_usage.entities),
         ("queries", current_usage.queries, prev_usage.queries),
-        ("syncs", current_usage.syncs, prev_usage.syncs),
+        ("source_connections", current_usage.source_connections, prev_usage.source_connections),
     ]
 
     for metric_name, current_val, prev_val in metrics:
@@ -212,6 +209,7 @@ def _calculate_trends(
 async def _build_previous_periods(
     db: AsyncSession,
     organization_id: UUID,
+    ctx: ApiContext,
     limit: int = 6,
 ) -> List[BillingPeriodUsage]:
     """Build list of previous billing period usage data."""
@@ -219,12 +217,28 @@ async def _build_previous_periods(
         db, organization_id=organization_id, limit=limit
     )
 
+    # Compute team members once (current count is sufficient for historical view)
+    members = await crud.organization.get_organization_members(
+        db, organization_id=organization_id, ctx=ctx
+    )
+    team_members_count = len(members)
+
     previous_periods = []
     for period in previous_periods_data:
         period_usage = await crud.usage.get_by_billing_period(db, billing_period_id=period.id)
 
+        # Normalize plan to enum before looking up limits
+        try:
+            plan_enum = (
+                period.plan
+                if hasattr(period, "plan") and hasattr(period.plan, "value")
+                else BillingPlan(str(period.plan))
+            )
+        except Exception:
+            plan_enum = BillingPlan.PRO
+
         period_limits = GuardRailService.PLAN_LIMITS.get(
-            period.plan, GuardRailService.PLAN_LIMITS[BillingPlan.PRO]
+            plan_enum, GuardRailService.PLAN_LIMITS[BillingPlan.PRO]
         )
 
         status_str, plan_str = _get_status_and_plan_strings(period)
@@ -236,7 +250,9 @@ async def _build_previous_periods(
                 period_end=period.period_end,
                 status=status_str,
                 plan=plan_str,
-                usage=_create_usage_snapshot(period_usage, period_limits, period.id),
+                usage=_create_usage_snapshot(
+                    period_usage, period_limits, period.id, team_members_count
+                ),
                 daily_usage=[],
                 days_remaining=None,
                 is_current=False,
@@ -269,12 +285,30 @@ async def get_usage_dashboard(
         usage_record = await crud.usage.get_by_billing_period(
             db, billing_period_id=target_period.id
         )
+        # Normalize plan to enum before looking up limits
+        try:
+            plan_enum = (
+                target_period.plan
+                if hasattr(target_period, "plan") and hasattr(target_period.plan, "value")
+                else BillingPlan(str(target_period.plan))
+            )
+        except Exception:
+            plan_enum = BillingPlan.PRO
+
         plan_limits = GuardRailService.PLAN_LIMITS.get(
-            target_period.plan, GuardRailService.PLAN_LIMITS[BillingPlan.PRO]
+            plan_enum, GuardRailService.PLAN_LIMITS[BillingPlan.PRO]
         )
 
+        # Compute team members (current organization member count)
+        members = await crud.organization.get_organization_members(
+            db, organization_id=ctx.organization.id, ctx=ctx
+        )
+        team_members_count = len(members)
+
         # Create usage snapshot
-        usage_snapshot = _create_usage_snapshot(usage_record, plan_limits, target_period.id)
+        usage_snapshot = _create_usage_snapshot(
+            usage_record, plan_limits, target_period.id, team_members_count
+        )
 
         # Calculate period status
         now = datetime.utcnow()
@@ -298,7 +332,7 @@ async def get_usage_dashboard(
         )
 
         # Get previous periods
-        previous_periods = await _build_previous_periods(db, ctx.organization.id)
+        previous_periods = await _build_previous_periods(db, ctx.organization.id, ctx)
 
         # Calculate aggregate stats
         all_usage_records = await crud.usage.get_all_by_organization(

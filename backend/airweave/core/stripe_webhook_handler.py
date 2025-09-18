@@ -27,6 +27,8 @@ class StripeWebhookHandler:
             "customer.subscription.updated": self._handle_subscription_updated,
             "customer.subscription.deleted": self._handle_subscription_deleted,
             "invoice.payment_succeeded": self._handle_payment_succeeded,
+            # For $0 invoices Stripe may also mark invoice as paid without charges
+            "invoice.paid": self._handle_payment_succeeded,
             "invoice.payment_failed": self._handle_payment_failed,
             "customer.subscription.trial_will_end": self._handle_trial_ending,
             "invoice.upcoming": self._handle_invoice_upcoming,

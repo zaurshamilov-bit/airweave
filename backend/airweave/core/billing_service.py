@@ -76,6 +76,14 @@ class BillingService:
 
     # Plan limits configuration (matching GuardRailService)
     PLAN_LIMITS = {
+        BillingPlan.DEVELOPER: {
+            "max_syncs": None,
+            "max_entities": 50000,
+            "max_queries": 500,
+            "max_collections": None,
+            "max_source_connections": 10,
+            "max_team_members": 1,  # community support, minimal team
+        },
         BillingPlan.PRO: {
             "max_syncs": None,
             "max_entities": 100000,
@@ -141,7 +149,7 @@ class BillingService:
             onboarding_data = organization.org_metadata.get("onboarding", {})
             plan_from_metadata = onboarding_data.get("subscriptionPlan", "pro")
             # Convert to BillingPlan enum
-            if plan_from_metadata in ["pro", "team", "enterprise"]:
+            if plan_from_metadata in ["developer", "pro", "team", "enterprise"]:
                 selected_plan = BillingPlan(plan_from_metadata)
 
         billing_create = OrganizationBillingCreate(
@@ -166,7 +174,92 @@ class BillingService:
             f"Created billing record for organization {organization.id} with plan {selected_plan}"
         )
 
+        # If free developer plan, create a $0 Stripe subscription to get webhook-driven periods
+        if selected_plan == BillingPlan.DEVELOPER:
+            developer_price_id = stripe_client.get_price_id_for_plan("developer")
+            if developer_price_id:
+                sub = await stripe_client.create_subscription(
+                    customer_id=stripe_customer_id,
+                    price_id=developer_price_id,
+                    metadata={
+                        "organization_id": str(organization.id),
+                        "plan": "developer",
+                    },
+                )
+                # We don't create the period here; webhook will set period boundaries
+                await crud.organization_billing.update(
+                    db,
+                    db_obj=billing,
+                    obj_in=OrganizationBillingUpdate(
+                        stripe_subscription_id=sub.id,
+                        billing_plan=BillingPlan.DEVELOPER,
+                        billing_status=BillingStatus.ACTIVE,
+                        current_period_start=datetime.utcfromtimestamp(sub.current_period_start),
+                        current_period_end=datetime.utcfromtimestamp(sub.current_period_end),
+                        payment_method_added=False,
+                    ),
+                    ctx=ctx,
+                )
+                log.info(
+                    "Created $0 developer subscription %s for org %s",
+                    sub.id,
+                    organization.id,
+                )
+            else:
+                log.warning("Developer price ID not configured; developer plan will be local-only")
+
         return schemas.OrganizationBilling.model_validate(billing, from_attributes=True)
+
+    async def _detect_payment_method(
+        self, subscription: stripe.Subscription
+    ) -> tuple[bool, Optional[str]]:
+        """Determine whether a default payment method exists for the customer.
+
+        Checks subscription.default_payment_method first; if absent, falls back to
+        customer.invoice_settings.default_payment_method or default_source.
+        """
+        try:
+            # Subscription-level default payment method (string id or object)
+            pm = getattr(subscription, "default_payment_method", None)
+            if isinstance(pm, dict):
+                pm_id = pm.get("id")
+            else:
+                pm_id = pm
+            if pm_id:
+                return True, pm_id
+
+            # Fallback to customer invoice settings
+            cust_id = getattr(subscription, "customer", None)
+            if not cust_id:
+                return False, None
+            customer = await stripe.Customer.retrieve_async(cust_id)
+            inv_pm = None
+            try:
+                inv_pm = (
+                    customer.get("invoice_settings", {}).get("default_payment_method")
+                    if isinstance(customer, dict)
+                    else getattr(
+                        getattr(customer, "invoice_settings", None), "default_payment_method", None
+                    )
+                )
+            except Exception:
+                inv_pm = None
+            if isinstance(inv_pm, dict):
+                inv_pm_id = inv_pm.get("id")
+            else:
+                inv_pm_id = inv_pm
+            if inv_pm_id:
+                return True, inv_pm_id
+
+            # Legacy default source support
+            default_source = getattr(customer, "default_source", None)
+            if default_source:
+                return True, default_source
+
+            return False, None
+        except Exception:
+            # On API errors, be conservative and report no PM
+            return False, None
 
     async def get_billing_for_organization(
         self, db: AsyncSession, organization_id: UUID
@@ -248,46 +341,54 @@ class BillingService:
         if not price_id:
             raise InvalidStateError(f"Invalid plan: {plan}")
 
+        # Determine if Checkout is required: only when target is paid AND no payment method
+        is_target_paid = plan in {"pro", "team"}
+        needs_checkout = is_target_paid and not bool(billing_model.payment_method_added)
+
         # Check if already has a subscription (active or scheduled to cancel)
         if billing_model.stripe_subscription_id:
-            # If there's an existing subscription, always update/overwrite it
             current_plan = billing_model.billing_plan
-            if current_plan != plan:
-                # This is a plan change, use update_subscription instead
+
+            if not needs_checkout and current_plan != plan:
+                # Update existing subscription without Checkout
                 log.info(
-                    f"Redirecting to subscription update for plan change from {current_plan} "
+                    f"Updating existing subscription for plan change from {current_plan} "
                     f"to {plan} (existing subscription: {billing_model.stripe_subscription_id})"
                 )
                 return await self.update_subscription_plan(db, ctx, plan)
-            else:
-                # Same plan - check if it's canceled and needs reactivation
+
+            if not needs_checkout and current_plan == plan:
+                # Same plan; if it was set to cancel, reactivate
                 if billing_model.cancel_at_period_end:
                     log.info(f"Reactivating canceled {plan} subscription")
                     return await self.update_subscription_plan(db, ctx, plan)
-                else:
-                    raise InvalidStateError(
-                        f"Organization already has an active {plan} subscription"
-                    )
+                raise InvalidStateError(f"Organization already has an active {plan} subscription")
 
         # Trials disabled
         use_trial_period_days = None
 
         # Create checkout session
+        checkout_metadata = {
+            "organization_id": str(ctx.organization.id),
+            "plan": plan,
+        }
+
+        # If lacking payment method, include previous subscription id for context
+        if billing_model.stripe_subscription_id and needs_checkout:
+            checkout_metadata["previous_subscription_id"] = billing_model.stripe_subscription_id
+
         session = await stripe_client.create_checkout_session(
             customer_id=billing_model.stripe_customer_id,
             price_id=price_id,
             success_url=success_url,
             cancel_url=cancel_url,
-            metadata={
-                "organization_id": str(ctx.organization.id),
-                "plan": plan,
-            },
+            metadata=checkout_metadata,
             trial_period_days=use_trial_period_days,
         )
 
         return session.url
 
-    def _validate_plan_change(self, billing_model: Any, new_plan: str) -> str:
+    def _validate_plan_change(self, billing_model: Any, new_plan: str) -> Optional[str]:
         """Validate that a plan change is allowed.
 
         Args:
@@ -486,9 +587,11 @@ class BillingService:
         system_ctx = await self._create_system_context(db, organization)
 
         # Update local billing record
+        # Do not update billing_plan here. Let the Stripe webhook drive the
+        # authoritative plan change and create the new billing period to avoid
+        # races where the webhook cannot detect the change.
         update_data = OrganizationBillingUpdate(
             cancel_at_period_end=False,
-            billing_plan=BillingPlan(new_plan),
         )
 
         if is_trial_to_startup:
@@ -532,7 +635,13 @@ class BillingService:
             db, organization_id=ctx.organization.id
         )
 
-        # Validate plan change
+        # Developer is treated like any other plan (0$). No cancel path here.
+
+        # Validate plan change for target plans
+        # If upgrading to a paid plan without a payment method, require Checkout
+        if new_plan in {"pro", "team"} and not billing_model.payment_method_added:
+            raise InvalidStateError("Payment method required for upgrade; use checkout-session")
+
         new_price_id = self._validate_plan_change(billing_model, new_plan)
         current_plan = billing_model.billing_plan
 
@@ -679,20 +788,16 @@ class BillingService:
         if not billing_model or not billing_model.pending_plan_change:
             raise InvalidStateError("No pending plan change found")
 
-        # Get current subscription from Stripe
-        await stripe_client.get_subscription(billing_model.stripe_subscription_id)
+        # Get current subscription from Stripe (ensures it exists)
+        _ = await stripe_client.get_subscription(billing_model.stripe_subscription_id)
 
-        # Revert the plan change in Stripe by setting the price back
-        # to the original plan
+        # Revert scheduled price change by setting price back to current plan
         current_price_id = stripe_client.get_price_id_for_plan(billing_model.billing_plan)
-
         await stripe_client.update_subscription(
             subscription_id=billing_model.stripe_subscription_id,
             price_id=current_price_id,
             proration_behavior="none",
         )
-
-        # Clear the pending change in our database
         update_data = OrganizationBillingUpdate(
             pending_plan_change=None,
             pending_plan_change_at=None,
@@ -813,6 +918,8 @@ class BillingService:
         ctx = await self._create_system_context(db, UUID(org_id), "stripe_webhook")
 
         # Update billing record using CRUD
+        has_pm, pm_id = await self._detect_payment_method(subscription)
+
         update_data = OrganizationBillingUpdate(
             stripe_subscription_id=subscription.id,
             billing_plan=BillingPlan(plan),
@@ -821,12 +928,9 @@ class BillingService:
             current_period_end=datetime.utcfromtimestamp(subscription.current_period_end),
             trial_ends_at=trial_ends_at,
             grace_period_ends_at=None,  # Clear grace period
-            payment_method_added=True,
+            payment_method_added=has_pm,
+            payment_method_id=pm_id,
         )
-
-        # Store payment method ID if available
-        if hasattr(subscription, "default_payment_method"):
-            update_data.payment_method_id = subscription.default_payment_method
 
         await crud.organization_billing.update(
             db,
@@ -857,45 +961,226 @@ class BillingService:
             f"(trial: {has_trial}, upgrade: {is_trial_upgrade})"
         )
 
-    def _extract_plan_from_subscription(
-        self, subscription: stripe.Subscription, current_plan: BillingPlan
-    ) -> tuple[BillingPlan, bool]:
-        """Extract plan from subscription items.
+    def _infer_new_plan(  # Noqa: C901
+        self,
+        subscription: stripe.Subscription,
+        previous_attributes: Optional[dict],
+        current_plan: BillingPlan,
+        pending_plan_change: Optional[BillingPlan],
+        log: ContextualLogger,
+    ) -> tuple[BillingPlan, bool, str]:
+        """Infer the new plan deterministically using event context and local intent.
 
-        Args:
-            subscription: Stripe subscription object
-            current_plan: Current billing plan
+        This function avoids relying on subscription.items ordering and uses the
+        following priority rules:
+          1) Renewal (previous_attributes contains current_period_end):
+             - If pending_plan_change exists: choose it
+             - Else choose the single candidate, or the single candidate different from current
+             - Else fallback to current_plan
+          2) Immediate items change (previous_attributes contains items):
+             - If exactly one candidate: choose it
+             - Else if exactly one candidate differs from current_plan: choose it
+             - Else if pending_plan_change exists and present among candidates: choose it
+             - Else if previous_attributes carries an old price id, choose the candidate
+               different from that, if unique
+             - Else fallback to current_plan
+          3) Neither renewal nor items change: keep current_plan
 
         Returns:
-            Tuple of (new_plan, plan_changed)
+            Tuple of (new_plan, plan_changed, reason)
         """
-        if not hasattr(subscription, "items") or not subscription.items:
-            return current_plan, False
+        # Build reverse mapping price_id -> BillingPlan from configured price IDs
+        price_id_to_plan: dict[str, BillingPlan] = {}
+        try:
+            for key, configured_price_id in (stripe_client.price_ids or {}).items():
+                if not configured_price_id:
+                    continue
+                if key == "developer_monthly":
+                    price_id_to_plan[configured_price_id] = BillingPlan.DEVELOPER
+                elif key == "pro_monthly":
+                    price_id_to_plan[configured_price_id] = BillingPlan.PRO
+                elif key == "team_monthly":
+                    price_id_to_plan[configured_price_id] = BillingPlan.TEAM
+        except Exception:
+            # If mapping fails, log and keep current
+            log.error("Failed to build price_id_to_plan map from configuration")
+            return current_plan, False, "mapping_error_fallback_current"
 
-        items_data = subscription.items.data if hasattr(subscription.items, "data") else []
-        if not items_data:
-            return current_plan, False
+        # Extract all plan candidates from subscription items (ignore order)
+        candidates: set[BillingPlan] = set()
 
-        for plan_key, configured_price_id in stripe_client.price_ids.items():
-            if configured_price_id and items_data[0].price.id == configured_price_id:
-                if plan_key == "pro_monthly":
-                    return BillingPlan.PRO, BillingPlan.PRO != current_plan
-                if plan_key == "team_monthly":
-                    return BillingPlan.TEAM, BillingPlan.TEAM != current_plan
-                try:
-                    normalized = BillingPlan(plan_key)
-                    return normalized, normalized != current_plan
-                except Exception:
-                    pass
+        def _safe_get_items(obj: Any) -> list[Any]:
+            try:
+                if hasattr(obj, "items") and hasattr(obj.items, "data"):
+                    return obj.items.data or []
+                if isinstance(obj, dict):
+                    return (obj.get("items") or {}).get("data") or []
+            except Exception:
+                pass
+            return []
 
-        return current_plan, False
+        items_data = _safe_get_items(subscription)
+
+        def _extract_price_id(item: Any) -> Optional[str]:
+            try:
+                price_obj = None
+                if hasattr(item, "price"):
+                    price_obj = item.price
+                elif isinstance(item, dict):
+                    price_obj = item.get("price")
+                if hasattr(price_obj, "id"):
+                    return price_obj.id
+                if isinstance(price_obj, dict):
+                    return price_obj.get("id")
+            except Exception:
+                return None
+            return None
+
+        for item in items_data:
+            price_id = _extract_price_id(item)
+            plan = price_id_to_plan.get(price_id) if price_id else None
+            if plan is not None:
+                candidates.add(plan)
+
+        prev_keys = (
+            list(previous_attributes.keys()) if isinstance(previous_attributes, dict) else []
+        )
+        is_renewal = bool(previous_attributes and "current_period_end" in previous_attributes)
+        items_changed = bool(previous_attributes and "items" in previous_attributes)
+
+        log.info(
+            "Plan inference context",
+            extra={
+                "current_plan": getattr(current_plan, "value", str(current_plan)),
+                "pending_plan_change": (
+                    getattr(pending_plan_change, "value", str(pending_plan_change))
+                    if pending_plan_change
+                    else None
+                ),
+                "prev_attr_keys": prev_keys,
+                "candidates": [
+                    getattr(c, "value", str(c)) for c in sorted(candidates, key=lambda p: p.value)
+                ],
+                "subscription_id": getattr(subscription, "id", None),
+            },
+        )
+
+        # Helper to choose single candidate or differing candidate
+        def _choose_single_or_diff() -> tuple[BillingPlan, str] | None:
+            if len(candidates) == 1:
+                chosen = next(iter(candidates))
+                return chosen, "single_candidate"
+            diffs = [p for p in candidates if p != current_plan]
+            if len(diffs) == 1:
+                return diffs[0], "single_diff_from_current"
+            return None
+
+        # 1) Renewal boundary
+        if is_renewal:
+            if pending_plan_change:
+                log.info(
+                    "Renewal with pending change; choosing pending plan",
+                    extra={
+                        "pending": getattr(pending_plan_change, "value", str(pending_plan_change))
+                    },
+                )
+                return pending_plan_change, pending_plan_change != current_plan, "renewal_pending"
+            maybe = _choose_single_or_diff()
+            if maybe is not None:
+                chosen, reason = maybe
+                log.info(
+                    "Renewal chose plan",
+                    extra={
+                        "chosen": getattr(chosen, "value", str(chosen)),
+                        "reason": reason,
+                    },
+                )
+                return chosen, chosen != current_plan, f"renewal_{reason}"
+            log.warning(
+                "Renewal ambiguous; fallback current",
+                extra={
+                    "current_plan": getattr(current_plan, "value", str(current_plan)),
+                    "candidates": [getattr(c, "value", str(c)) for c in candidates],
+                },
+            )
+            return current_plan, False, "renewal_ambiguous_fallback_current"
+
+        # 2) Immediate items change
+        if items_changed:
+            maybe = _choose_single_or_diff()
+            if maybe is not None:
+                chosen, reason = maybe
+                log.info(
+                    "Items change chose plan",
+                    extra={
+                        "chosen": getattr(chosen, "value", str(chosen)),
+                        "reason": reason,
+                    },
+                )
+                return chosen, chosen != current_plan, f"items_{reason}"
+
+            if pending_plan_change and pending_plan_change in candidates:
+                log.info(
+                    "Items change tie-break to pending plan",
+                    extra={
+                        "pending": getattr(pending_plan_change, "value", str(pending_plan_change))
+                    },
+                )
+                return (
+                    pending_plan_change,
+                    pending_plan_change != current_plan,
+                    "items_tiebreak_pending",
+                )
+
+            # Try to read old price from previous_attributes if present
+            try:
+                old_items = (
+                    (previous_attributes or {}).get("items")
+                    if isinstance(previous_attributes, dict)
+                    else None
+                )
+                old_price_id = None
+                if isinstance(old_items, dict):
+                    # various shapes; best effort
+                    old_data = old_items.get("data") or []
+                    if old_data:
+                        pid = _extract_price_id(old_data[0])
+                        old_price_id = pid
+                old_plan = price_id_to_plan.get(old_price_id) if old_price_id else None
+                if old_plan is not None:
+                    diffs2 = [p for p in candidates if p != old_plan]
+                    if len(diffs2) == 1:
+                        chosen = diffs2[0]
+                        log.info(
+                            "Items change chose plan via prev old",
+                            extra={
+                                "chosen": chosen.value,
+                                "old_plan": old_plan.value,
+                            },
+                        )
+                        return chosen, chosen != current_plan, "items_diff_from_old"
+            except Exception:
+                pass
+
+            log.warning(
+                "Items change ambiguous; fallback current",
+                extra={
+                    "current_plan": getattr(current_plan, "value", str(current_plan)),
+                    "candidates": [getattr(c, "value", str(c)) for c in candidates],
+                },
+            )
+            return current_plan, False, "items_ambiguous_fallback_current"
+
+        # 3) Neither renewal nor items change -> keep current
+        log.info("No renewal/items change; keeping current plan")
+        return current_plan, False, "no_change"
 
     async def _handle_subscription_renewal(
         self,
         db: AsyncSession,
         org_id: UUID,
         subscription: stripe.Subscription,
-        billing_model: Any,
+        billing_snapshot: schemas.OrganizationBilling,
         new_plan: BillingPlan,
         plan_changed: bool,
     ) -> None:
@@ -905,16 +1190,16 @@ class BillingService:
             db: Database session
             org_id: Organization ID
             subscription: Stripe subscription
-            billing_model: Organization billing model
+            billing_snapshot: Organization billing snapshot
             new_plan: New plan
             plan_changed: Whether plan changed
         """
         current_period = await self.get_current_billing_period(db, org_id)
 
-        # Determine effective plan and transition type
-        effective_plan = billing_model.pending_plan_change or new_plan
+        # Determine effective plan and transition type using snapshot (no ORM access)
+        effective_plan = billing_snapshot.pending_plan_change or new_plan
 
-        if billing_model.pending_plan_change:
+        if billing_snapshot.pending_plan_change:
             transition = BillingTransition.DOWNGRADE
         elif plan_changed:
             transition = BillingTransition.UPGRADE
@@ -927,7 +1212,11 @@ class BillingService:
             organization_id=org_id,
             period_start=datetime.utcfromtimestamp(subscription.current_period_start),
             period_end=datetime.utcfromtimestamp(subscription.current_period_end),
-            plan=BillingPlan(effective_plan),
+            plan=(
+                effective_plan
+                if isinstance(effective_plan, BillingPlan)
+                else BillingPlan(effective_plan)
+            ),
             transition=transition,
             stripe_subscription_id=subscription.id,
             previous_period_id=current_period.id if current_period else None,
@@ -1026,8 +1315,9 @@ class BillingService:
             log.error(f"No billing record for subscription {subscription.id}")
             return
 
-        # Store organization_id before any DB operations to avoid lazy loading issues
+        # Store ids before any DB operations to avoid lazy loading issues
         org_id = billing_model.organization_id
+        billing_id = billing_model.id
 
         # Create webhook auth context for CRUD operations
         # Fetch the organization for the context
@@ -1050,30 +1340,79 @@ class BillingService:
             logger=log,
         )
 
-        # Extract plan information
-        new_plan, plan_changed = self._extract_plan_from_subscription(
-            subscription, billing_model.billing_plan
+        # Load a fresh billing model instance and freeze values to avoid async lazy-loads
+        db_billing_fresh = await crud.organization_billing.get(db, id=billing_id, ctx=ctx)
+        billing_snapshot = schemas.OrganizationBilling.model_validate(
+            db_billing_fresh, from_attributes=True
+        )
+
+        current_plan_snapshot = billing_snapshot.billing_plan
+        pending_plan_change_snapshot = billing_snapshot.pending_plan_change
+
+        # Extract/infer plan information using event-aware logic
+        new_plan, plan_changed, inference_reason = self._infer_new_plan(
+            subscription=subscription,
+            previous_attributes=previous_attributes,
+            current_plan=current_plan_snapshot,
+            pending_plan_change=pending_plan_change_snapshot,
+            log=log,
+        )
+        # Determine change kind (upgrade/downgrade/same)
+        rank = {
+            BillingPlan.DEVELOPER: 0,
+            BillingPlan.PRO: 1,
+            BillingPlan.TEAM: 2,
+            BillingPlan.ENTERPRISE: 3,
+        }
+        current_rank = rank.get(current_plan_snapshot, 0)
+        new_rank = rank.get(new_plan, current_rank)
+        change_kind = (
+            "UPGRADE"
+            if new_rank > current_rank
+            else "DOWNGRADE"
+            if new_rank < current_rank
+            else "SAME"
+        )
+        log.info(
+            "Inferred plan",
+            extra={
+                "current_plan": getattr(current_plan_snapshot, "value", str(current_plan_snapshot)),
+                "new_plan": getattr(new_plan, "value", str(new_plan)),
+                "plan_changed": plan_changed,
+                "inference_reason": inference_reason,
+                "change_kind": change_kind,
+            },
         )
 
         # Check if this is a renewal
         is_renewal = previous_attributes and "current_period_end" in previous_attributes
 
-        # Check if this is a canceled plan change (plan matches current but we have pending change)
-        is_canceled_plan_change = (
-            billing_model.pending_plan_change
-            and new_plan == billing_model.billing_plan
-            and not is_renewal
-        )
+        # Pending changes are only cleared at renewal (when they take effect)
 
         # Handle renewal
         if is_renewal:
             await self._handle_subscription_renewal(
-                db, org_id, subscription, billing_model, new_plan, plan_changed
+                db, org_id, subscription, billing_snapshot, new_plan, plan_changed
             )
 
-        # Handle immediate plan change
-        elif plan_changed and previous_attributes and "items" in previous_attributes:
-            await self._handle_immediate_plan_change(db, org_id, subscription, new_plan)
+        # Handle immediate plan change only for upgrades
+        # For downgrades we keep the current period active until renewal to avoid
+        # splitting the period mid-cycle and to prevent race conditions.
+        elif previous_attributes and "items" in previous_attributes:
+            if plan_changed and change_kind == "UPGRADE":
+                await self._handle_immediate_plan_change(db, org_id, subscription, new_plan)
+            else:
+                log.info(
+                    "Items changed but not an upgrade; skipping immediate period creation",
+                    extra={
+                        "plan_changed": plan_changed,
+                        "change_kind": change_kind,
+                        "current_plan": getattr(
+                            current_plan_snapshot, "value", str(current_plan_snapshot)
+                        ),
+                        "new_plan": getattr(new_plan, "value", str(new_plan)),
+                    },
+                )
 
         # Prepare update data
         update_data = OrganizationBillingUpdate(
@@ -1083,23 +1422,37 @@ class BillingService:
             current_period_end=datetime.utcfromtimestamp(subscription.current_period_end),
         )
 
-        # Update plan if changed
-        if plan_changed:
-            update_data.billing_plan = BillingPlan(new_plan)
+        # Keep payment_method_added accurate based on Stripe
+        has_pm, pm_id = await self._detect_payment_method(subscription)
+        update_data.payment_method_added = has_pm
+        if pm_id:
+            update_data.payment_method_id = pm_id
 
-        # Clear pending plan change if renewal with pending change OR if plan change was canceled
-        if (is_renewal and billing_model.pending_plan_change) or is_canceled_plan_change:
+        # Update plan only when appropriate:
+        # - On renewal: always apply (pending change becomes active)
+        # - On immediate items change: only if it's an UPGRADE
+        try:
+            plan_enum = new_plan if hasattr(new_plan, "value") else BillingPlan(str(new_plan))
+        except Exception:
+            plan_enum = BillingPlan.PRO
+        if is_renewal:
+            update_data.billing_plan = plan_enum
+        elif previous_attributes and "items" in previous_attributes and change_kind == "UPGRADE":
+            update_data.billing_plan = plan_enum
+
+        # Clear pending plan change only when renewal applies it
+        if is_renewal and pending_plan_change_snapshot:
             update_data.pending_plan_change = None
             update_data.pending_plan_change_at = None
-            if is_canceled_plan_change:
-                log.info(f"Cleared canceled plan change for org {org_id}")
 
         # Trials disabled: ignore trial_end updates
 
-        # Update billing record
+        # Update billing record using a freshly loaded instance to avoid
+        # lazy-loading on an expired object in async context (MissingGreenlet).
+        db_billing_model = await crud.organization_billing.get(db, id=billing_id, ctx=ctx)
         await crud.organization_billing.update(
             db,
-            db_obj=billing_model,
+            db_obj=db_billing_model,
             obj_in=update_data,
             ctx=ctx,
         )
@@ -1142,24 +1495,10 @@ class BillingService:
         # Create system auth context for update
         ctx = await self._create_system_context(db, org_id, "stripe_webhook")
 
-        # Check if this is a scheduled cancellation or actual deletion
-        # When cancel_at_period_end is set to true, Stripe sends this event but
-        # the subscription remains active until period end
-        if hasattr(subscription, "cancel_at_period_end") and subscription.cancel_at_period_end:
-            # Subscription is scheduled to cancel but still active
-            # Just update the cancel_at_period_end flag, keep the subscription ID
-            update_data = OrganizationBillingUpdate(
-                cancel_at_period_end=True,
-                # Keep current status - subscription is still active
-            )
-            await crud.organization_billing.update(
-                db,
-                db_obj=billing_model,
-                obj_in=update_data,
-                ctx=ctx,
-            )
-            log.info(f"Subscription scheduled to cancel at period end for org {org_id}")
-        else:
+        # Determine deletion vs scheduled-cancel update
+        # For customer.subscription.deleted, Stripe sets status='canceled' at end-of-period
+        sub_status = getattr(subscription, "status", None)
+        if sub_status == "canceled":
             # Subscription is actually deleted/ended
             # Complete the final billing period
             current_period = await self.get_current_billing_period(db, org_id)
@@ -1172,12 +1511,43 @@ class BillingService:
                 )
                 log.info(f"Completed final billing period {current_period.id} for org {org_id}")
 
+            # Snapshot billing to avoid lazy-loading anything
+            fresh = await crud.organization_billing.get(db, id=billing_model.id, ctx=ctx)
+            snap = schemas.OrganizationBilling.model_validate(fresh, from_attributes=True)
+            # If there was a pending downgrade, apply it; else keep plan but no sub
+            new_plan = snap.pending_plan_change or snap.billing_plan
             update_data = OrganizationBillingUpdate(
-                billing_status=BillingStatus.CANCELED,
+                billing_status=BillingStatus.ACTIVE,
+                billing_plan=new_plan,
                 stripe_subscription_id=None,
                 cancel_at_period_end=False,
+                pending_plan_change=None,
+                pending_plan_change_at=None,
             )
+            await crud.organization_billing.update(
+                db,
+                db_obj=billing_model,
+                obj_in=update_data,
+                ctx=ctx,
+            )
+
+            # Developer is a normal plan now; no auto-create here. Deletion means real cancel.
             log.info(f"Subscription fully canceled for org {org_id}")
+        else:
+            # Not a final deletion – treat as scheduled cancel flag update
+            update_data = OrganizationBillingUpdate(
+                cancel_at_period_end=True,
+            )
+            await crud.organization_billing.update(
+                db,
+                db_obj=billing_model,
+                obj_in=update_data,
+                ctx=ctx,
+            )
+            log.info(
+                f"Subscription scheduled to cancel at period end "
+                f"for org {org_id} (status={sub_status})"
+            )
 
     async def handle_payment_succeeded(
         self,
@@ -1370,8 +1740,13 @@ class BillingService:
             is not None  # Grace period only applies to existing subscriptions
         )
 
-        # Needs setup when no subscription (trials disabled)
-        needs_initial_setup = not billing_model.stripe_subscription_id
+        # Needs setup when plan is paid and no subscription
+        is_paid_plan = billing_model.billing_plan in {
+            BillingPlan.PRO,
+            BillingPlan.TEAM,
+            BillingPlan.ENTERPRISE,
+        }
+        needs_initial_setup = is_paid_plan and not billing_model.stripe_subscription_id
 
         # Determine if payment method is required now
         requires_payment_method = needs_initial_setup or in_grace_period or grace_period_expired
@@ -1392,6 +1767,10 @@ class BillingService:
                 ctx=ctx,
             )
 
+        # Consider subscription "active" only if we have an active/current billing period.
+        # This gates access when Stripe webhooks are not processed yet (both paid and developer).
+        current_period = await self.get_current_billing_period(db, organization_id)
+
         return SubscriptionInfo(
             plan=billing_model.billing_plan,
             status=billing_model.billing_status,
@@ -1402,7 +1781,7 @@ class BillingService:
             cancel_at_period_end=billing_model.cancel_at_period_end,
             limits=self.PLAN_LIMITS.get(billing_model.billing_plan, {}),
             is_oss=False,
-            has_active_subscription=bool(billing_model.stripe_subscription_id),
+            has_active_subscription=bool(current_period),
             in_trial=in_trial,
             in_grace_period=in_grace_period,
             payment_method_added=billing_model.payment_method_added,
@@ -1443,35 +1822,34 @@ class BillingService:
         """
         log = contextual_logger or logger
 
-        # Get any currently active periods
-        active_periods = await crud.billing_period.get_by_organization(
-            db, organization_id=organization_id, limit=10
+        # Complete the current active period (if any), avoiding iteration over ORM rows
+        fresh_ctx = await self._create_system_context(db, organization_id)
+        current_active = await crud.billing_period.get_current_period(
+            db, organization_id=organization_id
         )
-
-        # Find active periods that need to be completed
-        for period in active_periods:
-            if period.status in [
-                BillingPeriodStatus.ACTIVE,
-                BillingPeriodStatus.TRIAL,
-                BillingPeriodStatus.GRACE,
-            ]:
-                # Update the period to be completed with exact end time
+        if current_active and current_active.status in [
+            BillingPeriodStatus.ACTIVE,
+            BillingPeriodStatus.TRIAL,
+            BillingPeriodStatus.GRACE,
+        ]:
+            # Re-fetch by id to ensure a live instance scoped to this context
+            db_period = await crud.billing_period.get(db, id=current_active.id, ctx=fresh_ctx)
+            if db_period:
                 await crud.billing_period.update(
                     db,
-                    db_obj=period,
+                    db_obj=db_period,
                     obj_in={
                         "status": BillingPeriodStatus.COMPLETED,
                         "period_end": period_start,  # Ensure continuity!
                     },
-                    ctx=await self._create_system_context(db, organization_id),
+                    ctx=fresh_ctx,
                 )
 
-                # If no previous_period_id was provided, use the most recent active period
-                if not previous_period_id and period.status == BillingPeriodStatus.ACTIVE:
-                    previous_period_id = period.id
+                if not previous_period_id:
+                    previous_period_id = db_period.id
 
                 log.info(
-                    f"Completed period {period.id} with adjusted end time {period_start} "
+                    f"Completed period {db_period.id} with adjusted end time {period_start} "
                     f"to ensure continuity with new period"
                 )
 

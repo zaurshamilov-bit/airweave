@@ -69,15 +69,32 @@ const ORGANIZATION_TYPES = [
 
 const SUBSCRIPTION_PLANS = [
   {
+    value: 'developer',
+    label: 'Developer',
+    price: 'Free',
+    period: '',
+    description: 'Perfect for personal agents and side projects. No credit card required.',
+    features: [
+      '10 source connections',
+      '500 queries / mo',
+      '50K entities / mo',
+      '1 team member',
+      'Community support',
+    ],
+    teamMemberLimit: 1,
+    recommended: false,
+    hasTrial: false,
+  },
+  {
     value: 'pro',
     label: 'Pro',
     price: '$20',
     period: 'per month',
     description: 'Take your agent to the next level',
     features: [
-      '50 sources',
+      '50 source connections',
       '2K queries / mo',
-      '100K entities synced / mo',
+      '100K entities / mo',
       '2 team members',
       'Email support',
     ],
@@ -92,7 +109,7 @@ const SUBSCRIPTION_PLANS = [
     period: 'per month',
     description: 'For fast-moving teams that need scale and control',
     features: [
-      '1000 sources',
+      '1000 source connections',
       '10K queries / mo',
       '1M entities synced / mo',
       '10 team members',
@@ -110,7 +127,7 @@ const SUBSCRIPTION_PLANS = [
     period: '',
     description: 'Tailored solutions for large organizations',
     features: [
-      'Unlimited sources',
+      'Unlimited source connections',
       'Custom usage limits',
       'Tailored onboarding',
       'Dedicated priority support',
@@ -299,8 +316,15 @@ export const Onboarding = () => {
         return;
       }
 
-      // Step 4: Try to create checkout session for production
+      // Step 4: Billing
       try {
+        if (formData.subscriptionPlan === 'developer') {
+          // Free plan: backend already created $0 subscription; no checkout required
+          toast.success('Organization created successfully!');
+          navigate('/'); // TODO: is this redirection correct????
+          return;
+        }
+
         const checkoutResponse = await apiClient.post('/billing/checkout-session', {
           plan: formData.subscriptionPlan,
           success_url: `${window.location.origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,

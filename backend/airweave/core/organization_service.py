@@ -109,8 +109,12 @@ class OrganizationService:
                     owner_user=owner_user,
                     uow=uow,
                 )
+                # Capture primitives immediately to avoid lazy loads later
+                org_id = local_org.id
 
-                logger.info(f"Created organization with auth0_org_id: {local_org.auth0_org_id}")
+                logger.info(
+                    f"Created organization with auth0_org_id: {org_dict.get('auth0_org_id')}"
+                )
 
                 # Create billing record if Stripe is enabled
                 if settings.STRIPE_ENABLED and stripe_customer:
@@ -140,17 +144,43 @@ class OrganizationService:
                         uow=uow,
                     )
 
-                # Create organization schema response
+                # Create organization schema response without triggering lazy ORM loads.
+                # Fetch concrete columns explicitly and build the Pydantic model from primitives.
+
+                row_result = await db.execute(
+                    select(
+                        Organization.id,
+                        Organization.name,
+                        Organization.description,
+                        Organization.auth0_org_id,
+                        Organization.created_at,
+                        Organization.modified_at,
+                        Organization.org_metadata,
+                    ).where(Organization.id == org_id)
+                )
+                (
+                    org_id,
+                    org_name,
+                    org_description,
+                    org_auth0_id,
+                    org_created_at,
+                    org_modified_at,
+                    org_metadata,
+                ) = row_result.one()
+
                 organization = schemas.Organization(
-                    **org_dict,
+                    id=org_id,
+                    name=org_name,
+                    description=org_description,
+                    auth0_org_id=org_auth0_id,
+                    created_at=org_created_at,
+                    modified_at=org_modified_at,
+                    org_metadata=org_metadata,
                     role="owner",
-                    created_at=local_org.created_at,
-                    modified_at=local_org.modified_at,
-                    id=local_org.id,
                 )
 
                 # Create API key for the organization
-                logger.info(f"Creating API key for organization {local_org.id}")
+                logger.info(f"Creating API key for organization {org_id}")
 
                 # Create system auth context for API key creation
                 # Generate a request ID for the API key creation context
@@ -159,7 +189,7 @@ class OrganizationService:
                 # Create logger with organization context
                 contextual_logger = logger.with_context(
                     request_id=request_id,
-                    organization_id=str(local_org.id),
+                    organization_id=str(org_id),
                     auth_method="system",
                     context_base="organization_service",
                     user_id=str(owner_user.id),
@@ -184,7 +214,7 @@ class OrganizationService:
                     uow=uow,
                 )
 
-                logger.info(f"Successfully created API key for organization {local_org.id}")
+                logger.info(f"Successfully created API key for organization {org_id}")
 
                 # Commit the transaction
                 await uow.commit()

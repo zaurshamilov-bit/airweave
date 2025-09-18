@@ -12,6 +12,7 @@ class BillingPlan(str, Enum):
     """Billing plan tiers."""
 
     TRIAL = "trial"
+    DEVELOPER = "developer"
     PRO = "pro"
     TEAM = "team"
     ENTERPRISE = "enterprise"
@@ -91,6 +92,9 @@ class OrganizationBillingInDBBase(OrganizationBillingBase):
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
     cancel_at_period_end: bool = False
+    # Pending plan change fields (take effect at renewal)
+    pending_plan_change: Optional[BillingPlan] = None
+    pending_plan_change_at: Optional[datetime] = None
     payment_method_id: Optional[str] = None
     last_payment_status: Optional[str] = None
     last_payment_at: Optional[datetime] = None

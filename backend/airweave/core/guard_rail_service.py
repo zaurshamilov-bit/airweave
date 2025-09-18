@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
+from sqlalchemy import func, select
+
 from airweave import crud
 from airweave.core.config import settings
 from airweave.core.exceptions import PaymentRequiredException, UsageLimitExceededException
@@ -12,6 +14,7 @@ from airweave.core.logging import ContextualLogger
 from airweave.core.logging import logger as default_logger
 from airweave.core.shared_models import ActionType
 from airweave.db.session import get_db_context
+from airweave.models.user_organization import UserOrganization
 from airweave.schemas.billing_period import BillingPeriodStatus
 from airweave.schemas.organization_billing import BillingPlan
 from airweave.schemas.usage import Usage, UsageLimit
@@ -62,6 +65,14 @@ class GuardRailService:
 
     # Plan limits configuration (matching BillingService)
     PLAN_LIMITS = {
+        BillingPlan.DEVELOPER: {
+            "max_syncs": None,
+            "max_entities": 50000,
+            "max_queries": 500,
+            "max_collections": None,
+            "max_source_connections": 10,
+            "max_team_members": 1,
+        },
         BillingPlan.PRO: {
             "max_syncs": None,
             "max_entities": 100000,
@@ -427,6 +438,62 @@ class GuardRailService:
 
             return current_period.status
 
+    async def _get_current_plan(self) -> BillingPlan:
+        """Get the organization's current billing plan.
+
+        Falls back to developer if no active period is found.
+        """
+        async with get_db_context() as db:
+            current_period = await crud.billing_period.get_current_period(
+                db, organization_id=self.organization_id
+            )
+            if not current_period or not current_period.plan:
+                return BillingPlan.DEVELOPER
+            return current_period.plan
+
+    async def _count_team_members(self) -> int:
+        """Count current team members in the organization."""
+        async with get_db_context() as db:
+            stmt = (
+                select(func.count())
+                .select_from(UserOrganization)
+                .where(UserOrganization.organization_id == self.organization_id)
+            )
+            result = await db.execute(stmt)
+            return int(result.scalar_one() or 0)
+
+    async def ensure_can_add_team_member(self) -> None:
+        """Ensure adding a team member is allowed under plan limits.
+
+        Raises UsageLimitExceededException if at or above the limit.
+        """
+        # Legacy orgs (no billing) are not limited
+        has_billing = await self._check_has_billing()
+        if not has_billing:
+            return
+
+        plan = await self._get_current_plan()
+        # Ensure enum normalization (plan may be a string in some edge cases)
+        try:
+            plan_enum = plan if hasattr(plan, "value") else BillingPlan(str(plan))
+        except Exception:
+            plan_enum = BillingPlan.DEVELOPER
+        limits = self.PLAN_LIMITS.get(plan_enum, self.PLAN_LIMITS[BillingPlan.DEVELOPER])
+        max_team = limits.get("max_team_members")
+
+        # Unlimited
+        if max_team is None:
+            return
+
+        count = await self._count_team_members()
+        if count >= max_team:
+            self.logger.warning(
+                f"Team member limit reached for plan {plan}: current={count}, limit={max_team}"
+            )
+            raise UsageLimitExceededException(
+                action_type="team_members", limit=max_team, current_usage=count
+            )
+
     async def _infer_usage_limit(self) -> UsageLimit:
         """Infer usage limit based on current billing period's plan.
 
@@ -442,21 +509,29 @@ class GuardRailService:
                 db, organization_id=self.organization_id
             )
 
-            if not current_period or not current_period.plan:
-                # Default to developer limits if no period found
-                self.logger.warning(
-                    f"No active billing period found for organization {self.organization_id}. "
-                    "Using developer plan limits as default."
+        if not current_period or not current_period.plan:
+            # Default to developer limits if no period found
+            self.logger.warning(
+                f"No active billing period found for organization {self.organization_id}. "
+                "Using developer plan limits as default."
+            )
+            plan = BillingPlan.DEVELOPER
+        else:
+            # Normalize plan to enum if needed
+            try:
+                plan = (
+                    current_period.plan
+                    if hasattr(current_period, "plan") and hasattr(current_period.plan, "value")
+                    else BillingPlan(str(current_period.plan))
                 )
+            except Exception:
                 plan = BillingPlan.DEVELOPER
-            else:
-                plan = current_period.plan
-                self.logger.info(
-                    f"\n\nRetrieved billing period for limits calculation: "
-                    f"plan={plan}, status={current_period.status}, "
-                    f"period_id={current_period.id}, "
-                    f"organization_id={self.organization_id}\n\n"
-                )
+            self.logger.info(
+                f"\n\nRetrieved billing period for limits calculation: "
+                f"plan={plan}, status={current_period.status}, "
+                f"period_id={current_period.id}, "
+                f"organization_id={self.organization_id}\n\n"
+            )
 
         # Get limits for the plan
         limits = self.PLAN_LIMITS.get(plan, self.PLAN_LIMITS[BillingPlan.DEVELOPER])
