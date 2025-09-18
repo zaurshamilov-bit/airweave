@@ -226,7 +226,8 @@ export const useCollectionCreationStore = create<CollectionCreationState>()(
 
       selectSource: (shortName, displayName) => set({
         selectedSource: shortName,
-        sourceName: displayName
+        sourceName: displayName,
+        sourceConnectionName: undefined // Clear previous connection name when switching sources
       }),
 
       setSourceConnectionName: (name) => set({ sourceConnectionName: name }),

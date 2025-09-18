@@ -124,6 +124,15 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     }
   }, [connectionName]); // Only depend on connectionName changes
 
+  // Update connection name when source changes (when user goes back and selects different source)
+  useEffect(() => {
+    if (sourceName && !sourceConnectionName) {
+      // Only set default name if no custom name is set
+      const defaultName = `${sourceName} Connection`;
+      setConnectionName(defaultName);
+    }
+  }, [sourceName, sourceConnectionName]);
+
   const [connectionUrl, setConnectionUrl] = useState('');
 
   // Check if source requires custom OAuth credentials (BYOC - Bring Your Own Credentials)
