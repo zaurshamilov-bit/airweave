@@ -522,13 +522,18 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                                             Authentication
                                         </label>
 
-                                        {/* Composio Platform Button with Tooltip */}
-                                        {authProviderShortName === 'composio' && (
+                                        {/* Auth Provider Platform Buttons with Tooltips */}
+                                        {(authProviderShortName === 'composio' || authProviderShortName === 'pipedream') && (
                                             <TooltipProvider>
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <button
-                                                            onClick={() => window.open('https://platform.composio.dev/', '_blank')}
+                                                            onClick={() => {
+                                                                const url = authProviderShortName === 'composio'
+                                                                    ? 'https://platform.composio.dev/'
+                                                                    : 'https://pipedream.com/settings/api';
+                                                                window.open(url, '_blank');
+                                                            }}
                                                             className={cn(
                                                                 "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
                                                                 "border",
@@ -538,19 +543,19 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                                                             )}
                                                         >
                                                             <img
-                                                                src={getAuthProviderIconUrl('composio', resolvedTheme)}
-                                                                alt="Composio"
+                                                                src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
+                                                                alt={authProviderShortName}
                                                                 className="w-3 h-3 object-contain"
                                                                 onError={(e) => {
                                                                     e.currentTarget.style.display = 'none';
                                                                 }}
                                                             />
-                                                            Get API Key from Composio
+                                                            {authProviderShortName === 'composio' ? 'Get API Key from Composio' : 'Get Client ID & Secret from Pipedream'}
                                                             <ExternalLink className="w-3 h-3" />
                                                         </button>
                                                     </TooltipTrigger>
                                                     <TooltipContent>
-                                                        <p>Opens Composio platform to retrieve your API credentials</p>
+                                                        <p>Opens {authProviderShortName === 'composio' ? 'Composio platform to retrieve your API credentials' : 'Pipedream settings to retrieve your client ID and secret'}</p>
                                                     </TooltipContent>
                                                 </Tooltip>
                                             </TooltipProvider>
