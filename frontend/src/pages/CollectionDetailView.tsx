@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Alert } from "@/components/ui/alert";
-import { AlertCircle, RefreshCw, Pencil, Trash, Plus, Clock, Play, Plug, Copy, Check, Loader2, RotateCw } from "lucide-react";
+import { AlertCircle, RefreshCw, Pencil, Trash, Plus, Clock, Play, Plug, Copy, Check, Loader2, RotateCw, AlertTriangle } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { useUsageStore } from "@/lib/stores/usage";
 import { Button } from "@/components/ui/button";
@@ -60,58 +60,114 @@ const DeleteCollectionDialog = ({
 }: DeleteCollectionDialogProps) => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
+    const isConfirmValid = confirmText === collectionReadableId;
 
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
             <AlertDialogContent className={cn(
-                "border-border",
+                "border-border max-w-md",
                 isDark ? "bg-card-solid text-foreground" : "bg-white"
             )}>
-                <AlertDialogHeader>
-                    <AlertDialogTitle className="text-foreground">Delete Collection</AlertDialogTitle>
-                    <AlertDialogDescription className={isDark ? "text-gray-300" : "text-foreground"}>
-                        <div className="space-y-3">
-                            <p className="font-medium">This action will permanently delete:</p>
-                            <ul className="space-y-2 ml-4">
-                                <li className="flex items-start">
-                                    <span className="mr-2">•</span>
+                <AlertDialogHeader className="space-y-4">
+                    {/* Header with warning icon */}
+                    <div className="flex items-center gap-3">
+                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                            <AlertTriangle className="w-5 h-5 text-destructive" />
+                        </div>
+                        <div>
+                            <AlertDialogTitle className="text-lg font-semibold text-foreground">
+                                Delete Collection
+                            </AlertDialogTitle>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                This action cannot be undone
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Warning content */}
+                    <AlertDialogDescription className="space-y-4">
+                        <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-4">
+                            <p className="font-medium text-foreground mb-3">
+                                This will permanently delete:
+                            </p>
+                            <ul className="space-y-2 text-sm text-muted-foreground">
+                                <li className="flex items-start gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-destructive/60 mt-2 flex-shrink-0" />
                                     <span>The collection and all its source connections</span>
                                 </li>
-                                <li className="flex items-start">
-                                    <span className="mr-2">•</span>
+                                <li className="flex items-start gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-destructive/60 mt-2 flex-shrink-0" />
                                     <span>All synced data from the knowledge base</span>
                                 </li>
-                                <li className="flex items-start">
-                                    <span className="mr-2">•</span>
+                                <li className="flex items-start gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-destructive/60 mt-2 flex-shrink-0" />
                                     <span>All sync history and configuration</span>
                                 </li>
                             </ul>
-                            <p className="text-sm font-semibold text-destructive">This action cannot be undone.</p>
                         </div>
 
-                        <div className="mt-4">
-                            <label htmlFor="confirm-delete" className="text-sm font-medium block mb-2">
-                                Type <span className="font-bold">{collectionReadableId}</span> to confirm deletion
-                            </label>
-                            <Input
-                                id="confirm-delete"
-                                value={confirmText}
-                                onChange={(e) => setConfirmText(e.target.value)}
-                                className="w-full"
-                                placeholder={collectionReadableId}
-                            />
+                        {/* Confirmation input */}
+                        <div className="space-y-3">
+                            <div>
+                                <label htmlFor="confirm-delete" className="text-sm font-medium text-foreground block mb-2">
+                                    Type <span className="font-mono font-semibold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">
+                                        {collectionReadableId}
+                                    </span> to confirm deletion
+                                </label>
+                                <Input
+                                    id="confirm-delete"
+                                    value={confirmText}
+                                    onChange={(e) => setConfirmText(e.target.value)}
+                                    className={cn(
+                                        "w-full transition-colors",
+                                        isConfirmValid && confirmText.length > 0
+                                            ? "border-green-500 focus:border-green-500 focus:ring-green-500/20"
+                                            : confirmText.length > 0
+                                                ? "border-destructive focus:border-destructive focus:ring-destructive/20"
+                                                : ""
+                                    )}
+                                    placeholder={collectionReadableId}
+                                />
+                            </div>
+
+                            {/* Validation feedback */}
+                            {confirmText.length > 0 && (
+                                <div className="flex items-center gap-2 text-sm">
+                                    {isConfirmValid ? (
+                                        <>
+                                            <Check className="w-4 h-4 text-green-500" />
+                                            <span className="text-green-600 dark:text-green-400">
+                                                Confirmation matches
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <AlertCircle className="w-4 h-4 text-destructive" />
+                                            <span className="text-destructive">
+                                                Confirmation does not match
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </AlertDialogDescription>
                 </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel className={isDark ? "bg-gray-800 text-white hover:bg-gray-700" : ""}>
+
+                <AlertDialogFooter className="gap-3">
+                    <AlertDialogCancel className="flex-1">
                         Cancel
                     </AlertDialogCancel>
                     <AlertDialogAction
                         onClick={onConfirm}
-                        disabled={confirmText !== collectionReadableId}
-                        className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-600 disabled:opacity-50"
+                        disabled={!isConfirmValid}
+                        className={cn(
+                            "flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90",
+                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                            "transition-all duration-200"
+                        )}
                     >
+                        <Trash className="w-4 h-4 mr-2" />
                         Delete Collection
                     </AlertDialogAction>
                 </AlertDialogFooter>

@@ -3,7 +3,7 @@ import type { DialogViewProps } from "@/components/types/dialog";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
-import { Copy, Check, Trash, Pencil } from "lucide-react";
+import { Copy, Check, Trash, Pencil, AlertTriangle, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { getAuthProviderIconUrl } from "@/lib/utils/icons";
 import { format } from "date-fns";
@@ -19,6 +19,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 
 // Delete Connection Dialog component
 interface DeleteConnectionDialogProps {
@@ -41,62 +42,147 @@ const DeleteConnectionDialog: React.FC<DeleteConnectionDialogProps> = ({
     setConfirmText,
     isDeleting,
     isDark
-}) => (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-        <AlertDialogContent className={cn(
-            "border-border",
-            isDark ? "bg-card-solid text-foreground" : "bg-white"
-        )}>
-            <AlertDialogHeader>
-                <AlertDialogTitle className="text-foreground">Delete Auth Provider Connection</AlertDialogTitle>
-                <AlertDialogDescription className={isDark ? "text-gray-300" : "text-foreground"}>
-                    <div className="mb-4">
-                        This will permanently delete this auth provider connection.
-                    </div>
-                    <div className="mb-4 font-semibold text-red-500">
-                        Warning: All source connections that were created using this auth provider will also be deleted,
-                        as they will no longer work without this connection.
-                    </div>
-                    <div className="mb-4">
-                        This action cannot be undone.
+}) => {
+    const isConfirmValid = confirmText === connectionReadableId;
+
+    return (
+        <AlertDialog open={open} onOpenChange={onOpenChange}>
+            <AlertDialogContent className={cn(
+                "border-border max-w-md",
+                isDark ? "bg-card-solid text-foreground" : "bg-white"
+            )}>
+                <AlertDialogHeader className="space-y-4">
+                    {/* Header with warning icon */}
+                    <div className="flex items-center gap-3">
+                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                            <AlertTriangle className="w-5 h-5 text-destructive" />
+                        </div>
+                        <div>
+                            <AlertDialogTitle className="text-lg font-semibold text-foreground">
+                                Delete Auth Provider Connection
+                            </AlertDialogTitle>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                This action cannot be undone
+                            </p>
+                        </div>
                     </div>
 
-                    <div className="mt-4">
-                        <label htmlFor="confirm-delete" className="text-sm font-medium block mb-2">
-                            Type <span className="font-bold">{connectionReadableId}</span> to confirm deletion
-                        </label>
-                        <input
-                            id="confirm-delete"
-                            value={confirmText}
-                            onChange={(e) => setConfirmText(e.target.value)}
-                            className={cn(
-                                "w-full px-3 py-2 rounded-lg text-sm",
-                                "border bg-transparent",
-                                "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
-                                isDark
-                                    ? "border-gray-700 text-white placeholder:text-gray-500"
-                                    : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                    {/* Warning content */}
+                    <AlertDialogDescription className="space-y-4">
+                        <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-4">
+                            <p className="font-medium text-foreground mb-3">
+                                This will permanently delete:
+                            </p>
+                            <ul className="space-y-2 text-sm text-muted-foreground">
+                                <li className="flex items-start gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-destructive/60 mt-2 flex-shrink-0" />
+                                    <span>This auth provider connection</span>
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-destructive/60 mt-2 flex-shrink-0" />
+                                    <span>All source connections created using this auth provider</span>
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-destructive/60 mt-2 flex-shrink-0" />
+                                    <span>All associated sync configurations and data</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        {/* Critical warning */}
+                        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                            <div className="flex items-start gap-2">
+                                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                                <div className="text-sm">
+                                    <p className="font-medium text-amber-800 dark:text-amber-200 mb-1">
+                                        Critical Impact
+                                    </p>
+                                    <p className="text-amber-700 dark:text-amber-300">
+                                        Source connections will stop working immediately and cannot be recovered.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Confirmation input */}
+                        <div className="space-y-3">
+                            <div>
+                                <label htmlFor="confirm-delete" className="text-sm font-medium text-foreground block mb-2">
+                                    Type <span className="font-mono font-semibold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">
+                                        {connectionReadableId}
+                                    </span> to confirm deletion
+                                </label>
+                                <Input
+                                    id="confirm-delete"
+                                    value={confirmText}
+                                    onChange={(e) => setConfirmText(e.target.value)}
+                                    disabled={isDeleting}
+                                    className={cn(
+                                        "w-full transition-colors",
+                                        isConfirmValid && confirmText.length > 0
+                                            ? "border-green-500 focus:border-green-500 focus:ring-green-500/20"
+                                            : confirmText.length > 0
+                                                ? "border-destructive focus:border-destructive focus:ring-destructive/20"
+                                                : ""
+                                    )}
+                                    placeholder={connectionReadableId}
+                                />
+                            </div>
+
+                            {/* Validation feedback */}
+                            {confirmText.length > 0 && !isDeleting && (
+                                <div className="flex items-center gap-2 text-sm">
+                                    {isConfirmValid ? (
+                                        <>
+                                            <Check className="w-4 h-4 text-green-500" />
+                                            <span className="text-green-600 dark:text-green-400">
+                                                Confirmation matches
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <AlertCircle className="w-4 h-4 text-destructive" />
+                                            <span className="text-destructive">
+                                                Confirmation does not match
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
                             )}
-                            placeholder={connectionReadableId}
-                        />
-                    </div>
-                </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel className={isDark ? "bg-gray-800 text-white hover:bg-gray-700" : ""}>
-                    Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction
-                    onClick={onConfirm}
-                    disabled={confirmText !== connectionReadableId || isDeleting}
-                    className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-600 disabled:opacity-50"
-                >
-                    {isDeleting ? "Deleting..." : "Delete Connection"}
-                </AlertDialogAction>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-    </AlertDialog>
-);
+                        </div>
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+
+                <AlertDialogFooter className="gap-3">
+                    <AlertDialogCancel disabled={isDeleting} className="flex-1">
+                        Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={onConfirm}
+                        disabled={!isConfirmValid || isDeleting}
+                        className={cn(
+                            "flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90",
+                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                            "transition-all duration-200"
+                        )}
+                    >
+                        {isDeleting ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Deleting...
+                            </>
+                        ) : (
+                            <>
+                                <Trash className="w-4 h-4 mr-2" />
+                                Delete Connection
+                            </>
+                        )}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+};
 
 export interface AuthProviderDetailViewProps extends DialogViewProps {
     viewData?: {
