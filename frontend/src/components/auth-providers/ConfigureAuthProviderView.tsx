@@ -10,6 +10,13 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuthProvidersStore } from "@/lib/stores/authProviders";
 import { getAuthProviderIconUrl } from "@/lib/utils/icons";
+import { ExternalLink } from "lucide-react";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 /**
  * Generates a random suffix for the readable ID
@@ -510,9 +517,45 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                         {authProviderDetails?.auth_fields?.fields && authProviderDetails.auth_fields.fields.length > 0 && (
                             <>
                                 <div className="pt-2">
-                                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
-                                        Authentication
-                                    </label>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                            Authentication
+                                        </label>
+
+                                        {/* Composio Platform Button with Tooltip */}
+                                        {authProviderShortName === 'composio' && (
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <button
+                                                            onClick={() => window.open('https://platform.composio.dev/', '_blank')}
+                                                            className={cn(
+                                                                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                                                                "border",
+                                                                isDark
+                                                                    ? "bg-gray-800/50 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
+                                                                    : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                                                            )}
+                                                        >
+                                                            <img
+                                                                src={getAuthProviderIconUrl('composio', resolvedTheme)}
+                                                                alt="Composio"
+                                                                className="w-3 h-3 object-contain"
+                                                                onError={(e) => {
+                                                                    e.currentTarget.style.display = 'none';
+                                                                }}
+                                                            />
+                                                            Get API Key from Composio
+                                                            <ExternalLink className="w-3 h-3" />
+                                                        </button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Opens Composio platform to retrieve your API credentials</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        )}
+                                    </div>
                                     <div className="space-y-4">
                                         {authProviderDetails.auth_fields.fields.map((field: any) => (
                                             <div key={field.name}>
