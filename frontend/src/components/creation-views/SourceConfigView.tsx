@@ -815,9 +815,11 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                           "text-xs leading-relaxed",
                           isDark ? "text-gray-400" : "text-gray-600"
                         )}>
-                          The URL where users will be redirected after authorizing the connection.
-                          By default, this is set to the current application URL.
-                          Change this if you have a specific redirect flow requirement.
+                          This is the URL where users are redirected after they complete OAuth authorization for services like Google Drive, Notion, etc.
+                          <br /><br />
+                          Your application should handle this callback to process the OAuth response and complete the connection setup.
+                          <br /><br />
+                          By default, this is set to the current application URL, but you can customize it for your specific integration needs.
                         </p>
                       </div>
                     </div>
