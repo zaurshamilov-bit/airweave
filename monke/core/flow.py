@@ -258,6 +258,8 @@ class TestFlow:
 
     async def cleanup(self) -> bool:
         """Clean up the test environment."""
+        self.logger.info("🧹 Cleanup skipped")
+        return True
         try:
             self.logger.info("🧹 Cleaning up test environment")
             await self._emit_event("cleanup_started")
