@@ -406,6 +406,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
             {connectionUrl ? (
               <SourceAuthenticationView
                 sourceName={sourceName}
+                sourceShortName={selectedSource}
                 authenticationUrl={connectionUrl}
                 showBorder={false}
               />

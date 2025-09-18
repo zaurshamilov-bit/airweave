@@ -173,9 +173,8 @@ export const CollectionCreationModal: React.FC = () => {
   };
 
   // Determine if we should show the visualization
-  // Don't show visualization when adding to existing collection
-  const showVisualization = !isAddingToExistingCollection() &&
-    currentStep !== 'source-select' &&
+  // Show visualization for all flows except specific steps that need full width
+  const showVisualization = currentStep !== 'source-select' &&
     currentStep !== 'oauth-redirect';
 
   // Determine column widths based on step
