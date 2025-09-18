@@ -559,8 +559,12 @@ const SourceConnectionStateView: React.FC<Props> = ({
           <div className={cn("h-8 px-3 py-1.5 border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[90px]", isDark ? "bg-gray-900" : "bg-white")}>
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">ENTITIES</span>
             <span className="text-xs font-semibold text-foreground">
-              {/* Use entities.total_entities from source connection */}
-              {(sourceConnection?.entities?.total_entities || 0).toLocaleString()}
+              {/* Calculate total from real-time store data or fall back to source connection */}
+              {(
+                storeConnection?.entity_states?.reduce((sum, state) => sum + (state.total_count || 0), 0) ||
+                sourceConnection?.entities?.total_entities ||
+                0
+              ).toLocaleString()}
             </span>
           </div>
 

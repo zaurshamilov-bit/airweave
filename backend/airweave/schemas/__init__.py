@@ -114,6 +114,7 @@ from .source_connection import (
     SourceConnectionCreate,
     SourceConnectionJob,
     SourceConnectionListItem,
+    SourceConnectionSimple,
     SourceConnectionUpdate,
     SyncDetails,
     SyncJobDetails,

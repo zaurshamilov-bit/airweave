@@ -1,11 +1,17 @@
-"""Clean source connection schemas with automatic auth method inference."""
+"""Clean source connection schemas with automatic auth method inference.
+
+This module provides a clean schema hierarchy for source connections:
+- Input schemas for create/update operations
+- Response schemas optimized for API endpoints with computed fields
+- Builder classes with type-safe construction and validation
+"""
 
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 from airweave.core.shared_models import SourceConnectionStatus, SyncJobStatus
 
@@ -160,20 +166,67 @@ class SyncSummary(BaseModel):
 
 
 class SourceConnectionListItem(BaseModel):
-    """Minimal source connection for list views."""
+    """Minimal source connection for list views with computed fields."""
 
+    # Direct database fields
     id: UUID
     name: str
     short_name: str
     readable_collection_id: str
-    status: SourceConnectionStatus
-    auth_method: AuthenticationMethod
     created_at: datetime
     modified_at: datetime
+
+    # Fields needed for computing auth_method and status
+    is_authenticated: bool
+    readable_auth_provider_id: Optional[str] = None
+    connection_init_session_id: Optional[UUID] = None
+    is_active: bool = True  # Default to active if not provided
 
     # Summary fields
     last_sync: Optional[SyncSummary] = None
     entity_count: int = 0
+    last_job_status: Optional[SyncJobStatus] = None  # For computing status
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def auth_method(self) -> AuthenticationMethod:
+        """Compute authentication method from database fields."""
+        # Auth provider takes precedence
+        if self.readable_auth_provider_id:
+            return AuthenticationMethod.AUTH_PROVIDER
+
+        # Check for pending OAuth
+        if self.connection_init_session_id and not self.is_authenticated:
+            return AuthenticationMethod.OAUTH_BROWSER
+
+        # TODO: Distinguish between DIRECT, OAUTH_TOKEN, and OAUTH_BYOC
+        # This would require additional fields from the database
+        # For now, default to direct if authenticated
+        if self.is_authenticated:
+            return AuthenticationMethod.DIRECT
+
+        # Default to OAuth browser for unauthenticated
+        return AuthenticationMethod.OAUTH_BROWSER
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def status(self) -> SourceConnectionStatus:
+        """Compute connection status from current state."""
+        if not self.is_authenticated:
+            return SourceConnectionStatus.PENDING_AUTH
+
+        # Check if manually disabled
+        if not self.is_active:
+            return SourceConnectionStatus.INACTIVE
+
+        # Check last job status if provided
+        if self.last_job_status:
+            if self.last_job_status == SyncJobStatus.RUNNING:
+                return SourceConnectionStatus.SYNCING
+            elif self.last_job_status == SyncJobStatus.FAILED:
+                return SourceConnectionStatus.ERROR
+
+        return SourceConnectionStatus.ACTIVE
 
 
 class AuthenticationDetails(BaseModel):
@@ -244,6 +297,20 @@ class EntitySummary(BaseModel):
     last_updated: Optional[datetime] = None
 
 
+class SourceConnectionSimple(BaseModel):
+    """Simple source connection details."""
+
+    id: UUID
+    name: str
+    description: Optional[str]
+    short_name: str
+    sync_id: Optional[UUID] = None
+    readable_collection_id: str
+    status: SourceConnectionStatus
+    created_at: datetime
+    modified_at: datetime
+
+
 class SourceConnection(BaseModel):
     """Complete source connection details."""
 
@@ -290,3 +357,58 @@ class SourceConnectionJob(BaseModel):
     # Error info
     error: Optional[str] = None
     error_details: Optional[Dict[str, Any]] = None
+
+
+# ===========================
+# Helper Functions (Deprecated - use computed fields in schemas instead)
+# ===========================
+
+
+def determine_auth_method(source_conn: Any) -> AuthenticationMethod:
+    """DEPRECATED: Use SourceConnectionListItem computed field instead.
+
+    Determine authentication method from database fields.
+    """
+    # Auth provider takes precedence
+    if hasattr(source_conn, "readable_auth_provider_id") and source_conn.readable_auth_provider_id:
+        return AuthenticationMethod.AUTH_PROVIDER
+
+    # Check for pending OAuth
+    if (
+        hasattr(source_conn, "connection_init_session_id")
+        and source_conn.connection_init_session_id
+        and not source_conn.is_authenticated
+    ):
+        return AuthenticationMethod.OAUTH_BROWSER
+
+    # Default to direct if authenticated
+    if source_conn.is_authenticated:
+        return AuthenticationMethod.DIRECT
+
+    # Default to OAuth browser for unauthenticated
+    return AuthenticationMethod.OAUTH_BROWSER
+
+
+def compute_status(
+    source_conn: Any,
+    last_job_status: Optional[SyncJobStatus] = None,
+) -> SourceConnectionStatus:
+    """DEPRECATED: Use SourceConnectionListItem computed field instead.
+
+    Compute connection status from current state.
+    """
+    if not source_conn.is_authenticated:
+        return SourceConnectionStatus.PENDING_AUTH
+
+    # Check if manually disabled
+    if hasattr(source_conn, "is_active") and not source_conn.is_active:
+        return SourceConnectionStatus.INACTIVE
+
+    # Check last job status if provided
+    if last_job_status:
+        if last_job_status == SyncJobStatus.RUNNING:
+            return SourceConnectionStatus.SYNCING
+        elif last_job_status == SyncJobStatus.FAILED:
+            return SourceConnectionStatus.ERROR
+
+    return SourceConnectionStatus.ACTIVE

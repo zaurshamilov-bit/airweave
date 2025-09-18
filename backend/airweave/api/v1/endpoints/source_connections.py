@@ -38,6 +38,12 @@ async def oauth_callback(
 
     # Redirect to the app with success
     redirect_url = source_conn.auth.redirect_url
+    if not redirect_url:
+        # Fallback to app URL if redirect_url is not set
+        from airweave.core.config import settings
+
+        redirect_url = settings.app_url
+
     connection_id = source_conn.id
     return Response(
         status_code=303,

@@ -58,8 +58,17 @@ class SyncService:
         sync_in: schemas.SyncCreate,
         ctx: ApiContext,
         uow: UnitOfWork,
+        skip_temporal_schedule: bool = False,
     ) -> Tuple[Sync, Optional[SyncJob]]:
-        """Internal method to create sync within a transaction."""
+        """Internal method to create sync within a transaction.
+
+        Args:
+            db: Database session
+            sync_in: Sync creation schema
+            ctx: API context
+            uow: Unit of work for transaction management
+            skip_temporal_schedule: If True, skip creating Temporal schedule (for deferred creation)
+        """
         # Create sync
         sync = await crud.sync.create(db, obj_in=sync_in, ctx=ctx, uow=uow)
         await db.flush()
@@ -68,8 +77,8 @@ class SyncService:
         await dag_service.create_initial_dag(db=db, sync_id=sync.id, ctx=ctx, uow=uow)
         # No flush needed here - let the caller decide when to flush
 
-        # Schedule in Temporal if cron schedule provided
-        if sync_in.cron_schedule:
+        # Schedule in Temporal if cron schedule provided (unless skipped)
+        if sync_in.cron_schedule and not skip_temporal_schedule:
             await temporal_schedule_service.create_or_update_schedule(
                 sync_id=sync.id,
                 cron_schedule=sync_in.cron_schedule,

@@ -29,6 +29,7 @@ from airweave.models.connection_init_session import (
     ConnectionInitStatus,
 )
 from airweave.models.integration_credential import IntegrationType
+from airweave.models.source_connection import SourceConnection
 from airweave.models.sync import Sync
 from airweave.models.sync_job import SyncJob
 from airweave.platform.auth.services import oauth2_service
@@ -360,6 +361,18 @@ class SourceConnectionHelpers:
         """
         from airweave.core.sync_service import sync_service
 
+        # Default to 24-hour schedule if not provided
+        if cron_schedule is None:
+            now_utc = datetime.now(timezone.utc)
+            minute = now_utc.minute
+            hour = now_utc.hour
+            # Format: minute hour day_of_month month day_of_week
+            # e.g., "30 14 * * *" = run at 14:30 every day
+            cron_schedule = f"{minute} {hour} * * *"
+            ctx.logger.info(
+                f"No cron schedule provided, defaulting to daily at {hour:02d}:{minute:02d} UTC"
+            )
+
         sync_in = schemas.SyncCreate(
             name=f"Sync for {name}",
             description=f"Auto-generated sync for {name}",
@@ -371,6 +384,39 @@ class SourceConnectionHelpers:
             run_immediately=run_immediately,
         )
         return await sync_service.create_and_run_sync(db, sync_in=sync_in, ctx=ctx, uow=uow)
+
+    async def create_sync_without_schedule(
+        self,
+        db: AsyncSession,
+        name: str,
+        connection_id: UUID,
+        collection_id: UUID,
+        cron_schedule: Optional[str],
+        run_immediately: bool,
+        ctx: ApiContext,
+        uow: Any,
+    ) -> Tuple[schemas.Sync, Optional[schemas.SyncJob]]:
+        """Create sync without creating Temporal schedule (for deferred schedule creation).
+
+        Connection ID here is the model.connection.id, not the model.source_connection.id
+        Collection ID is not used directly by sync, but kept for consistency
+        """
+        from airweave.core.sync_service import sync_service
+
+        sync_in = schemas.SyncCreate(
+            name=f"Sync for {name}",
+            description=f"Auto-generated sync for {name}",
+            source_connection_id=connection_id,
+            embedding_model_connection_id=NATIVE_TEXT2VEC_UUID,
+            destination_connection_ids=[NATIVE_QDRANT_UUID],
+            cron_schedule=cron_schedule,
+            status=SyncStatus.ACTIVE,
+            run_immediately=run_immediately,
+        )
+        # Call the internal method with skip_temporal_schedule=True
+        return await sync_service._create_and_run_with_uow(
+            db, sync_in=sync_in, ctx=ctx, uow=uow, skip_temporal_schedule=True
+        )
 
     async def create_source_connection(
         self,
@@ -407,69 +453,33 @@ class SourceConnectionHelpers:
 
         return await crud.source_connection.create(db, obj_in=sc_data, ctx=ctx, uow=uow)
 
-    def determine_auth_method(self, source_conn: Any) -> Optional[AuthenticationMethod]:
+    def determine_auth_method(self, source_conn: Any) -> AuthenticationMethod:
         """Determine authentication method from existing database fields.
 
-        Returns None if authentication method cannot be determined.
+        This is a wrapper around the shared function for backward compatibility.
         """
-        # Check auth provider first (safely)
-        auth_provider_id = getattr(source_conn, "readable_auth_provider_id", None)
-        if auth_provider_id:
-            return AuthenticationMethod.AUTH_PROVIDER
+        from airweave.schemas.source_connection import determine_auth_method
 
-        # Check if OAuth flow is in progress (safely)
-        has_init_session = (
-            hasattr(source_conn, "connection_init_session_id")
-            and source_conn.connection_init_session_id
-        )
-        is_not_authenticated = not getattr(source_conn, "is_authenticated", False)
-        if has_init_session and is_not_authenticated:
-            return AuthenticationMethod.OAUTH_BROWSER
+        return determine_auth_method(source_conn)
 
-        # Check if we have a connection with credentials (safely)
-        if hasattr(source_conn, "connection_id") and source_conn.connection_id:
-            # Could be direct auth or completed OAuth token
-            # We'll default to direct since we can't distinguish without more info
-            return AuthenticationMethod.DIRECT
+    def compute_status(
+        self, source_conn: Any, last_job_status: Optional[SyncJobStatus] = None
+    ) -> SourceConnectionStatus:
+        """Compute status from current state.
 
-        # If we have authentication but no clear method, default to direct
-        if getattr(source_conn, "is_authenticated", False):
-            return AuthenticationMethod.DIRECT
+        This is a wrapper around the shared function for backward compatibility.
+        """
+        from airweave.schemas.source_connection import compute_status
 
-        # Cannot determine authentication method
-        return None
-
-    def compute_status(self, source_conn: schemas.SourceConnection) -> SourceConnectionStatus:
-        """Compute status from current state."""
-        from airweave.core.shared_models import SourceConnectionStatus
-
-        if not source_conn.is_authenticated:
-            return SourceConnectionStatus.PENDING_AUTH
-
-        # Check if manually disabled
-        if hasattr(source_conn, "is_active") and not source_conn.is_active:
-            return SourceConnectionStatus.INACTIVE
-
-        # Check if we have sync job info
-        if hasattr(source_conn, "_last_sync_job") and source_conn._last_sync_job:
-            job = source_conn._last_sync_job
-            if job.status == SyncJobStatus.RUNNING:
-                return SourceConnectionStatus.SYNCING
-            elif job.status == SyncJobStatus.FAILED:
-                return SourceConnectionStatus.ERROR
-
-        return SourceConnectionStatus.ACTIVE
+        return compute_status(source_conn, last_job_status)
 
     async def build_source_connection_response(  # noqa: C901
         self,
         db: AsyncSession,
-        source_conn: schemas.SourceConnection,
+        source_conn: SourceConnection,
         ctx: ApiContext,
     ) -> schemas.SourceConnection:
         """Build complete source connection response object.
-
-        This method owns the logic of constructing the response,
-        always including all available data while handling missing fields gracefully.
 
         Args:
             db: Database session
@@ -477,32 +487,59 @@ class SourceConnectionHelpers:
             ctx: API context
         """
         from airweave.core.sync_service import sync_service
+        from airweave.schemas.source_connection import compute_status, determine_auth_method
 
-        # Determine authentication method from database state
-        auth_method = self.determine_auth_method(source_conn)
-
-        # Base fields (always present)
-        response = {
-            "id": source_conn.id,
-            "name": source_conn.name,
-            "description": source_conn.description,
-            "short_name": source_conn.short_name,
-            "readable_collection_id": source_conn.readable_collection_id,
-            "created_at": source_conn.created_at,
-            "modified_at": source_conn.modified_at,
+        # Build authentication details
+        auth_method = determine_auth_method(source_conn)
+        auth_info = {
+            "method": auth_method,
+            "authenticated": source_conn.is_authenticated,
         }
 
-        # Config fields (safely check for presence and non-None)
-        if hasattr(source_conn, "config_fields") and source_conn.config_fields:
-            response["config"] = source_conn.config_fields
+        # Add authenticated timestamp
+        if source_conn.is_authenticated:
+            auth_info["authenticated_at"] = source_conn.created_at
 
-        # Schedule info and last sync job (only if sync_id exists)
+        # Add auth provider info
+        if (
+            hasattr(source_conn, "readable_auth_provider_id")
+            and source_conn.readable_auth_provider_id
+        ):
+            auth_info["provider_id"] = source_conn.readable_auth_provider_id
+            auth_info["provider_name"] = source_conn.readable_auth_provider_id
+
+        # Add OAuth pending info
+        if (
+            hasattr(source_conn, "connection_init_session_id")
+            and source_conn.connection_init_session_id
+        ):
+            # Load the connection init session to get the redirect URL
+            # (for both pending and completed OAuth)
+            from airweave.crud import connection_init_session
+
+            init_session = await connection_init_session.get(
+                db, id=source_conn.connection_init_session_id, ctx=ctx
+            )
+            if init_session and init_session.overrides:
+                redirect_url = init_session.overrides.get("redirect_url")
+                if redirect_url:
+                    auth_info["redirect_url"] = redirect_url
+
+        # Check for auth URL (set during OAuth flow)
+        if hasattr(source_conn, "authentication_url") and source_conn.authentication_url:
+            auth_info["auth_url"] = source_conn.authentication_url
+            if hasattr(source_conn, "authentication_url_expiry"):
+                auth_info["auth_url_expires"] = source_conn.authentication_url_expiry
+
+        auth = schemas.AuthenticationDetails(**auth_info)
+
+        # Fetch schedule info if sync exists
+        schedule = None
         if hasattr(source_conn, "sync_id") and source_conn.sync_id:
             try:
-                # Get schedule info - handle potential None return
                 schedule_info = await crud.source_connection.get_schedule_info(db, source_conn)
                 if schedule_info:
-                    response["schedule"] = schemas.ScheduleDetails(
+                    schedule = schemas.ScheduleDetails(
                         cron=schedule_info.get("cron_expression"),
                         next_run=schedule_info.get("next_run_at"),
                         continuous=schedule_info.get("is_continuous", False),
@@ -512,125 +549,62 @@ class SourceConnectionHelpers:
             except Exception as e:
                 ctx.logger.warning(f"Failed to get schedule info: {e}")
 
+        # Fetch sync details if sync exists
+        sync_details = None
+        if hasattr(source_conn, "sync_id") and source_conn.sync_id:
             try:
-                # Get last sync job
                 job = await sync_service.get_last_sync_job(db, ctx=ctx, sync_id=source_conn.sync_id)
                 if job:
-                    # Build LastSyncJob object with safe attribute access
-                    last_sync_job_data = {
-                        "id": job.id,
-                        "status": job.status,
-                        "started_at": getattr(job, "started_at", None),
-                        "completed_at": getattr(job, "completed_at", None),
-                    }
+                    # Build SyncJobDetails
+                    duration_seconds = None
+                    if job.completed_at and job.started_at:
+                        duration_seconds = (job.completed_at - job.started_at).total_seconds()
 
-                    # Calculate duration safely
-                    if last_sync_job_data["completed_at"] and last_sync_job_data["started_at"]:
-                        last_sync_job_data["duration_seconds"] = (
-                            last_sync_job_data["completed_at"] - last_sync_job_data["started_at"]
-                        ).total_seconds()
-
-                    # Add entity metrics - compute total processed from available fields
+                    # Calculate entity metrics
                     entities_inserted = getattr(job, "entities_inserted", 0) or 0
                     entities_updated = getattr(job, "entities_updated", 0) or 0
                     entities_deleted = getattr(job, "entities_deleted", 0) or 0
                     entities_kept = getattr(job, "entities_kept", 0) or 0
                     entities_skipped = getattr(job, "entities_skipped", 0) or 0
 
-                    # Calculate total processed and failed
                     entities_processed = (
                         entities_inserted + entities_updated + entities_deleted + entities_kept
                     )
-                    # Note: SyncJob doesn't have entities_failed, so we use skipped as a proxy
                     entities_failed = entities_skipped
 
-                    last_sync_job_data.update(
-                        {
-                            "entities_processed": entities_processed,
-                            "entities_inserted": entities_inserted,
-                            "entities_updated": entities_updated,
-                            "entities_deleted": entities_deleted,
-                            "entities_failed": entities_failed,
-                            "error": getattr(job, "error", None),
-                        }
+                    last_job = schemas.SyncJobDetails(
+                        id=job.id,
+                        status=job.status,
+                        started_at=getattr(job, "started_at", None),
+                        completed_at=getattr(job, "completed_at", None),
+                        duration_seconds=duration_seconds,
+                        entities_processed=entities_processed,
+                        entities_inserted=entities_inserted,
+                        entities_updated=entities_updated,
+                        entities_deleted=entities_deleted,
+                        entities_failed=entities_failed,
+                        error=getattr(job, "error", None),
                     )
 
-                    # Store for later use in SyncDetails
-                    response["_last_sync_job"] = last_sync_job_data
+                    # Create SyncDetails
+                    sync_details = schemas.SyncDetails(
+                        total_runs=1,  # Simplified - we only have last job
+                        successful_runs=1 if job.status == SyncJobStatus.COMPLETED else 0,
+                        failed_runs=1 if job.status == SyncJobStatus.FAILED else 0,
+                        last_job=last_job,
+                    )
 
             except Exception as e:
-                ctx.logger.warning(f"Failed to get last sync job: {e}")
+                ctx.logger.warning(f"Failed to get sync details: {e}")
 
-        # Compute status based on authentication and last sync job
-        last_job_status = None
-        if "_last_sync_job" in response and response["_last_sync_job"]:
-            last_job_status = response["_last_sync_job"]["status"]
-
-        response["status"] = self.compute_status_from_data(
-            is_authenticated=source_conn.is_authenticated,
-            is_active=getattr(source_conn, "is_active", True),
-            last_job_status=last_job_status,
-        )
-
-        # Authentication details (build safely)
-        auth_info = {
-            "method": auth_method,
-            "authenticated": source_conn.is_authenticated,
-        }
-
-        # Add optional authentication fields if they exist
-        if hasattr(source_conn, "created_at"):
-            auth_info["authenticated_at"] = source_conn.created_at
-
-        auth_provider_id = getattr(source_conn, "readable_auth_provider_id", None)
-        if auth_provider_id:
-            auth_info["provider_id"] = auth_provider_id
-
-        # Add OAuth-specific fields if pending
-        if hasattr(source_conn, "authentication_url") and source_conn.authentication_url:
-            auth_info["auth_url"] = source_conn.authentication_url
-            if hasattr(source_conn, "authentication_url_expiry"):
-                auth_info["auth_url_expires"] = source_conn.authentication_url_expiry
-
-        # Add redirect URL from connection init session if available
-        if (
-            hasattr(source_conn, "connection_init_session_id")
-            and source_conn.connection_init_session_id
-        ):
-            # Load the connection init session to get the redirect URL
-            init_session = await connection_init_session.get(
-                db, id=source_conn.connection_init_session_id, ctx=ctx
-            )
-            if init_session and init_session.overrides:
-                redirect_url = init_session.overrides.get("redirect_url")
-                if redirect_url:
-                    auth_info["redirect_url"] = redirect_url
-
-        response["auth"] = schemas.AuthenticationDetails(**auth_info)
-
-        # Build SyncDetails if we have sync information
-        if "_last_sync_job" in response:
-            last_job_data = response.pop("_last_sync_job")
-            # Convert to SyncJobDetails
-            last_job = schemas.SyncJobDetails(**last_job_data)
-
-            # Create SyncDetails (we don't have total/successful/failed counts readily available)
-            response["sync"] = schemas.SyncDetails(
-                total_runs=1 if last_job else 0,  # Simplified - we only have last job
-                successful_runs=1 if last_job and last_job.status == SyncJobStatus.COMPLETED else 0,
-                failed_runs=1 if last_job and last_job.status == SyncJobStatus.FAILED else 0,
-                last_job=last_job,
-            )
-
-        # Entity states - get counts per entity type
+        # Fetch entity summary if sync exists
+        entities = None
         if hasattr(source_conn, "sync_id") and source_conn.sync_id:
             try:
-                # Get entity counts per type
                 entity_counts = await crud.entity_count.get_counts_per_sync_and_type(
                     db, source_conn.sync_id
                 )
 
-                # Convert to EntitySummary
                 if entity_counts:
                     total_entities = sum(count_data.count for count_data in entity_counts)
                     by_type = {}
@@ -640,16 +614,35 @@ class SourceConnectionHelpers:
                             last_updated=count_data.modified_at,
                         )
 
-                    response["entities"] = schemas.EntitySummary(
+                    entities = schemas.EntitySummary(
                         total_entities=total_entities,
                         by_type=by_type,
                         last_updated=source_conn.modified_at,
                     )
             except Exception as e:
-                ctx.logger.warning(f"Failed to get entity states: {e}")
+                ctx.logger.warning(f"Failed to get entity summary: {e}")
 
-        # Return constructed Pydantic object
-        return schemas.SourceConnection(**response)
+        # Compute status based on last job
+        last_job_status = None
+        if sync_details and sync_details.last_job:
+            last_job_status = sync_details.last_job.status
+
+        # Build and return the complete response
+        return schemas.SourceConnection(
+            id=source_conn.id,
+            name=source_conn.name,
+            description=source_conn.description,
+            short_name=source_conn.short_name,
+            readable_collection_id=source_conn.readable_collection_id,
+            status=compute_status(source_conn, last_job_status),
+            created_at=source_conn.created_at,
+            modified_at=source_conn.modified_at,
+            auth=auth,
+            config=source_conn.config_fields if hasattr(source_conn, "config_fields") else None,
+            schedule=schedule,
+            sync=sync_details,
+            entities=entities,
+        )
 
     def compute_status_from_data(
         self,
@@ -917,7 +910,7 @@ class SourceConnectionHelpers:
     async def _regenerate_oauth_url(
         self,
         db: AsyncSession,
-        source_conn: schemas.SourceConnection,
+        source_conn: SourceConnection,
         ctx: ApiContext,
     ) -> Tuple[Optional[str], Optional[datetime]]:
         """Regenerate OAuth authentication URL for an unauthenticated connection.
@@ -979,7 +972,7 @@ class SourceConnectionHelpers:
     async def complete_oauth_connection(
         self,
         db: AsyncSession,
-        source_conn_shell: Any,
+        source_conn_shell: schemas.SourceConnection,
         init_session: Any,
         token_response: Any,
         ctx: ApiContext,
@@ -990,7 +983,7 @@ class SourceConnectionHelpers:
             raise HTTPException(
                 status_code=404, detail=f"Source '{init_session.short_name}' not found"
             )
-
+        init_session_id = init_session.id
         payload = init_session.payload or {}
         overrides = init_session.overrides or {}
 
@@ -1048,23 +1041,33 @@ class SourceConnectionHelpers:
             )
 
             # Create sync
-            from airweave.core.sync_service import sync_service
-
             await db.flush()
             await db.refresh(connection)
 
-            sync_in = schemas.SyncCreate(
-                name=f"Sync for {payload.get('name') or source.name}",
-                description="Auto-generated sync",
-                source_connection_id=connection.id,
-                embedding_model_connection_id=NATIVE_TEXT2VEC_UUID,
-                destination_connection_ids=[NATIVE_QDRANT_UUID],
-                cron_schedule=payload.get("cron_schedule"),
-                status=SyncStatus.ACTIVE,
+            # Use the create_sync helper to ensure default schedule is applied
+            # Note: We temporarily skip Temporal schedule creation here because
+            # the source_connection hasn't been updated with sync_id yet
+            cron_schedule = payload.get("cron_schedule")
+            if cron_schedule is None:
+                from datetime import datetime, timezone
+
+                now_utc = datetime.now(timezone.utc)
+                minute = now_utc.minute
+                hour = now_utc.hour
+                cron_schedule = f"{minute} {hour} * * *"
+                ctx.logger.info(
+                    f"No cron schedule provided, defaulting to daily at {hour:02d}:{minute:02d} UTC"
+                )
+
+            sync, sync_job = await self.create_sync_without_schedule(
+                uow.session,
+                name=payload.get("name") or source.name,
+                connection_id=connection.id,
+                collection_id=collection.id,
+                cron_schedule=cron_schedule,
                 run_immediately=True,
-            )
-            sync, sync_job = await sync_service.create_and_run_sync(
-                uow.session, sync_in=sync_in, ctx=ctx, uow=uow
+                ctx=ctx,
+                uow=uow,
             )
 
             # Update shell source connection
@@ -1083,11 +1086,23 @@ class SourceConnectionHelpers:
                 uow=uow,
             )
 
+            # Now that source_connection is linked to sync, create the Temporal schedule
+            if cron_schedule and sync.id:
+                await uow.session.flush()  # Ensure the source_connection update is visible
+                from airweave.platform.temporal.schedule_service import temporal_schedule_service
+
+                await temporal_schedule_service.create_or_update_schedule(
+                    sync_id=sync.id,
+                    cron_schedule=cron_schedule,
+                    db=uow.session,
+                    ctx=ctx,
+                )
+
             # Mark init session complete
             await connection_init_session.mark_completed(
                 uow.session,
-                session_id=init_session.id,
-                final_connection_id=connection.id,
+                session_id=init_session_id,
+                final_connection_id=sc_update["connection_id"],
                 ctx=ctx,
             )
 

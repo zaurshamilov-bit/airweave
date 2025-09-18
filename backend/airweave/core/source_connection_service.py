@@ -12,7 +12,7 @@ from airweave.analytics import business_events
 from airweave.api.context import ApiContext
 from airweave.core.auth_provider_service import auth_provider_service
 from airweave.core.config import settings as core_settings
-from airweave.core.shared_models import SourceConnectionStatus, SyncJobStatus
+from airweave.core.shared_models import SyncJobStatus
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
 from airweave.crud import connection_init_session
@@ -165,27 +165,28 @@ class SourceConnectionService:
         if not source_conns:
             return []
 
-        # Build list items
+        # Build list items - schema will compute auth_method and status automatically
         result = []
         for sc in source_conns:
-            # Determine auth method from database state
-            auth_method = self._determine_auth_method(sc)
-
-            # Compute status
-            status = self._compute_status(sc)
-
+            # TODO: Fetch sync summary and entity count in bulk for performance
+            # TODO: Fetch last job status for computing status
             result.append(
                 SourceConnectionListItem(
                     id=sc.id,
                     name=sc.name,
                     short_name=sc.short_name,
                     readable_collection_id=sc.readable_collection_id,
-                    status=status,
-                    auth_method=auth_method,
                     created_at=sc.created_at,
                     modified_at=sc.modified_at,
+                    # Fields needed for computed properties
+                    is_authenticated=sc.is_authenticated,
+                    readable_auth_provider_id=sc.readable_auth_provider_id,
+                    connection_init_session_id=sc.connection_init_session_id,
+                    is_active=getattr(sc, "is_active", True),  # Default to True if not present
+                    # TODO: Add these when available
                     last_sync=None,  # TODO: Add sync summary
                     entity_count=0,  # TODO: Add entity count
+                    last_job_status=None,  # TODO: Add last job status
                 )
             )
 
@@ -661,45 +662,6 @@ class SourceConnectionService:
         return response
 
     # Helper methods
-    def _determine_auth_method(self, source_conn: Any) -> AuthenticationMethod:
-        """Determine authentication method from database state."""
-        # Check auth provider first
-        if (
-            hasattr(source_conn, "readable_auth_provider_id")
-            and source_conn.readable_auth_provider_id
-        ):
-            return AuthenticationMethod.AUTH_PROVIDER
-
-        # Check if OAuth flow is pending
-        if (
-            hasattr(source_conn, "connection_init_session_id")
-            and source_conn.connection_init_session_id
-        ):
-            if not source_conn.is_authenticated:
-                return AuthenticationMethod.OAUTH_BROWSER
-
-        # Check if we have a connection with credentials
-        if hasattr(source_conn, "connection_id") and source_conn.connection_id:
-            # TODO: Check credential type to distinguish between DIRECT, OAUTH_TOKEN, OAUTH_BYOC
-            # For now, default to DIRECT
-            return AuthenticationMethod.DIRECT
-
-        # Default to OAuth browser if not authenticated
-        if not source_conn.is_authenticated:
-            return AuthenticationMethod.OAUTH_BROWSER
-
-        return AuthenticationMethod.DIRECT
-
-    def _compute_status(self, source_conn: Any) -> SourceConnectionStatus:
-        """Compute status from source connection state."""
-        if not source_conn.is_authenticated:
-            return SourceConnectionStatus.PENDING_AUTH
-
-        # Check if manually disabled
-        if hasattr(source_conn, "is_active") and not source_conn.is_active:
-            return SourceConnectionStatus.INACTIVE
-
-        return SourceConnectionStatus.ACTIVE
 
     async def _trigger_sync_workflow(
         self,
@@ -942,7 +904,7 @@ class SourceConnectionService:
             ctx,
         )
 
-        # Complete the connection
+        # Complete the connection - also creates a sync if run_immediately is True
         source_conn = await self._complete_oauth_connection(
             db, source_conn_shell, init_session, token_response, ctx
         )
