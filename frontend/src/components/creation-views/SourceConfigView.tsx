@@ -89,6 +89,33 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
   const [customRedirectUrl, setCustomRedirectUrl] = useState('');
   const [showCustomRedirect, setShowCustomRedirect] = useState(false);
 
+  // Handle URL input with automatic https:// prefix
+  const handleRedirectUrlChange = (value: string) => {
+    const trimmed = value.trim();
+
+    // If user starts typing without protocol, automatically add https://
+    if (trimmed && !trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      // Check if it looks like a domain (contains dots or is localhost)
+      if (trimmed.includes('.') || trimmed.includes('localhost') || trimmed.includes(':')) {
+        setCustomRedirectUrl(`https://${trimmed}`);
+        return;
+      }
+    }
+
+    setCustomRedirectUrl(value);
+  };
+
+  // Generate default redirect URL with HTTPS
+  const getDefaultRedirectUrl = () => {
+    const origin = window.location.origin;
+    // Always use HTTPS by default, even for localhost
+    if (origin.startsWith('https://')) {
+      return `${origin}?oauth_return=true`;
+    }
+    // Convert HTTP to HTTPS for all origins (including localhost)
+    return origin.replace('http://', 'https://') + '?oauth_return=true';
+  };
+
   // Update store when connection name changes
   useEffect(() => {
     // Only update if the value actually changed
@@ -289,7 +316,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       } else if (authMode === 'oauth2') {
         // OAuth2 flow
         authentication = {
-          redirect_uri: customRedirectUrl.trim() || `${window.location.origin}?oauth_return=true`
+          redirect_uri: customRedirectUrl.trim() || getDefaultRedirectUrl()
         };
 
         // Add client credentials if BYOC or user chose to use own credentials
@@ -349,7 +376,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       if (authUrl) {
         setOAuthData(
           result.id,
-          payload.redirect_url || `${window.location.origin}?oauth_return=true`,
+          payload.redirect_url || getDefaultRedirectUrl(),
           authUrl
         );
 
@@ -798,7 +825,11 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                   {!showCustomRedirect && (
                     <button
                       type="button"
-                      onClick={() => setShowCustomRedirect(true)}
+                      onClick={() => {
+                        setShowCustomRedirect(true);
+                        // Pre-populate with https:// so user can continue typing
+                        setCustomRedirectUrl('https://');
+                      }}
                       className={cn(
                         "text-xs hover:underline transition-colors",
                         isDark
@@ -816,8 +847,8 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                     <ValidatedInput
                       type="text"
                       value={customRedirectUrl}
-                      onChange={setCustomRedirectUrl}
-                      placeholder={`${window.location.origin}?oauth_return=true`}
+                      onChange={handleRedirectUrlChange}
+                      placeholder={getDefaultRedirectUrl()}
                       validation={redirectUrlValidation}
                       className={cn(
                         "text-xs",
@@ -850,7 +881,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                       ? "bg-gray-900/50 text-gray-500 border border-gray-800"
                       : "bg-gray-50 text-gray-400 border border-gray-100"
                   )}>
-                    {`${window.location.origin}?oauth_return=true`}
+                    {getDefaultRedirectUrl()}
                   </div>
                 )}
               </div>

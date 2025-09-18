@@ -362,26 +362,72 @@ export const externalUserIdValidation: FieldValidation<string> = {
  */
 export const redirectUrlValidation: FieldValidation<string> = {
   field: 'redirectUrl',
-  debounceMs: 500,
+  debounceMs: 300,
   showOn: 'change',
   validate: (value: string): ValidationResult => {
     if (!value) return { isValid: true, severity: 'info' };
 
+    const trimmed = value.trim();
+
+    // Check if URL starts with protocol
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      return {
+        isValid: false,
+        hint: 'URL must start with http:// or https://',
+        severity: 'warning'
+      };
+    }
+
     try {
-      const url = new URL(value);
+      const url = new URL(trimmed);
+
+      // Check for valid protocol
       if (url.protocol !== 'http:' && url.protocol !== 'https:') {
         return {
           isValid: false,
-          hint: 'Must start with http:// or https://',
+          hint: 'Must use http:// or https:// protocol',
+          severity: 'warning'
+        };
+      }
+
+      // Check for valid hostname
+      if (!url.hostname || url.hostname.length === 0) {
+        return {
+          isValid: false,
+          hint: 'URL must include a valid hostname',
+          severity: 'warning'
+        };
+      }
+
+      // Check for localhost or valid domain
+      const isValidHostname =
+        url.hostname === 'localhost' ||
+        url.hostname.includes('.') ||
+        /^[a-zA-Z0-9-]+$/.test(url.hostname);
+
+      if (!isValidHostname) {
+        return {
+          isValid: false,
+          hint: 'Invalid hostname format',
+          severity: 'warning'
+        };
+      }
+
+      // Suggest HTTPS for production URLs
+      if (url.protocol === 'http:' && !url.hostname.includes('localhost')) {
+        return {
+          isValid: true,
+          hint: 'Consider using https:// for production URLs',
           severity: 'info'
         };
       }
+
       return { isValid: true, severity: 'info' };
     } catch {
       return {
         isValid: false,
         hint: 'Invalid URL format',
-        severity: 'info'
+        severity: 'warning'
       };
     }
   }
