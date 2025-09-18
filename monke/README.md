@@ -322,6 +322,9 @@ NOTION_AUTH_PROVIDER_ACCOUNT_ID=ca_xxx
 NOTION_AUTH_PROVIDER_AUTH_CONFIG_ID=ac_xxx
 ```
 
+__Gmail Composio config__
+To be able to delete entities from the source, explicitly add this scope to the scope: `https://mail.google.com/`.
+
 **For Direct Credentials (simpler but less secure):**
 ```bash
 # If not using Composio, provide tokens directly
