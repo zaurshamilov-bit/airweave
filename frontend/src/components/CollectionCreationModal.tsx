@@ -175,8 +175,8 @@ export const CollectionCreationModal: React.FC = () => {
   // Determine if we should show the visualization
   // Don't show visualization when adding to existing collection
   const showVisualization = !isAddingToExistingCollection() &&
-                           currentStep !== 'source-select' &&
-                           currentStep !== 'oauth-redirect';
+    currentStep !== 'source-select' &&
+    currentStep !== 'oauth-redirect';
 
   // Determine column widths based on step
   const getColumnWidths = () => {
@@ -245,10 +245,11 @@ export const CollectionCreationModal: React.FC = () => {
           <button
             onClick={handleClose}
             className={cn(
-              "absolute top-6 right-6 z-10 p-2 rounded-lg transition-colors",
+              "absolute top-4 right-4 z-50 p-2 rounded-lg transition-colors",
+              "bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm border shadow-sm",
               isDark
-                ? "hover:bg-gray-800 text-gray-400 hover:text-gray-200"
-                : "hover:bg-gray-100 text-gray-500 hover:text-gray-700"
+                ? "border-gray-700 hover:bg-gray-800 text-gray-400 hover:text-gray-200"
+                : "border-gray-200 hover:bg-gray-100 text-gray-500 hover:text-gray-700"
             )}
             aria-label="Close dialog"
           >

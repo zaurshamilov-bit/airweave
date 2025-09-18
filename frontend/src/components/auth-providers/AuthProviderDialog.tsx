@@ -174,7 +174,7 @@ export const AuthProviderDialog: React.FC<AuthProviderDialogProps> = ({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 className={cn(
-                    "max-w-4xl max-h-[90vh] p-0 overflow-hidden",
+                    "max-w-4xl max-h-[90vh] p-0 flex flex-col",
                     isDark ? "bg-card-solid border-border" : "bg-white"
                 )}
             >

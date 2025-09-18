@@ -417,9 +417,9 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
     }
 
     return (
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col min-h-0">
             {/* Content area - scrollable */}
-            <div className="px-8 py-10 flex-1 overflow-auto">
+            <div className="px-8 py-10 flex-1 overflow-auto min-h-0">
                 <div className="space-y-8">
                     {/* Header */}
                     <div>
@@ -603,7 +603,7 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
 
             {/* Bottom actions - Clean minimal */}
             <div className={cn(
-                "px-8 py-6 border-t",
+                "px-8 py-6 border-t flex-shrink-0",
                 isDark ? "border-gray-800" : "border-gray-200"
             )}>
                 <div className="flex gap-3">

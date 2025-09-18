@@ -2,10 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { useAuthProvidersStore } from '@/lib/stores/authProviders';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
-import { Check } from 'lucide-react';
+import { Check, ExternalLink } from 'lucide-react';
 import { getAuthProviderIconUrl } from '@/lib/utils/icons';
 import { ValidatedInput } from '@/components/ui/validated-input';
 import { authConfigIdValidation, accountIdValidation, projectIdValidation, environmentValidation, externalUserIdValidation } from '@/lib/validation/rules';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface AuthProviderSelectorProps {
   selectedProvider?: string;
@@ -160,9 +166,55 @@ export const AuthProviderSelector: React.FC<AuthProviderSelectorProps> = ({
       {/* Provider Configuration */}
       {selectedProviderConnection && (
         <div className="space-y-2.5">
-        <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-          Provider Configuration
-        </label>
+          <div className="flex items-center justify-between">
+            <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Provider Configuration
+            </label>
+
+            {/* Platform Buttons for Auth Providers */}
+            {(selectedProviderConnection.short_name === 'composio' || selectedProviderConnection.short_name === 'pipedream') && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => {
+                        const url = selectedProviderConnection.short_name === 'composio'
+                          ? 'https://platform.composio.dev/'
+                          : 'https://pipedream.com/';
+                        window.open(url, '_blank');
+                      }}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                        "border",
+                        isDark
+                          ? "bg-gray-800/50 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
+                          : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                      )}
+                    >
+                      <img
+                        src={getAuthProviderIconUrl(selectedProviderConnection.short_name, resolvedTheme)}
+                        alt={selectedProviderConnection.short_name}
+                        className="w-3 h-3 object-contain"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                      Get from {selectedProviderConnection.short_name === 'composio' ? 'Composio' : 'Pipedream'}
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      {selectedProviderConnection.short_name === 'composio'
+                        ? 'Opens Composio platform to retrieve your auth config ID and account ID'
+                        : 'Opens Pipedream platform to retrieve your project ID, account ID, and other credentials'
+                      }
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
 
           {getProviderConfigFields(selectedProviderConnection.short_name).map((field) => (
             <div key={field.name}>
