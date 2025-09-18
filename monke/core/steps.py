@@ -523,14 +523,56 @@ class VerifyPartialDeletionStep(TestStep):
             )
 
         async def check_deleted(entity: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
-            expected_token = entity.get("token") or str(
-                entity.get("id") or entity.get("gid") or entity.get("name", "")
+            # Prefer searching with the most specific identifier available
+            search_query = (
+                str(entity.get("id") or "")
+                or str(entity.get("gid") or "")
+                or str(entity.get("token") or "")
+                or str(entity.get("name") or "")
+                or (str(entity.get("path") or "").split("/")[-1])
+                or str(entity.get("url") or "")
             )
-            if not expected_token:
+            if not search_query:
                 return entity, False
-            present = await _token_present_in_collection(
-                client, self.config._collection_readable_id, expected_token, limit
+
+            results = await _search_collection_async(
+                client, self.config._collection_readable_id, search_query, limit
             )
+
+            def _values_equal(a: Any, b: Any) -> bool:
+                return str(a) == str(b)
+
+            # First, try to prove presence via exact field equality on common identifiers
+            keys_to_check = [
+                "id",
+                "gid",
+                "token",
+                "path",
+                "url",
+                "external_id",
+                "name",
+            ]
+            present = False
+            for r in results:
+                payload = r.get("payload", {}) or {}
+
+                # Exact match on any known identifier
+                for k in keys_to_check:
+                    ent_val = entity.get(k)
+                    pay_val = payload.get(k)
+                    if ent_val and pay_val and _values_equal(ent_val, pay_val):
+                        present = True
+                        break
+                if present:
+                    break
+
+                # Fallback: substring match on sufficiently long tokens only
+                token_val = entity.get("token")
+                if token_val and len(str(token_val)) >= 12:
+                    if str(token_val).lower() in str(payload).lower():
+                        present = True
+                        break
+
             return entity, (not present)
 
         results = await asyncio.gather(
