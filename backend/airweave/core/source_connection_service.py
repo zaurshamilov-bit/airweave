@@ -35,6 +35,27 @@ from airweave.schemas.source_connection import (
 
 
 class SourceConnectionService:
+    """Service for managing source connections and their lifecycle."""
+
+    def _get_default_cron_schedule(self, ctx: ApiContext) -> str:
+        """Generate a default daily cron schedule based on current UTC time.
+
+        Returns:
+            A cron expression for daily execution at the current UTC time.
+        """
+        from datetime import datetime, timezone
+
+        now_utc = datetime.now(timezone.utc)
+        minute = now_utc.minute
+        hour = now_utc.hour
+        # Format: minute hour day_of_month month day_of_week
+        # e.g., "30 14 * * *" = run at 14:30 every day
+        cron_schedule = f"{minute} {hour} * * *"
+        ctx.logger.info(
+            f"No cron schedule provided, defaulting to daily at {hour:02d}:{minute:02d} UTC"
+        )
+        return cron_schedule
+
     """Clean service with automatic auth method inference.
 
     Key improvements:
@@ -43,11 +64,14 @@ class SourceConnectionService:
     - Clean separation of concerns
     """
 
-    def _determine_auth_method(self, obj_in: SourceConnectionCreate) -> AuthenticationMethod:
+    def _determine_auth_method(
+        self, obj_in: SourceConnectionCreate, source_class: type[BaseSource]
+    ) -> AuthenticationMethod:
         """Determine authentication method from the nested authentication object.
 
         Args:
             obj_in: The source connection creation request
+            source_class: The source class to check supported auth methods
 
         Returns:
             The determined authentication method
@@ -56,6 +80,10 @@ class SourceConnectionService:
             HTTPException: If authentication type cannot be determined
         """
         auth = obj_in.authentication
+
+        # If no authentication provided, infer based on source capabilities
+        if auth is None:
+            return AuthenticationMethod.OAUTH_BROWSER
 
         if isinstance(auth, DirectAuthentication):
             return AuthenticationMethod.DIRECT
@@ -83,12 +111,16 @@ class SourceConnectionService:
 
         The authentication method is determined by the type of the authentication field.
         """
-        # Determine auth method from nested authentication type
-        auth_method = self._determine_auth_method(obj_in)
-
         # Get source and validate
         source = await self._get_and_validate_source(db, obj_in.short_name)
         source_class = self._get_source_class(source.class_name)
+
+        # Generate default name if not provided
+        if obj_in.name is None:
+            obj_in.name = f"{source.name} Connection"
+
+        # Determine auth method from nested authentication type
+        auth_method = self._determine_auth_method(obj_in, source_class)
 
         # Validate that source supports the auth method
         if not source_class.supports_auth_method(auth_method):
@@ -299,9 +331,9 @@ class SourceConnectionService:
         source = await self._get_and_validate_source(db, obj_in.short_name)
 
         # Extract credentials from nested authentication
-        if not isinstance(obj_in.authentication, DirectAuthentication):
+        if not obj_in.authentication or not isinstance(obj_in.authentication, DirectAuthentication):
             raise HTTPException(
-                status_code=400, detail="Invalid authentication type for direct auth"
+                status_code=400, detail="Direct authentication requires credentials"
             )
 
         # Validate credentials
@@ -336,9 +368,12 @@ class SourceConnectionService:
             )
             await uow.session.flush()
 
-            # Create sync
+            # Create sync WITHOUT Temporal schedule (we'll create it after source_connection is set)
             cron_schedule = obj_in.schedule.cron if obj_in.schedule else None
-            sync, sync_job = await self._create_sync(
+            if cron_schedule is None:
+                cron_schedule = self._get_default_cron_schedule(ctx)
+
+            sync, sync_job = await self._create_sync_without_schedule(
                 uow.session,
                 obj_in.name,
                 connection.id,
@@ -362,6 +397,18 @@ class SourceConnectionService:
                 ctx=ctx,
                 uow=uow,
             )
+            await uow.session.flush()
+
+            # Now create the Temporal schedule after source_connection is linked to sync
+            if cron_schedule and sync.id:
+                from airweave.platform.temporal.schedule_service import temporal_schedule_service
+
+                await temporal_schedule_service.create_or_update_schedule(
+                    sync_id=sync.id,
+                    cron_schedule=cron_schedule,
+                    db=uow.session,
+                    ctx=ctx,
+                )
 
             await uow.commit()
             await uow.session.refresh(source_conn)
@@ -385,11 +432,17 @@ class SourceConnectionService:
 
         source = await self._get_and_validate_source(db, obj_in.short_name)
 
-        # Extract OAuth config from nested authentication
-        if not isinstance(obj_in.authentication, OAuthBrowserAuthentication):
-            raise HTTPException(
-                status_code=400, detail="Invalid authentication type for OAuth browser"
-            )
+        # Extract OAuth config from nested authentication (or use defaults)
+        oauth_auth = None
+        if obj_in.authentication is not None:
+            if not isinstance(obj_in.authentication, OAuthBrowserAuthentication):
+                raise HTTPException(
+                    status_code=400, detail="Invalid authentication type for OAuth browser"
+                )
+            oauth_auth = obj_in.authentication
+        else:
+            # Create default OAuth browser authentication
+            oauth_auth = OAuthBrowserAuthentication()
 
         # Validate config
         validated_config = await self._validate_config_fields(
@@ -410,7 +463,7 @@ class SourceConnectionService:
         api_callback = f"{core_settings.api_url}/source-connections/callback"
 
         # Use custom client if provided
-        client_id = obj_in.authentication.client_id if obj_in.authentication.client_id else None
+        client_id = oauth_auth.client_id if oauth_auth.client_id else None
 
         provider_auth_url = await oauth2_service.generate_auth_url_with_redirect(
             oauth_settings,
@@ -468,9 +521,11 @@ class SourceConnectionService:
         source = await self._get_and_validate_source(db, obj_in.short_name)
 
         # Extract token from nested authentication
-        if not isinstance(obj_in.authentication, OAuthTokenAuthentication):
+        if not obj_in.authentication or not isinstance(
+            obj_in.authentication, OAuthTokenAuthentication
+        ):
             raise HTTPException(
-                status_code=400, detail="Invalid authentication type for OAuth token"
+                status_code=400, detail="OAuth token authentication requires an access token"
             )
 
         # Build OAuth credentials
@@ -511,9 +566,12 @@ class SourceConnectionService:
             )
             await uow.session.flush()
 
-            # Create sync
+            # Create sync WITHOUT Temporal schedule (we'll create it after source_connection is set)
             cron_schedule = obj_in.schedule.cron if obj_in.schedule else None
-            sync, sync_job = await self._create_sync(
+            if cron_schedule is None:
+                cron_schedule = self._get_default_cron_schedule(ctx)
+
+            sync, sync_job = await self._create_sync_without_schedule(
                 uow.session,
                 obj_in.name,
                 connection.id,
@@ -537,6 +595,18 @@ class SourceConnectionService:
                 ctx=ctx,
                 uow=uow,
             )
+            await uow.session.flush()
+
+            # Now create the Temporal schedule after source_connection is linked to sync
+            if cron_schedule and sync.id:
+                from airweave.platform.temporal.schedule_service import temporal_schedule_service
+
+                await temporal_schedule_service.create_or_update_schedule(
+                    sync_id=sync.id,
+                    cron_schedule=cron_schedule,
+                    db=uow.session,
+                    ctx=ctx,
+                )
 
             await uow.commit()
             await uow.session.refresh(source_conn)
@@ -559,9 +629,12 @@ class SourceConnectionService:
         from airweave.schemas.source_connection import OAuthBrowserAuthentication
 
         # Verify client credentials are present
-        if not isinstance(obj_in.authentication, OAuthBrowserAuthentication):
+        if not obj_in.authentication or not isinstance(
+            obj_in.authentication, OAuthBrowserAuthentication
+        ):
             raise HTTPException(
-                status_code=400, detail="Invalid authentication type for OAuth BYOC"
+                status_code=400,
+                detail="BYOC OAuth requires OAuth browser authentication with client credentials",
             )
 
         if not obj_in.authentication.client_id or not obj_in.authentication.client_secret:
@@ -584,9 +657,12 @@ class SourceConnectionService:
         source = await self._get_and_validate_source(db, obj_in.short_name)
 
         # Extract provider info from nested authentication
-        if not isinstance(obj_in.authentication, AuthProviderAuthentication):
+        if not obj_in.authentication or not isinstance(
+            obj_in.authentication, AuthProviderAuthentication
+        ):
             raise HTTPException(
-                status_code=400, detail="Invalid authentication type for auth provider"
+                status_code=400,
+                detail="Auth provider authentication requires provider configuration",
             )
 
         # Validate auth provider exists
@@ -621,9 +697,12 @@ class SourceConnectionService:
             )
             await uow.session.flush()
 
-            # Create sync
+            # Create sync WITHOUT Temporal schedule (we'll create it after source_connection is set)
             cron_schedule = obj_in.schedule.cron if obj_in.schedule else None
-            sync, sync_job = await self._create_sync(
+            if cron_schedule is None:
+                cron_schedule = self._get_default_cron_schedule(ctx)
+
+            sync, sync_job = await self._create_sync_without_schedule(
                 uow.session,
                 obj_in.name,
                 connection.id,
@@ -649,6 +728,18 @@ class SourceConnectionService:
                 auth_provider_id=obj_in.provider_id,
                 auth_provider_config=validated_auth_config,
             )
+            await uow.session.flush()
+
+            # Now create the Temporal schedule after source_connection is linked to sync
+            if cron_schedule and sync.id:
+                from airweave.platform.temporal.schedule_service import temporal_schedule_service
+
+                await temporal_schedule_service.create_or_update_schedule(
+                    sync_id=sync.id,
+                    cron_schedule=cron_schedule,
+                    db=uow.session,
+                    ctx=ctx,
+                )
 
             await uow.commit()
             await uow.session.refresh(source_conn)
@@ -972,6 +1063,7 @@ class SourceConnectionService:
     _create_connection = source_connection_helpers.create_connection
     _get_collection = source_connection_helpers.get_collection
     _create_sync = source_connection_helpers.create_sync
+    _create_sync_without_schedule = source_connection_helpers.create_sync_without_schedule
     _create_source_connection = source_connection_helpers.create_source_connection
     _build_source_connection_response = source_connection_helpers.build_source_connection_response
     _create_init_session = source_connection_helpers.create_init_session

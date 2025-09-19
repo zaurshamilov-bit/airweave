@@ -38,6 +38,7 @@ Environment variables:
   STRIPE_API_KEY     Stripe API key (required)
   OPENAI_API_KEY     OpenAI API key (optional for local)
   AIRWEAVE_API_KEY   API key for dev/prod environments
+  SKIP_STARTUP       Skip running start.sh (default: false)
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -49,12 +50,22 @@ Environment variables:
         help="Environment to test against (default: local)",
     )
 
+    parser.add_argument(
+        "--skip-startup",
+        action="store_true",
+        help="Skip running start.sh and container health checks (assumes services are already running)",
+    )
+
     args = parser.parse_args()
 
     # Get API keys from environment variables
     args.stripe_api_key = os.environ.get("STRIPE_API_KEY")
     args.openai_api_key = os.environ.get("OPENAI_API_KEY")
     args.api_key = os.environ.get("AIRWEAVE_API_KEY")
+
+    # Check SKIP_STARTUP environment variable if not set via command line
+    if not args.skip_startup:
+        args.skip_startup = os.environ.get("SKIP_STARTUP", "false").lower() in ["true", "1", "yes"]
 
     # Validate Stripe API key (always required)
     if not args.stripe_api_key:
@@ -87,8 +98,13 @@ def main():
     """Main test execution orchestrator."""
     args = parse_arguments()
 
+    # Show skip-startup status if enabled
+    if args.skip_startup:
+        print("\n⚡ Skip-startup mode enabled - assuming services are already running")
+        print("   (Use --skip-startup flag or set SKIP_STARTUP=true to enable)")
+
     # Setup environment
-    api_url = setup_environment(args.env, args.openai_api_key)
+    api_url = setup_environment(args.env, args.openai_api_key, skip_startup=args.skip_startup)
     if not api_url:
         print("❌ Failed to setup environment")
         sys.exit(1)

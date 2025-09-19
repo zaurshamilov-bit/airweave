@@ -121,14 +121,22 @@ AuthenticationConfig = Union[
 class SourceConnectionCreate(BaseModel):
     """Create source connection with nested authentication."""
 
-    name: str = Field(..., min_length=4, max_length=42, description="Connection name")
+    name: Optional[str] = Field(
+        None,
+        min_length=4,
+        max_length=42,
+        description="Connection name (defaults to '{Source Name} Connection')",
+    )
     short_name: str = Field(..., description="Source identifier (e.g., 'slack', 'github')")
     readable_collection_id: str = Field(..., description="Collection readable ID")
     description: Optional[str] = Field(None, max_length=255, description="Connection description")
     config: Optional[Dict[str, Any]] = Field(None, description="Source-specific configuration")
     schedule: Optional[ScheduleConfig] = None
     sync_immediately: bool = Field(True, description="Run initial sync after creation")
-    authentication: AuthenticationConfig = Field(..., description="Authentication configuration")
+    authentication: Optional[AuthenticationConfig] = Field(
+        None,
+        description="Authentication config (defaults to OAuth browser flow for OAuth sources)",
+    )
 
 
 class SourceConnectionUpdate(BaseModel):
