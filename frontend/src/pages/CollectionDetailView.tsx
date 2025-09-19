@@ -865,7 +865,7 @@ const Collections = () => {
                             ))}
 
                             {/* Add Source Button - Now in the source connections row */}
-                            <TooltipProvider delayDuration={100}>
+                            <TooltipProvider delayDuration={0}>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <div
@@ -878,17 +878,17 @@ const Collections = () => {
                                                 DESIGN_SYSTEM.radius.button,
                                                 DESIGN_SYSTEM.transitions.standard,
                                                 "border-2 border-dashed",
-                                                (!sourceConnectionsAllowed || isCheckingUsage)
+                                                (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage)
                                                     ? "opacity-50 cursor-not-allowed border-border border"
                                                     : isDark
                                                         ? "border-blue-500 bg-blue-500/35 hover:bg-blue-500/20 hover:border-blue-400/80 border"
                                                         : "border-blue-400 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 border"
                                             )}
-                                            onClick={(!sourceConnectionsAllowed || isCheckingUsage) ? undefined : () => setShowAddSourceDialog(true)}
+                                            onClick={(!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage) ? undefined : () => setShowAddSourceDialog(true)}
                                         >
                                             <Plus className={cn(
                                                 DESIGN_SYSTEM.icons.large,
-                                                (!sourceConnectionsAllowed || isCheckingUsage)
+                                                (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage)
                                                     ? "text-black"
                                                     : isDark ? "text-white" : "text-black"
                                             )} strokeWidth={1.5} />
@@ -899,18 +899,33 @@ const Collections = () => {
                                             )}>Add Source</span>
                                         </div>
                                     </TooltipTrigger>
-                                    {!sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'usage_limit_exceeded' && (
+                                    {(!entitiesAllowed || !sourceConnectionsAllowed) && (
                                         <TooltipContent className="max-w-xs">
                                             <p className={DESIGN_SYSTEM.typography.sizes.body}>
-                                                Source connection limit reached.{' '}
-                                                <a
-                                                    href="/organization/settings?tab=billing"
-                                                    className="underline"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                >
-                                                    Upgrade your plan
-                                                </a>
-                                                {' '}for more connections.
+                                                {(!entitiesAllowed && entitiesCheckDetails?.reason === 'usage_limit_exceeded') && (
+                                                    <>Entity processing limit reached.{' '}
+                                                        <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Upgrade your plan</a>
+                                                        {' '}to add new sources.
+                                                    </>
+                                                )}
+                                                {(!entitiesAllowed && entitiesCheckDetails?.reason === 'payment_required') && (
+                                                    <>Billing issue detected.{' '}
+                                                        <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Update billing</a>
+                                                        {' '}to add new sources.
+                                                    </>
+                                                )}
+                                                {(entitiesAllowed && !sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'usage_limit_exceeded') && (
+                                                    <>Source connection limit reached.{' '}
+                                                        <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Upgrade your plan</a>
+                                                        {' '}for more connections.
+                                                    </>
+                                                )}
+                                                {(entitiesAllowed && !sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'payment_required') && (
+                                                    <>Billing issue detected.{' '}
+                                                        <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Update billing</a>
+                                                        {' '}to add new sources.
+                                                    </>
+                                                )}
                                             </p>
                                         </TooltipContent>
                                     )}
@@ -924,7 +939,7 @@ const Collections = () => {
                                 isDark ? "border-border bg-muted/20 text-muted-foreground" : "border-border bg-background text-muted-foreground"
                             )}>
                                 <p className="mb-2">No source connections found.</p>
-                                <TooltipProvider delayDuration={100}>
+                                <TooltipProvider delayDuration={0}>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <span tabIndex={0}>
@@ -935,28 +950,43 @@ const Collections = () => {
                                                         DESIGN_SYSTEM.buttons.heights.secondary,
                                                         DESIGN_SYSTEM.buttons.padding.secondary,
                                                         isDark ? "border-border-border hover:bg-muted" : "border-border hover:bg-muted",
-                                                        (!sourceConnectionsAllowed || isCheckingUsage) && "opacity-50 cursor-not-allowed"
+                                                        (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage) && "opacity-50 cursor-not-allowed"
                                                     )}
-                                                    onClick={() => setShowAddSourceDialog(true)}
-                                                    disabled={!sourceConnectionsAllowed || isCheckingUsage}
+                                                    onClick={() => { if (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage) return; setShowAddSourceDialog(true); }}
+                                                    disabled={!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage}
                                                 >
                                                     <Plus className={cn(DESIGN_SYSTEM.icons.button, "mr-2")} />
                                                     Add a source connection
                                                 </Button>
                                             </span>
                                         </TooltipTrigger>
-                                        {!sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'usage_limit_exceeded' && (
+                                        {(!entitiesAllowed || !sourceConnectionsAllowed) && (
                                             <TooltipContent className="max-w-xs">
                                                 <p className={DESIGN_SYSTEM.typography.sizes.body}>
-                                                    Source connection limit reached.{' '}
-                                                    <a
-                                                        href="/organization/settings?tab=billing"
-                                                        className="underline"
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    >
-                                                        Upgrade your plan
-                                                    </a>
-                                                    {' '}for more connections.
+                                                    {(!entitiesAllowed && entitiesCheckDetails?.reason === 'usage_limit_exceeded') && (
+                                                        <>Entity processing limit reached.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Upgrade your plan</a>
+                                                            {' '}to add new sources.
+                                                        </>
+                                                    )}
+                                                    {(!entitiesAllowed && entitiesCheckDetails?.reason === 'payment_required') && (
+                                                        <>Billing issue detected.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Update billing</a>
+                                                            {' '}to add new sources.
+                                                        </>
+                                                    )}
+                                                    {(entitiesAllowed && !sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'usage_limit_exceeded') && (
+                                                        <>Source connection limit reached.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Upgrade your plan</a>
+                                                            {' '}for more connections.
+                                                        </>
+                                                    )}
+                                                    {(entitiesAllowed && !sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'payment_required') && (
+                                                        <>Billing issue detected.{' '}
+                                                            <a href="/organization/settings?tab=billing" className="underline" onClick={(e) => e.stopPropagation()}>Update billing</a>
+                                                            {' '}to add new sources.
+                                                        </>
+                                                    )}
                                                 </p>
                                             </TooltipContent>
                                         )}

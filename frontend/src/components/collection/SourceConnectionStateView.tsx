@@ -20,6 +20,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { DESIGN_SYSTEM } from '@/lib/design-system';
+import { ActionCheckResponse } from '@/types';
 
 // Source Connection interface - matches backend schema
 interface SourceConnection {
@@ -65,6 +66,9 @@ const SourceConnectionStateView: React.FC<Props> = ({
   const [isCancelling, setIsCancelling] = useState(false);
   const [nextRunTime, setNextRunTime] = useState<string | null>(null);
   const [lastRanDisplay, setLastRanDisplay] = useState<string>('Never');
+  const [entitiesAllowed, setEntitiesAllowed] = useState<boolean>(true);
+  const [entitiesCheckDetails, setEntitiesCheckDetails] = useState<ActionCheckResponse | null>(null);
+  const [isCheckingUsage, setIsCheckingUsage] = useState<boolean>(true);
 
   const mediator = useRef<EntityStateMediator | null>(null);
   const { resolvedTheme } = useTheme();
@@ -285,7 +289,46 @@ const SourceConnectionStateView: React.FC<Props> = ({
     }
   }, [state?.syncStatus, state?.error, fetchSourceConnection]);
 
+  const checkEntitiesAllowed = useCallback(async () => {
+    try {
+      setIsCheckingUsage(true);
+      const response = await apiClient.get('/usage/check-action?action=entities');
+      if (response.ok) {
+        const data: ActionCheckResponse = await response.json();
+        setEntitiesAllowed(data.allowed);
+        setEntitiesCheckDetails(data);
+      } else {
+        setEntitiesAllowed(true);
+        setEntitiesCheckDetails(null);
+      }
+    } catch (e) {
+      setEntitiesAllowed(true);
+      setEntitiesCheckDetails(null);
+    } finally {
+      setIsCheckingUsage(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkEntitiesAllowed();
+  }, [checkEntitiesAllowed]);
+
+  // Re-check when totals or sync state changes
+  useEffect(() => {
+    void checkEntitiesAllowed();
+  }, [state?.totalEntities, state?.syncStatus, checkEntitiesAllowed]);
+
   const handleRunSync = async () => {
+    if (!entitiesAllowed || isCheckingUsage) {
+      toast({
+        title: "Limit reached",
+        description: entitiesCheckDetails?.reason === 'usage_limit_exceeded'
+          ? "Entity processing limit reached. Upgrade your plan to continue syncing."
+          : "Sync is currently blocked by billing status.",
+        variant: 'destructive'
+      });
+      return;
+    }
     try {
       setIsRunningSync(true);
       const response = await apiClient.post(`/source-connections/${sourceConnectionId}/run`);
@@ -465,13 +508,13 @@ const SourceConnectionStateView: React.FC<Props> = ({
         {/* Settings and Action Buttons */}
         <div className="flex gap-1.5 items-center">
           {/* Refresh/Cancel Button */}
-          <TooltipProvider delayDuration={100}>
+          <TooltipProvider delayDuration={0}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
                   onClick={isSyncing ? handleCancelSync : handleRunSync}
-                  disabled={isRunningSync || isCancelling}
+                  disabled={isRunningSync || isCancelling || !entitiesAllowed || isCheckingUsage}
                   className={cn(
                     "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
                     isSyncing
@@ -482,13 +525,19 @@ const SourceConnectionStateView: React.FC<Props> = ({
                         : isDark
                           ? "bg-red-900/30 border-red-700 hover:bg-red-900/50 cursor-pointer"
                           : "bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer"
-                      : isRunningSync
+                      : (isRunningSync || !entitiesAllowed || isCheckingUsage)
                         ? "bg-muted border-border cursor-not-allowed"
                         : isDark
                           ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
                           : "bg-white border-border hover:bg-muted cursor-pointer"
                   )}
-                  title={isSyncing ? (isCancelling ? "Cancelling sync..." : "Cancel sync") : (isRunningSync ? "Starting sync..." : "Refresh data")}
+                  title={isSyncing
+                    ? (isCancelling ? "Cancelling sync..." : "Cancel sync")
+                    : (isRunningSync
+                      ? "Starting sync..."
+                      : (!entitiesAllowed
+                        ? (entitiesCheckDetails?.reason === 'usage_limit_exceeded' ? "Entity processing limit reached — upgrade to sync" : "Billing issue — update to sync")
+                        : (isCheckingUsage ? "Checking usage..." : "Refresh data")))}
                 >
                   {isSyncing ? (
                     isCancelling ? (
@@ -499,7 +548,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
                   ) : (
                     <RefreshCw className={cn(
                       "h-3 w-3 text-muted-foreground",
-                      isRunningSync && "animate-spin"
+                      (isRunningSync || isCheckingUsage) && "animate-spin"
                     )} />
                   )}
                 </button>
@@ -507,12 +556,22 @@ const SourceConnectionStateView: React.FC<Props> = ({
               <TooltipContent>
                 <p className="text-xs">
                   {isSyncing
-                    ? isCancelling
-                      ? "Cancelling sync..."
-                      : "Cancel sync"
-                    : isRunningSync
+                    ? (isCancelling ? "Cancelling sync..." : "Cancel sync")
+                    : (isRunningSync
                       ? "Starting sync..."
-                      : "Refresh data"}
+                      : (!entitiesAllowed
+                        ? (<>
+                          {entitiesCheckDetails?.reason === 'usage_limit_exceeded' ? 'Entity processing limit reached. ' : 'Billing issue detected. '}
+                          <a
+                            href="/organization/settings?tab=billing"
+                            className="underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {entitiesCheckDetails?.reason === 'usage_limit_exceeded' ? 'Upgrade your plan' : 'Update billing'}
+                          </a>
+                          {' '}to continue syncing.
+                        </>)
+                        : (isCheckingUsage ? 'Checking usage...' : 'Refresh data')))}
                 </p>
               </TooltipContent>
             </Tooltip>

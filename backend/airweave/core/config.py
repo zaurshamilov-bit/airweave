@@ -138,6 +138,7 @@ class Settings(BaseSettings):
     STRIPE_PRO_YEARLY: str = ""
     STRIPE_TEAM_MONTHLY: str = ""
     STRIPE_TEAM_YEARLY: str = ""
+    STRIPE_YEARLY_DISCOUNT_COUPON_ID: str = ""
 
     # Email settings - only for production Airweave instance
     RESEND_API_KEY: Optional[str] = None
