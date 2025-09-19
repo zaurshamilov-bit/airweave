@@ -59,38 +59,60 @@ class OrganizationService:
             Exception: If any step fails, all changes are rolled back
         """
         auth0_org_data = None
+        auth0_org_id = None
         stripe_customer = None
 
+        # Determine whether to use Auth0 in this environment
+        use_auth0 = bool(settings.AUTH_ENABLED and auth0_management_client)
+
         try:
-            # Step 1: Create Auth0 organization
-            logger.info(f"Creating Auth0 organization for: {org_data.name}")
-            auth0_org_data = await auth0_management_client.create_organization(
-                name=self._create_org_name(org_data),
-                display_name=org_data.name,
-            )
-            auth0_org_id = auth0_org_data["id"]
+            # Step 1: Create Auth0 organization (only when enabled and configured)
+            if use_auth0:
+                logger.info(f"Creating Auth0 organization for: {org_data.name}")
+                auth0_org_data = await auth0_management_client.create_organization(
+                    name=self._create_org_name(org_data),
+                    display_name=org_data.name,
+                )
+                auth0_org_id = auth0_org_data["id"]
 
-            # Add user to Auth0 organization as owner
-            await auth0_management_client.add_user_to_organization(
-                auth0_org_id, owner_user.auth0_id
-            )
+                # Add user to Auth0 organization as owner
+                await auth0_management_client.add_user_to_organization(
+                    auth0_org_id, owner_user.auth0_id
+                )
 
-            # Enable default connections for the new organization
-            await self._setup_auth0_connections(auth0_org_id)
+                # Enable default connections for the new organization
+                await self._setup_auth0_connections(auth0_org_id)
 
-            logger.info(f"Successfully created Auth0 organization: {auth0_org_id}")
+                logger.info(f"Successfully created Auth0 organization: {auth0_org_id}")
+            else:
+                logger.info(
+                    "AUTH disabled or Auth0 client not configured; skipping Auth0 org creation"
+                )
 
             # Step 2: Create Stripe customer if enabled
             if settings.STRIPE_ENABLED:
                 logger.info(f"Creating Stripe customer for: {org_data.name}")
+                # Optional test clock support for local/testing
+                test_clock_id = None
+                try:
+                    # Read from org_data.org_metadata.onboarding if present
+                    if hasattr(org_data, "org_metadata") and org_data.org_metadata:
+                        onboarding = org_data.org_metadata.get("onboarding", {})
+                        tc = onboarding.get("stripe_test_clock")
+                        if tc:
+                            test_clock_id = tc
+                except Exception:
+                    test_clock_id = None
+
                 stripe_customer = await stripe_client.create_customer(
                     email=owner_user.email,
                     name=org_data.name,
                     metadata={
-                        "auth0_org_id": auth0_org_id,
+                        "auth0_org_id": auth0_org_id or "",
                         "owner_user_id": str(owner_user.id),
                         "organization_name": org_data.name,
                     },
+                    test_clock=test_clock_id,
                 )
                 logger.info(f"Created Stripe customer: {stripe_customer.id}")
 

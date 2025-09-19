@@ -1690,7 +1690,7 @@ class BillingService:
         log.warning(f"Payment failed for org {org_id}")
 
     async def get_subscription_info(
-        self, db: AsyncSession, organization_id: UUID
+        self, db: AsyncSession, organization_id: UUID, *, at: Optional[datetime] = None
     ) -> SubscriptionInfo:
         """Get comprehensive subscription information for an organization.
 
@@ -1769,7 +1769,11 @@ class BillingService:
 
         # Consider subscription "active" only if we have an active/current billing period.
         # This gates access when Stripe webhooks are not processed yet (both paid and developer).
-        current_period = await self.get_current_billing_period(db, organization_id)
+        current_period = (
+            await self.get_current_billing_period_at(db, organization_id, at)
+            if at is not None
+            else await self.get_current_billing_period(db, organization_id)
+        )
 
         return SubscriptionInfo(
             plan=billing_model.billing_plan,
@@ -1919,6 +1923,20 @@ class BillingService:
             Current billing period or None
         """
         period = await crud.billing_period.get_current_period(db, organization_id=organization_id)
+        return (
+            schemas.BillingPeriod.model_validate(period, from_attributes=True) if period else None
+        )
+
+    async def get_current_billing_period_at(
+        self, db: AsyncSession, organization_id: UUID, at: datetime
+    ) -> Optional[schemas.BillingPeriod]:
+        """Get the active billing period for an organization at a specific time.
+
+        Useful for tests that simulate time (e.g., Stripe Test Clock).
+        """
+        period = await crud.billing_period.get_current_period_at(
+            db, organization_id=organization_id, at=at
+        )
         return (
             schemas.BillingPeriod.model_validate(period, from_attributes=True) if period else None
         )

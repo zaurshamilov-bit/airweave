@@ -46,7 +46,11 @@ class StripeClient:
             return "".join(char for char in text if ord(char) < 128)
 
     async def create_customer(
-        self, email: str, name: str, metadata: Optional[Dict[str, str]] = None
+        self,
+        email: str,
+        name: str,
+        metadata: Optional[Dict[str, str]] = None,
+        test_clock: Optional[str] = None,
     ) -> stripe.Customer:
         """Create a Stripe customer.
 
@@ -74,9 +78,15 @@ class StripeClient:
                     clean_value = self._sanitize_for_stripe(str(value))
                     clean_metadata[clean_key] = clean_value
 
-            return await stripe.Customer.create_async(
-                email=clean_email, name=clean_name, metadata=clean_metadata
-            )
+            params: Dict[str, object] = {
+                "email": clean_email,
+                "name": clean_name,
+                "metadata": clean_metadata,
+            }
+            if test_clock:
+                params["test_clock"] = test_clock
+
+            return await stripe.Customer.create_async(**params)
         except StripeError as e:
             logger.error(f"Failed to create Stripe customer: {e}")
             raise ExternalServiceError(
