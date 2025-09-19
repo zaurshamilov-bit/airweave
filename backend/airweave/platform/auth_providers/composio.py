@@ -8,8 +8,7 @@ from fastapi import HTTPException
 from airweave.core.credential_sanitizer import (
     safe_log_credentials,
     sanitize_credentials_dict,
-
-from airweave.platform.auth.schemas import AuthType
+)
 from airweave.platform.auth_providers._base import BaseAuthProvider
 from airweave.platform.decorators import auth_provider
 
