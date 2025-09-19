@@ -7,7 +7,7 @@ responses to entity objects.
 
 import asyncio
 from datetime import datetime
-from typing import Any, AsyncGenerator, ClassVar, Dict, List, Optional, Set, Tuple
+from typing import Any, AsyncGenerator, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
 import httpx
@@ -56,10 +56,25 @@ class NotionSource(BaseSource):
     RATE_LIMIT_PERIOD = 1.0  # Time period in seconds
     MAX_RETRIES = 5  # Increased from 3
 
-    # Class-level shared rate limiter
-    _shared_rate_limiter: ClassVar[Optional[asyncio.Semaphore]] = None
-    _shared_request_times: ClassVar[List[float]] = []
-    _shared_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
+    class NotionAccessError(Exception):
+        """Non-retryable access/shape error from Notion.
+
+        Raised for permission or structural cases that won't succeed on retry
+        (e.g., 403/404, or specific 400 validation for linked views).
+        """
+
+        def __init__(self, status: int, message: str, url: str):
+            """Initialize a non-retryable Notion access/shape error.
+
+            Args:
+                status: HTTP status code returned by Notion.
+                message: Short explanation extracted from Notion's response.
+                url: The Notion API URL that was called.
+            """
+            super().__init__(f"HTTP {status} - {message} ({url})")
+            self.status = status
+            self.message = message
+            self.url = url
 
     @classmethod
     async def create(cls, access_token, config: Optional[Dict[str, Any]] = None) -> "NotionSource":
@@ -85,37 +100,6 @@ class NotionSource(BaseSource):
 
         return instance
 
-    @classmethod
-    async def _get_shared_rate_limiter(cls):
-        """Get or create the shared rate limiter for all Notion instances."""
-        if cls._shared_rate_limiter is None:
-            cls._shared_rate_limiter = asyncio.Semaphore(cls.RATE_LIMIT_REQUESTS)
-        return cls._shared_rate_limiter
-
-    @classmethod
-    async def _shared_wait_for_rate_limit(cls):
-        """Shared rate limiting across all Notion instances."""
-        async with cls._shared_lock:
-            current_time = asyncio.get_event_loop().time()
-
-            # Remove old request times
-            cls._shared_request_times = [
-                t for t in cls._shared_request_times if current_time - t < cls.RATE_LIMIT_PERIOD
-            ]
-
-            if len(cls._shared_request_times) >= cls.RATE_LIMIT_REQUESTS:
-                sleep_time = cls._shared_request_times[0] + cls.RATE_LIMIT_PERIOD - current_time
-                if sleep_time > 0:
-                    await asyncio.sleep(sleep_time)
-
-                # Clean up again after waiting
-                current_time = asyncio.get_event_loop().time()
-                cls._shared_request_times = [
-                    t for t in cls._shared_request_times if current_time - t < cls.RATE_LIMIT_PERIOD
-                ]
-
-            cls._shared_request_times.append(current_time)
-
     def __init__(self):
         """Initialize rate limiting state and tracking."""
         super().__init__()
@@ -136,13 +120,6 @@ class NotionSource(BaseSource):
             "max_page_depth": 0,
         }
         logger.info("Initialized comprehensive Notion source with content aggregation")
-        self._client_ref = None
-
-        # ---- new: per-instance gating for lazy materialization ----
-        self.batch_generation: bool = True  # enable gate by default
-        self.batch_size: int = 6  # max concurrent materializations
-        self._materialize_semaphore: asyncio.Semaphore = asyncio.Semaphore(self.batch_size)
-        # -----------------------------------------------------------
 
     async def _wait_for_rate_limit(self):
         """Implement rate limiting for Notion API requests."""
@@ -200,16 +177,45 @@ class NotionSource(BaseSource):
 
         try:
             response = await client.get(url, headers=headers, timeout=self.TIMEOUT_SECONDS)
-            self.logger.debug(f"GET response from {url}: status={response.status_code}")
+            status = response.status_code
+            self.logger.debug(f"GET response from {url}: status={status}")
 
-            if response.status_code != 200:
-                self.logger.warning(
-                    f"Non-200 response from Notion API: {response.status_code} for {url}"
-                )
-                self.logger.debug(f"Response body: {response.text[:200]}...")
+            if status != 200:
+                body_text = response.text[:200] if getattr(response, "text", None) else ""
+                self.logger.warning(f"Non-200 response from Notion API: {status} for {url}")
+                self.logger.debug(f"Response body: {body_text}...")
 
+                # Determine path
+                is_pages = "/v1/pages/" in url
+                is_databases = "/v1/databases/" in url
+
+                # Parse message if available
+                msg = body_text
+                try:
+                    body_json = response.json()
+                    if isinstance(body_json, dict):
+                        msg = str(body_json.get("message", msg))
+                except Exception:
+                    pass
+
+                # Non-retryable: inaccessible parents (404/403) or child DB validation 400
+                if is_pages and status in (403, 404):
+                    raise NotionSource.NotionAccessError(status, msg or "access denied", url)
+                if is_databases and (
+                    status in (403, 404)
+                    or (
+                        status == 400 and "does not contain any data sources" in (msg or "").lower()
+                    )
+                ):
+                    raise NotionSource.NotionAccessError(status, msg or "validation_error", url)
+
+            # Fallback to standard behavior (lets tenacity retry on HTTPStatusError)
             response.raise_for_status()
             return response.json()
+        except NotionSource.NotionAccessError as e:
+            # Known inaccessibility: log as warning (no retry by design)
+            self.logger.warning(f"Error during GET request to {url}: {str(e)}")
+            raise
         except Exception as e:
             self.logger.error(f"Error during GET request to {url}: {str(e)}")
             raise
@@ -245,6 +251,10 @@ class NotionSource(BaseSource):
 
             response.raise_for_status()
             return response.json()
+        except NotionSource.NotionAccessError as e:
+            # Not used in POST flow currently, keep symmetry if added later
+            self.logger.warning(f"Error during POST request to {url}: {str(e)}")
+            raise
         except Exception as e:
             self.logger.error(f"Error during POST request to {url}: {str(e)}")
             raise
@@ -276,6 +286,9 @@ class NotionSource(BaseSource):
                 has_more = response.get("has_more", False)
                 start_cursor = response.get("next_cursor")
 
+            except NotionSource.NotionAccessError as e:
+                self.logger.warning(f"Search access issue for {object_type}: {str(e)}")
+                raise
             except Exception as e:
                 self.logger.error(f"Error searching for {object_type}: {str(e)}")
                 raise
@@ -303,6 +316,9 @@ class NotionSource(BaseSource):
                 has_more = response.get("has_more", False)
                 start_cursor = response.get("next_cursor")
 
+            except NotionSource.NotionAccessError as e:
+                self.logger.warning(f"Database query access issue for {database_id}: {str(e)}")
+                raise
             except Exception as e:
                 self.logger.error(f"Error querying database {database_id}: {str(e)}")
                 raise
@@ -362,22 +378,37 @@ class NotionSource(BaseSource):
                                 )
                             ]
 
-                            # Always use lazy loading for better performance
-                            page_entity = await self._create_lazy_page_entity(
-                                page, page_breadcrumbs, database_id, schema
+                            # Eagerly build page and files for child database page
+                            page_entity, files = await self._create_comprehensive_page_entity(
+                                client, page, page_breadcrumbs, database_id, schema
                             )
                             yield page_entity
 
-                            # Don't yield files separately - they'll be handled
-                            # during materialization
+                            for file_entity in files:
+                                processed = await self._process_and_yield_file(file_entity)
+                                if processed:
+                                    yield processed
+
                             self._processed_pages.add(page_id)
 
+                        except NotionSource.NotionAccessError as e:
+                            self.logger.warning(
+                                f"Access issue processing child database page {page_id}: {str(e)}"
+                            )
+                            continue
                         except Exception as e:
                             self.logger.error(
                                 f"Error processing child database page {page_id}: {str(e)}"
                             )
                             continue
 
+                except NotionSource.NotionAccessError as e:
+                    status = e.status
+                    self.logger.warning(
+                        f"Child database {database_id} not accessible ({status}). Skipping."
+                    )
+                    self._processed_databases.add(database_id)
+                    continue
                 except httpx.HTTPStatusError as e:
                     status = e.response.status_code
                     msg = ""
@@ -583,6 +614,9 @@ class NotionSource(BaseSource):
                 has_more = response.get("has_more", False)
                 start_cursor = response.get("next_cursor")
 
+            except NotionSource.NotionAccessError as e:
+                self.logger.warning(f"Access issue extracting blocks from {block_id}: {str(e)}")
+                raise
             except Exception as e:
                 self.logger.error(f"Error extracting blocks from {block_id}: {str(e)}")
                 raise
@@ -1111,11 +1145,6 @@ class NotionSource(BaseSource):
 
         try:
             async with httpx.AsyncClient() as client:
-                self._client_ref = client  # Store for lazy operations
-
-                # Process databases and pages as we discover them
-                # This allows the orchestrator to start processing immediately
-
                 # Phase 1 & 2: Discover and yield databases with their schemas
                 self.logger.info("Phase 1 & 2: Streaming database discovery and schema analysis")
                 async for entity in self._stream_database_discovery(client):
@@ -1126,7 +1155,7 @@ class NotionSource(BaseSource):
                 async for entity in self._stream_page_discovery(client):
                     yield entity
 
-                # Phase 4: Process any child databases found during page processing
+                # Phase 4: Process any remaining child databases found during page processing
                 self.logger.info("Phase 4: Processing child databases")
                 async for entity in self._process_child_databases(client):
                     yield entity
@@ -1142,62 +1171,72 @@ class NotionSource(BaseSource):
     async def _stream_database_discovery(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[ChunkEntity, None]:
-        """Stream database discovery and immediately yield database entities with their pages."""
-        self.loggerinfo = self.logger.info  # micro-opt for f-strings below (no functional change)
-        self.loggerinfo("Streaming database discovery...")
+        """Discover databases and delegate per-database processing to a helper.
 
-        # Search for databases and process them one by one
+        Keeping this wrapper minimal satisfies complexity limits while preserving logic.
+        """
+        self.logger.info("Streaming database discovery...")
+
         async for database in self._search_objects(client, "database"):
             database_id = database["id"]
             if database_id in self._processed_databases:
                 continue
-
             self._stats["databases_found"] += 1
+            async for entity in self._process_single_database(client, database_id):
+                yield entity
 
-            try:
-                # Get the database schema
-                self.loggerinfo(f"Fetching schema for database: {database_id}")
-                schema = await self._get_with_auth(
-                    client, f"https://api.notion.com/v1/databases/{database_id}"
-                )
-                self._processed_databases.add(database_id)
+    async def _process_single_database(
+        self, client: httpx.AsyncClient, database_id: str
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Process one database: fetch schema, emit DB entity, pages, files, child DBs."""
+        try:
+            self.logger.info(f"Fetching schema for database: {database_id}")
+            schema = await self._get_with_auth(
+                client, f"https://api.notion.com/v1/databases/{database_id}"
+            )
+            self._processed_databases.add(database_id)
 
-                # Yield the database entity immediately
-                database_entity = self._create_database_entity(schema)
-                yield database_entity
+            database_entity = self._create_database_entity(schema)
+            yield database_entity
 
-                database_title = self._extract_rich_text_plain(schema.get("title", []))
-                self.loggerinfo(f"Processing pages in database: {database_title}")
+            database_title = self._extract_rich_text_plain(schema.get("title", []))
+            self.logger.info(f"Processing pages in database: {database_title}")
 
-                # Query and yield pages in this database
-                async for page in self._query_database_pages(client, database_id):
-                    page_id = page["id"]
-                    if page_id in self._processed_pages:
-                        continue
-
-                    try:
-                        # Create breadcrumbs for database pages
-                        breadcrumbs = [
-                            Breadcrumb(
-                                entity_id=database_id, name=database_entity.title, type="database"
-                            )
-                        ]
-
-                        # Always use lazy loading for better performance
-                        page_entity = await self._create_lazy_page_entity(
-                            page, breadcrumbs, database_id, schema
+            async for page in self._query_database_pages(client, database_id):
+                page_id = page["id"]
+                if page_id in self._processed_pages:
+                    continue
+                try:
+                    breadcrumbs = [
+                        Breadcrumb(
+                            entity_id=database_id, name=database_entity.title, type="database"
                         )
-                        yield page_entity
-
-                        self._processed_pages.add(page_id)
-
-                    except Exception as e:
-                        self.logger.error(f"Error processing database page {page_id}: {str(e)}")
-                        continue
-
-            except Exception as e:
-                self.logger.error(f"Error processing database {database_id}: {str(e)}")
-                continue
+                    ]
+                    page_entity, files = await self._create_comprehensive_page_entity(
+                        client, page, breadcrumbs, database_id, schema
+                    )
+                    yield page_entity
+                    for file_entity in files:
+                        processed = await self._process_and_yield_file(file_entity)
+                        if processed:
+                            yield processed
+                    self._processed_pages.add(page_id)
+                    async for child_entity in self._process_child_databases(client):
+                        yield child_entity
+                except NotionSource.NotionAccessError as e:
+                    self.logger.warning(
+                        f"Access issue processing database page {page_id}: {str(e)}"
+                    )
+                    continue
+                except Exception as e:
+                    self.logger.error(f"Error processing database page {page_id}: {str(e)}")
+                    continue
+        except NotionSource.NotionAccessError as e:
+            self.logger.warning(f"Access issue processing database {database_id}: {str(e)}")
+            return
+        except Exception as e:
+            self.logger.error(f"Error processing database {database_id}: {str(e)}")
+            return
 
     async def _stream_page_discovery(
         self, client: httpx.AsyncClient
@@ -1229,12 +1268,26 @@ class NotionSource(BaseSource):
                 # Build breadcrumbs for standalone pages
                 breadcrumbs = await self._build_page_breadcrumbs(client, full_page)
 
-                # Always use lazy loading for better performance
-                page_entity = await self._create_lazy_page_entity(full_page, breadcrumbs)
+                # Eagerly build full page entity and files
+                page_entity, files = await self._create_comprehensive_page_entity(
+                    client, full_page, breadcrumbs
+                )
                 yield page_entity
+
+                for file_entity in files:
+                    processed = await self._process_and_yield_file(file_entity)
+                    if processed:
+                        yield processed
 
                 self._processed_pages.add(page_id)
 
+                # Process any child databases discovered within this page immediately
+                async for child_entity in self._process_child_databases(client):
+                    yield child_entity
+
+            except NotionSource.NotionAccessError as e:
+                self.logger.warning(f"Access issue processing standalone page {page_id}: {str(e)}")
+                continue
             except Exception as e:
                 self.logger.error(f"Error processing standalone page {page_id}: {str(e)}")
                 continue
@@ -1286,6 +1339,9 @@ class NotionSource(BaseSource):
                 self.logger.warning(f"File {file_entity.name} was skipped during processing")
                 return None
 
+        except NotionSource.NotionAccessError as e:
+            self.logger.warning(f"Access issue processing file {file_entity.name}: {str(e)}")
+            return None
         except Exception as e:
             self.logger.error(f"Error processing file {file_entity.name}: {str(e)}")
             return None
@@ -1315,222 +1371,10 @@ class NotionSource(BaseSource):
                 self.logger.warning(f"Skipping file {processed_entity.name}: {error_msg}")
 
             return processed_entity
+        except NotionSource.NotionAccessError as e:
+            self.logger.warning(f"Access issue processing pre-signed file {file_entity.name}: {e}")
+            return None
         except Exception as e:
             self.logger.error(f"Error processing pre-signed file {file_entity.name}: {e}")
             return None
-
-    async def _create_lazy_page_entity(
-        self,
-        page: dict,
-        breadcrumbs: List[Breadcrumb],
-        database_id: Optional[str] = None,
-        database_schema: Optional[dict] = None,
-    ) -> NotionPageEntity:
-        """Create lazy entity with self-contained operations."""
-        page_id = page["id"]
-        parent = page.get("parent", {})
-
-        self.logger.info(f"🦴 LAZY_SKELETON Creating skeleton entity for page: {page_id}")
-
-        # Create entity with only immediately available data
-        entity = NotionPageEntity(
-            entity_id=page_id,
-            page_id=page_id,
-            title=self._extract_page_title(page),
-            parent_id=parent.get("page_id") or parent.get("database_id") or "",
-            parent_type=parent.get("type", "workspace"),
-            breadcrumbs=breadcrumbs,
-            properties=page.get("properties", {}),
-            url=page.get("url", ""),
-            icon=page.get("icon"),
-            cover=page.get("cover"),
-            archived=page.get("archived", False),
-            in_trash=page.get("in_trash", False),
-            created_time=self._parse_datetime(page.get("created_time")),
-            last_edited_time=self._parse_datetime(page.get("last_edited_time")),
-            # Lazy fields - will be populated during materialization
-            content=None,
-            content_blocks_count=0,
-            max_depth=0,
-            property_entities=[],
-            files=[],
-        )
-
-        # Add lazy operation for content aggregation
-        # Pass all necessary data for self-contained execution
-        entity.add_lazy_operation(
-            "aggregate_content",
-            self._create_content_fetcher(
-                access_token=self.access_token,
-                rate_limit_config={
-                    "requests_per_second": self.RATE_LIMIT_REQUESTS,
-                    "period": self.RATE_LIMIT_PERIOD,
-                    "timeout": self.TIMEOUT_SECONDS,
-                    "max_retries": self.MAX_RETRIES,
-                },
-            ),
-            page_id,
-            breadcrumbs,
-        )
-
-        self.logger.info(
-            f"🔄 LAZY_OPERATION Added content aggregation operation for page: {page_id}"
-        )
-
-        # If it's a database page, add property extraction operation
-        if database_id and database_schema:
-            entity.add_lazy_operation(
-                "extract_properties",
-                self._create_property_extractor(self.access_token),
-                page,
-                database_id,
-                database_schema,
-            )
-            self.logger.info(
-                f"🔄 LAZY_OPERATION Added property extraction operation for page: {page_id}"
-            )
-
-        return entity
-
-    def _create_content_fetcher(self, access_token: str, rate_limit_config: dict):
-        """Create a content fetcher that uses the shared rate limiter and optional gating."""
-
-        async def fetch_content(page_id: str, breadcrumbs: List[Breadcrumb]) -> dict:
-            """Fetch page content with shared rate limiting and optional concurrency gate."""
-
-            async def _do_fetch() -> dict:
-                async with httpx.AsyncClient() as client:
-                    headers = {
-                        "Authorization": f"Bearer {access_token}",
-                        "Notion-Version": "2022-06-28",
-                    }
-
-                    # Create request helper with shared rate limiting
-                    async def make_request(method: str, url: str, **kwargs):
-                        await NotionSource._shared_wait_for_rate_limit()  # Use shared rate limiter
-                        response = await getattr(client, method.lower())(
-                            url, headers=headers, **kwargs
-                        )
-                        response.raise_for_status()
-                        return response.json()
-
-                    # Fetch all blocks and aggregate content
-                    return await self._fetch_and_aggregate_blocks(
-                        make_request, page_id, breadcrumbs
-                    )
-
-            # gate concurrent materializations if enabled
-            if getattr(self, "batch_generation", False):
-                async with self._materialize_semaphore:
-                    self.logger.debug(
-                        f"[Notion] Materializing page {page_id} "
-                        f"(batch_generation=True, batch_size={self.batch_size})"
-                    )
-                    return await _do_fetch()
-            else:
-                return await _do_fetch()
-
-        return fetch_content
-
-    async def _fetch_and_aggregate_blocks(
-        self, make_request, page_id: str, breadcrumbs: List[Breadcrumb]
-    ) -> dict:
-        """Fetch blocks and aggregate content."""
-        content_parts = []
-        files = []
-        blocks_count = 0
-        max_depth = 0
-
-        async def fetch_blocks(block_id: str, depth: int = 0):
-            nonlocal blocks_count, max_depth
-
-            url = f"https://api.notion.com/v1/blocks/{block_id}/children"
-            has_more = True
-            start_cursor = None
-
-            while has_more:
-                params = {"start_cursor": start_cursor} if start_cursor else {}
-
-                try:
-                    response = await make_request("GET", url, params=params)
-                    blocks = response.get("results", [])
-
-                    for block in blocks:
-                        blocks_count += 1
-                        max_depth = max(max_depth, depth)
-
-                        # Format block content
-                        block_result = await self._format_block_content(block, depth, breadcrumbs)
-
-                        if block_result["content"]:
-                            content_parts.append(block_result["content"])
-
-                        files.extend(block_result["files"])
-
-                        # Process children if present
-                        if block.get("has_children", False):
-                            await fetch_blocks(block["id"], depth + 1)
-
-                    has_more = response.get("has_more", False)
-                    start_cursor = response.get("next_cursor")
-
-                except Exception as e:
-                    self.logger.error(f"Error fetching blocks for {block_id}: {str(e)}")
-                    raise e
-
-        # Start fetching from the page
-        await fetch_blocks(page_id)
-
-        return {
-            "content": "\n\n".join(filter(None, content_parts)),
-            "blocks_count": blocks_count,
-            "max_depth": max_depth,
-            "files": files,
-        }
-
-    def _create_property_extractor(self, access_token: str):
-        """Create a self-contained property extractor."""
-
-        async def extract_properties(
-            page: dict, database_id: str, database_schema: dict
-        ) -> List[NotionPropertyEntity]:
-            """Extract properties with proper entity creation."""
-            # Create notion instance for property formatting
-            notion_source = NotionSource()
-
-            page_id = page["id"]
-            page_properties = page.get("properties", {})
-            schema_properties = database_schema.get("properties", {})
-
-            property_entities = []
-
-            for prop_name, prop_value in page_properties.items():
-                if prop_name in schema_properties:
-                    schema_prop = schema_properties[prop_name]
-
-                    try:
-                        # Use the existing create_property_entity method
-                        property_entity = notion_source._create_property_entity(
-                            prop_name, prop_value, schema_prop, page_id, database_id
-                        )
-                        property_entities.append(property_entity)
-
-                    except Exception as e:
-                        self.logger.warning(
-                            f"Error processing property {prop_name} for page {page_id}: {str(e)}"
-                        )
-
-            return property_entities
-
-        return extract_properties
-
-    async def validate(self) -> bool:
-        """Verify Notion OAuth2 token by pinging the /v1/users/me endpoint."""
-        return await self._validate_oauth2(
-            ping_url="https://api.notion.com/v1/users/me",
-            headers={
-                "Accept": "application/json",
-                "Notion-Version": "2022-06-28",
-            },
-            timeout=10.0,
-        )
+    # Removed lazy page entity creation and related helpers to simplify to eager-only generation

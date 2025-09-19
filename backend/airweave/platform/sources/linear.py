@@ -12,6 +12,7 @@ from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb
 from airweave.platform.entities.linear import (
     LinearAttachmentEntity,
+    LinearCommentEntity,
     LinearIssueEntity,
     LinearProjectEntity,
     LinearTeamEntity,
@@ -238,16 +239,81 @@ class LinearSource(BaseSource):
                         f"Error processing attachment {attachment_id} from description: {str(e)}"
                     )
 
+    async def _process_issue_comments(
+        self,
+        comments: List[Dict],
+        issue_id: str,
+        issue_identifier: str,
+        issue_breadcrumbs: List[Breadcrumb],
+        team_id: Optional[str],
+        team_name: Optional[str],
+        project_id: Optional[str],
+        project_name: Optional[str],
+    ) -> AsyncGenerator[LinearCommentEntity, None]:
+        """Process and yield comment entities for a given issue.
+
+        Args:
+            comments: List of comment data from Linear API
+            issue_id: ID of the parent issue
+            issue_identifier: Human-readable identifier of the parent issue
+            issue_breadcrumbs: Breadcrumbs including the issue context
+            team_id: ID of the team this issue belongs to
+            team_name: Name of the team this issue belongs to
+            project_id: ID of the project this issue belongs to, if any
+            project_name: Name of the project this issue belongs to, if any
+
+        Yields:
+            LinearCommentEntity instances for each valid comment
+        """
+        for comment in comments:
+            comment_id = comment.get("id")
+            comment_body = comment.get("body", "")
+
+            if not comment_body.strip():
+                continue  # Skip empty comments
+
+            # Extract user information
+            user = comment.get("user", {})
+            user_id = user.get("id") if user else None
+            user_name = user.get("name") if user else None
+
+            # Create comment URL
+            comment_url = f"https://linear.app/issue/{issue_identifier}#comment-{comment_id}"
+
+            # Create and yield LinearCommentEntity
+            comment_entity = LinearCommentEntity(
+                entity_id=comment_id,
+                title=f"Comment on {issue_identifier}",
+                breadcrumbs=issue_breadcrumbs.copy(),
+                url=comment_url,
+                # LinearCommentEntity specific fields
+                issue_id=issue_id,
+                issue_identifier=issue_identifier,
+                body=comment_body,
+                user_id=user_id,
+                user_name=user_name,
+                created_at=comment.get("createdAt"),
+                updated_at=comment.get("updatedAt"),
+                team_id=team_id,
+                team_name=team_name,
+                project_id=project_id,
+                project_name=project_name,
+            )
+
+            yield comment_entity
+
     async def _generate_issue_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[Union[LinearIssueEntity, LinearAttachmentEntity], None]:
-        """Generate entities for all issues and their attachments in the workspace.
+    ) -> AsyncGenerator[
+        Union[LinearIssueEntity, LinearCommentEntity, LinearAttachmentEntity], None
+    ]:
+        """Generate entities for all issues, their comments, and their attachments in the workspace.
 
         Args:
             client: HTTP client to use for requests
 
         Yields:
-            Issue entities and attachment entities
+            Issue entities, comment entities, and attachment entities
         """
         # Define query template with pagination placeholder
         query_template = """
@@ -276,6 +342,18 @@ class LinearSource(BaseSource):
               }}
               assignee {{
                 name
+              }}
+              comments {{
+                nodes {{
+                  id
+                  body
+                  createdAt
+                  updatedAt
+                  user {{
+                    id
+                    name
+                  }}
+                }}
               }}
             }}
             pageInfo {{
@@ -352,13 +430,29 @@ class LinearSource(BaseSource):
             # First yield the issue entity
             yield issue_entity
 
-            # Create issue breadcrumb for attachments
+            # Create issue breadcrumb for comments and attachments
             issue_breadcrumb = Breadcrumb(
                 entity_id=issue_entity.entity_id, name=issue_entity.title, type="issue"
             )
 
             # Combine breadcrumbs with issue breadcrumb
             issue_breadcrumbs = breadcrumbs + [issue_breadcrumb]
+
+            # Process and yield comment entities
+            comments = issue.get("comments", {}).get("nodes", [])
+            self.logger.info(f"Processing {len(comments)} comments for issue {issue_identifier}")
+
+            async for comment_entity in self._process_issue_comments(
+                comments,
+                issue_id,
+                issue_identifier,
+                issue_breadcrumbs,
+                team_id,
+                team_name,
+                project_id,
+                project_name,
+            ):
+                yield comment_entity
 
             # Extract attachments from description
             if issue_description:
@@ -762,6 +856,7 @@ class LinearSource(BaseSource):
             LinearProjectEntity,
             LinearUserEntity,
             LinearIssueEntity,
+            LinearCommentEntity,
             LinearAttachmentEntity,
         ],
         None,
@@ -772,7 +867,7 @@ class LinearSource(BaseSource):
         handling each entity type separately with proper error isolation.
 
         Yields:
-            All Linear entities (teams, projects, users, issues, attachments)
+            All Linear entities (teams, projects, users, issues, comments, attachments)
         """
         async with httpx.AsyncClient() as client:
             # Generate team entities
@@ -800,9 +895,9 @@ class LinearSource(BaseSource):
             except Exception as e:
                 self.logger.error(f"Failed to generate user entities: {str(e)}")
 
-            # Generate issue and attachment entities
+            # Generate issue, comment, and attachment entities
             try:
-                self.logger.info("Starting issue and attachment entity generation")
+                self.logger.info("Starting issue, comment, and attachment entity generation")
                 async for entity in self._generate_issue_entities(client):
                     yield entity
             except Exception as e:
@@ -857,4 +952,4 @@ class LinearSource(BaseSource):
             return False
         except Exception as e:
             self.logger.error(f"Unexpected error during Linear validation: {e}")
-            return False
+            return False            

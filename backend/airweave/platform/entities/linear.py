@@ -202,6 +202,53 @@ class LinearTeamEntity(ChunkEntity):
     member_count: Optional[int] = AirweaveField(None, description="Number of members in the team")
 
 
+class LinearCommentEntity(ChunkEntity):
+    """Schema for Linear comment entities.
+
+    This entity represents a comment on a Linear issue, containing all relevant
+    metadata and content from the Linear API.
+    """
+
+    # Core identification fields
+    issue_id: str = AirweaveField(..., description="ID of the issue this comment belongs to")
+    issue_identifier: str = AirweaveField(
+        ..., description="Identifier of the issue (e.g., 'ENG-123')", embeddable=True
+    )
+
+    # Content fields
+    body: str = AirweaveField(..., description="The content/body of the comment", embeddable=True)
+
+    # Author information
+    user_id: Optional[str] = AirweaveField(
+        None, description="ID of the user who created the comment"
+    )
+    user_name: Optional[str] = AirweaveField(
+        None, description="Name of the user who created the comment", embeddable=True
+    )
+
+    # Temporal information
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="When the comment was created", is_created_at=True
+    )
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="When the comment was last updated", is_updated_at=True
+    )
+
+    # Organizational information
+    team_id: Optional[str] = AirweaveField(
+        None, description="ID of the team this comment belongs to"
+    )
+    team_name: Optional[str] = AirweaveField(
+        None, description="Name of the team this comment belongs to", embeddable=True
+    )
+    project_id: Optional[str] = AirweaveField(
+        None, description="ID of the project this comment belongs to, if any"
+    )
+    project_name: Optional[str] = AirweaveField(
+        None, description="Name of the project this comment belongs to, if any", embeddable=True
+    )
+
+
 class LinearUserEntity(ChunkEntity):
     """Schema for Linear user entities.
 

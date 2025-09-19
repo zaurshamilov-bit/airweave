@@ -345,10 +345,18 @@ const SemanticMcp = () => {
         }
     }, [searchParams, setSearchParams]);
 
-    // Log authValues whenever they change
+    // Log authValues metadata whenever they change (without exposing sensitive data)
     useEffect(() => {
-        console.log('🔐 [SemanticMcp] AuthValues updated:', authValues);
-        console.log('🔐 [SemanticMcp] AuthValues keys:', Object.keys(authValues));
+        const sensitiveFields = Object.keys(authValues).filter(key =>
+            /(?:token|key|secret|password|credential)/i.test(key)
+        );
+        const nonSensitiveFields = Object.keys(authValues).filter(key =>
+            !/(?:token|key|secret|password|credential)/i.test(key)
+        );
+
+        console.log('🔐 [SemanticMcp] AuthValues updated - Total fields:', Object.keys(authValues).length,
+            'Sensitive fields:', sensitiveFields.length,
+            'Non-sensitive:', nonSensitiveFields);
     }, [authValues]);
 
     // Log configValues whenever they change
@@ -458,7 +466,7 @@ const SemanticMcp = () => {
                 auth_fields: authValues
             };
 
-            console.log('🔐 [SemanticMcp] Creating credentials for non-OAuth2 source:', credentialData);
+            console.log('🔐 [SemanticMcp] Creating credentials for non-OAuth2 source:', sourceShortName, 'with', Object.keys(credentialData).length, 'fields');
 
             // Make API call to create credentials
             const response = await apiClient.post(

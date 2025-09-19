@@ -5,6 +5,11 @@ from typing import Any, Dict, List, Optional
 import httpx
 from fastapi import HTTPException
 
+from airweave.core.credential_sanitizer import (
+    safe_log_credentials,
+    sanitize_credentials_dict,
+
+from airweave.platform.auth.schemas import AuthType
 from airweave.platform.auth_providers._base import BaseAuthProvider
 from airweave.platform.decorators import auth_provider
 
@@ -78,7 +83,10 @@ class ComposioAuthProvider(BaseAuthProvider):
         return self.FIELD_NAME_MAPPING.get(airweave_field, airweave_field)
 
     async def _get_with_auth(
-        self, client: httpx.AsyncClient, url: str, params: Optional[Dict[str, Any]] = None
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Make authenticated API request using Composio API key.
 
@@ -157,7 +165,11 @@ class ComposioAuthProvider(BaseAuthProvider):
 
             # TODO: pagination
 
-            self.logger.info(f"\n🔑 [Composio] Found credentials: {found_credentials}\n")
+            safe_log_credentials(
+                found_credentials,
+                self.logger.info,
+                f"\n🔑 [Composio] Retrieved credentials for '{source_short_name}':",
+            )
             return found_credentials
 
     async def _get_source_connected_accounts(
@@ -265,12 +277,13 @@ class ComposioAuthProvider(BaseAuthProvider):
                     self.logger.info(
                         f"\n🔓 [Composio] Available credential fields: {available_fields}\n"
                     )
-                    for field, value in source_creds_dict.items():
-                        if isinstance(value, str) and len(value) > 10:
-                            preview = f"{value[:5]}...{value[-3:]}"
-                        else:
-                            preview = "<non-string or short value>"
-                        self.logger.debug(f"\n  - {field}: {preview}\n")
+                    # Log credential fields safely without exposing values
+                    sanitized_preview = sanitize_credentials_dict(
+                        source_creds_dict, show_lengths=False
+                    )
+                    self.logger.debug(
+                        f"\n🔓 [Composio] Credential fields preview: {sanitized_preview}\n"
+                    )
                 break
 
         if not source_creds_dict:
