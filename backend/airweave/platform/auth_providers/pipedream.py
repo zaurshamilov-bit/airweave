@@ -15,7 +15,6 @@ from airweave.platform.decorators import auth_provider
 @auth_provider(
     name="Pipedream",
     short_name="pipedream",
-    auth_type=AuthType.oauth2_with_refresh,
     auth_config_class="PipedreamAuthConfig",
     config_class="PipedreamConfig",
 )
