@@ -47,6 +47,7 @@ class SourceConnectionStatus(str, Enum):
     SYNCING = "syncing"  # Currently running a sync job
     ERROR = "error"  # Last sync failed or auth error
     INACTIVE = "inactive"  # Manually disabled
+    PENDING_SYNC = "pending_sync"  # Awaiting a sync job to start
 
 
 class CollectionStatus(str, Enum):

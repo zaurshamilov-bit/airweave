@@ -62,7 +62,11 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
         for sc in active_connections:
             if sc.status == SourceConnectionStatus.ERROR:
                 failing_count += 1
-            elif sc.status == SourceConnectionStatus.SYNCING:
+            elif sc.status in [
+                SourceConnectionStatus.SYNCING,
+                SourceConnectionStatus.PENDING_SYNC,
+                SourceConnectionStatus.ACTIVE,
+            ]:
                 in_progress_count += 1
 
         # If any active connections are in progress, the collection is active

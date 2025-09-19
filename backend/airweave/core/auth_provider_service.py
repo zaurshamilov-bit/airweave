@@ -130,13 +130,10 @@ class AuthProviderService:
         # Both config class and config fields exist, validate them
         try:
             config_class = resource_locator.get_config(auth_provider.config_class)
-            # ConfigValues is always a Pydantic model, convert to dict for validation
-            config_data = auth_provider_config.model_dump()
-            config = config_class(**config_data)
+            config = config_class(**auth_provider_config)
             return config.model_dump()
         except Exception as e:
             auth_provider_logger.error(f"Failed to validate auth provider config fields: {e}")
-
             # Check if it's a Pydantic validation error and format it nicely
             from pydantic import ValidationError
 

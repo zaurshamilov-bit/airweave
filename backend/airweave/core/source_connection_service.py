@@ -1,7 +1,7 @@
 """Clean source connection service with auth method inference."""
 
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -410,6 +410,19 @@ class SourceConnectionService:
                     ctx=ctx,
                 )
 
+            # Convert to schemas while still in session
+            if sync_job and obj_in.sync_immediately:
+                # Ensure all models are flushed and refreshed before converting
+                await uow.session.flush()
+                await uow.session.refresh(sync_job)
+                await uow.session.refresh(collection)
+
+                sync_schema = schemas.Sync.model_validate(sync, from_attributes=True)
+                sync_job_schema = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
+                collection_schema = schemas.Collection.model_validate(
+                    collection, from_attributes=True
+                )
+
             await uow.commit()
             await uow.session.refresh(source_conn)
 
@@ -417,7 +430,9 @@ class SourceConnectionService:
 
         # Trigger sync if requested
         if sync_job and obj_in.sync_immediately:
-            await self._trigger_sync_workflow(db, source_conn, sync, sync_job, collection, ctx)
+            await self._trigger_sync_workflow(
+                db, response, sync_schema, sync_job_schema, collection_schema, ctx
+            )
 
         return response
 
@@ -608,6 +623,19 @@ class SourceConnectionService:
                     ctx=ctx,
                 )
 
+            # Convert to schemas while still in session
+            if sync_job and obj_in.sync_immediately:
+                # Ensure all models are flushed and refreshed before converting
+                await uow.session.flush()
+                await uow.session.refresh(sync_job)
+                await uow.session.refresh(collection)
+
+                sync_schema = schemas.Sync.model_validate(sync, from_attributes=True)
+                sync_job_schema = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
+                collection_schema = schemas.Collection.model_validate(
+                    collection, from_attributes=True
+                )
+
             await uow.commit()
             await uow.session.refresh(source_conn)
 
@@ -615,7 +643,9 @@ class SourceConnectionService:
 
         # Trigger sync if requested
         if sync_job and obj_in.sync_immediately:
-            await self._trigger_sync_workflow(db, source_conn, sync, sync_job, collection, ctx)
+            await self._trigger_sync_workflow(
+                db, response, sync_schema, sync_job_schema, collection_schema, ctx
+            )
 
         return response
 
@@ -725,7 +755,7 @@ class SourceConnectionService:
                 is_authenticated=True,
                 ctx=ctx,
                 uow=uow,
-                auth_provider_id=obj_in.provider_id,
+                auth_provider_id=auth_provider_conn.readable_id,
                 auth_provider_config=validated_auth_config,
             )
             await uow.session.flush()
@@ -741,6 +771,19 @@ class SourceConnectionService:
                     ctx=ctx,
                 )
 
+            # Convert to schemas while still in session
+            if sync_job and obj_in.sync_immediately:
+                # Ensure all models are flushed and refreshed before converting
+                await uow.session.flush()
+                await uow.session.refresh(sync_job)
+                await uow.session.refresh(collection)
+
+                sync_schema = schemas.Sync.model_validate(sync, from_attributes=True)
+                sync_job_schema = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
+                collection_schema = schemas.Collection.model_validate(
+                    collection, from_attributes=True
+                )
+
             await uow.commit()
             await uow.session.refresh(source_conn)
 
@@ -748,7 +791,9 @@ class SourceConnectionService:
 
         # Trigger sync if requested
         if sync_job and obj_in.sync_immediately:
-            await self._trigger_sync_workflow(db, source_conn, sync, sync_job, collection, ctx)
+            await self._trigger_sync_workflow(
+                db, response, sync_schema, sync_job_schema, collection_schema, ctx
+            )
 
         return response
 
@@ -757,33 +802,32 @@ class SourceConnectionService:
     async def _trigger_sync_workflow(
         self,
         db: AsyncSession,
-        source_conn: Any,
-        sync: Any,
-        sync_job: Any,
-        collection: Any,
+        source_conn: schemas.SourceConnection,
+        sync: schemas.Sync,
+        sync_job: schemas.SyncJob,
+        collection: schemas.Collection,
         ctx: ApiContext,
     ) -> None:
-        """Trigger Temporal workflow for sync."""
+        """Trigger Temporal workflow for sync.
+
+        Note: All parameters except db and ctx should be Pydantic schemas, not SQLAlchemy models.
+        """
         # Get sync DAG
         sync_dag = await crud.sync_dag.get_by_sync_id(db, sync_id=sync.id, ctx=ctx)
         if not sync_dag:
             ctx.logger.error(f"Sync DAG not found for sync {sync.id}")
             return
 
-        # Convert to schemas
-        collection_schema = schemas.Collection.model_validate(collection, from_attributes=True)
-        sync_schema = schemas.Sync.model_validate(sync, from_attributes=True)
-        sync_job_schema = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
+        # Convert sync_dag to schema (it's the only model we fetch here)
         sync_dag_schema = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
-        source_conn_schema = await self._build_source_connection_response(db, source_conn, ctx)
 
-        # Trigger workflow
+        # Trigger workflow - all inputs are already schemas
         await temporal_service.run_source_connection_workflow(
-            sync=sync_schema,
-            sync_job=sync_job_schema,
+            sync=sync,
+            sync_job=sync_job,
             sync_dag=sync_dag_schema,
-            collection=collection_schema,
-            source_connection=source_conn_schema,
+            collection=collection,
+            source_connection=source_conn,
             ctx=ctx,
         )
 

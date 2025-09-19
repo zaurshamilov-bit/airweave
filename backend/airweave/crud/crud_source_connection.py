@@ -167,6 +167,8 @@ class CRUDSourceConnection(
                     sc.status = SourceConnectionStatus.SYNCING
                 else:
                     sc.status = SourceConnectionStatus.ACTIVE
+            else:
+                sc.status = SourceConnectionStatus.PENDING_SYNC
 
     async def _attach_entity_counts_bulk(
         self,

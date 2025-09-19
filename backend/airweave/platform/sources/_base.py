@@ -103,12 +103,20 @@ class BaseSource:
     @classmethod
     def supports_auth_method(cls, method: AuthenticationMethod) -> bool:
         """Check if source supports a given authentication method."""
-        return method in cls._auth_methods
+        methods = cls.get_supported_auth_methods()
+        return method in methods
 
     @classmethod
     def get_supported_auth_methods(cls) -> list[AuthenticationMethod]:
         """Get all supported authentication methods."""
-        return cls._auth_methods
+        # Always include BYOC if OAUTH_BROWSER is supported
+        methods = list(cls._auth_methods)
+        if (
+            AuthenticationMethod.OAUTH_BROWSER in methods
+            and AuthenticationMethod.OAUTH_BYOC not in methods
+        ):
+            methods.append(AuthenticationMethod.OAUTH_BYOC)
+        return methods
 
     @classmethod
     def get_oauth_type(cls) -> Optional[OAuthType]:

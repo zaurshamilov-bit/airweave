@@ -8,6 +8,12 @@ This module replaces the original test_source_connections.py to test the refacto
 - State transitions
 
 This is designed to run in the CI/CD pipeline via test-public-api.yml
+
+OAuth Token Environment Variables:
+- TEST_GITHUB_TOKEN: GitHub personal access token for testing GitHub OAuth
+- TEST_NOTION_TOKEN: Notion integration token for testing Notion OAuth
+- TEST_GOOGLE_ACCESS_TOKEN: Google OAuth access token (requires refresh token)
+- TEST_GOOGLE_REFRESH_TOKEN: Google OAuth refresh token (used with access token)
 """
 
 import time
@@ -191,17 +197,29 @@ class OAuthBrowserTest(SourceConnectionTestBase):
 class AuthProviderTest(SourceConnectionTestBase):
     """Test authentication via external auth provider"""
 
+    def __init__(
+        self, api_url: str, headers: dict, collection_id: str, provider_readable_id: str = None
+    ):
+        """Initialize with optional provider readable_id for auth provider connections"""
+        super().__init__(api_url, headers, collection_id)
+        self.provider_readable_id = provider_readable_id
+
     def create_payload(self, provider_name: str, provider_config: Optional[dict] = None) -> dict:
         """Create payload for auth provider connection"""
-        auth = {"provider_name": provider_name}
+        # Use provider_name for the auth provider connection (matches AuthProviderAuthentication schema)
+        auth = {
+            "provider_name": self.provider_readable_id or f"composio-test-{int(time.time())}",
+        }
+
+        # Add Composio-specific config if provided
         if provider_config:
             auth["provider_config"] = provider_config
 
         return {
-            "name": f"Test {provider_name} Auth Provider",
-            "short_name": "google_drive",  # Most sources support auth provider
+            "name": f"Test {provider_name} Auth Provider Source",
+            "short_name": "asana",  # Using Asana for auth provider test
             "readable_collection_id": self.collection_id,
-            "description": "Testing auth provider authentication",
+            "description": "Testing auth provider authentication with Asana",
             "authentication": auth,
             "sync_immediately": False,
         }
@@ -229,12 +247,61 @@ class AuthProviderTest(SourceConnectionTestBase):
 
         # Step 2: Verify authenticated via provider
         assert conn["auth"]["authenticated"] == True, "Should be authenticated via provider"
-        assert "provider_name" in conn["auth"], "Missing provider_name in auth"
-        assert conn["auth"]["provider_name"] == provider_name, "Provider name mismatch"
+        assert "provider_id" in conn["auth"], "Missing provider_id in auth"
+        assert conn["auth"]["provider_id"] == self.provider_readable_id, "Provider ID mismatch"
         assert conn["status"] == "active", f"Expected active status, got {conn['status']}"
 
         print(f"    ✓ Connection created via auth provider: {conn_id}")
         print(f"    ✓ Provider: {provider_name}")
+
+        return conn_id
+
+
+class OAuthBYOCTest(SourceConnectionTestBase):
+    """Test OAuth BYOC (Bring Your Own Credentials) flow"""
+
+    def create_payload(self, source_name: str, client_id: str, client_secret: str) -> dict:
+        """Create payload for OAuth BYOC"""
+        return {
+            "name": f"Test {source_name} BYOC OAuth",
+            "short_name": source_name,
+            "readable_collection_id": self.collection_id,
+            "description": "Testing OAuth BYOC flow",
+            "authentication": {
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
+            "sync_immediately": False,
+        }
+
+    def run_test(self, source_name: str, client_id: str, client_secret: str) -> Optional[str]:
+        """Run OAuth BYOC test - creates shell for OAuth flow"""
+        print(f"  Testing OAuth BYOC ({source_name})...")
+
+        # Step 1: Create shell connection with BYOC credentials
+        payload = self.create_payload(source_name, client_id, client_secret)
+        response = self.create_connection(payload)
+
+        if response.status_code != 200:
+            print(f"    ❌ OAuth BYOC test failed: {response.status_code}")
+            print(f"    Response: {response.text}")
+            raise AssertionError(f"Failed to create BYOC connection: {response.text}")
+
+        conn = response.json()
+        conn_id = conn["id"]
+        # BYOC returns oauth_browser since they're functionally the same after creation
+        # The difference is only in the control flow (user provides vs system provides credentials)
+        self.verify_response_structure(conn, "oauth_browser")
+
+        # Step 2: Verify pending auth state with BYOC
+        assert conn["auth"]["authenticated"] == False, "Should not be authenticated"
+        assert conn["status"] == "pending_auth", f"Expected pending_auth, got {conn['status']}"
+        assert "auth_url" in conn["auth"], "Missing auth_url"
+        assert conn["auth"]["auth_url"] is not None, "auth_url should not be None"
+
+        print(f"    ✓ OAuth BYOC shell created: {conn_id}")
+        print(f"    ✓ Client ID confirmed: {conn['auth'].get('client_id', 'N/A')[:10]}...")
+        print(f"    ℹ️ Cannot complete OAuth flow in CI (requires user interaction)")
 
         return conn_id
 
@@ -463,9 +530,11 @@ def test_source_connections(
 
         print(f"  ✅ Second connection created with immediate sync: {conn2_id}")
 
-    except AssertionError as e:
+    except (AssertionError, Exception) as e:
         print(f"  ❌ Second connection test failed: {e}")
-        # Continue with other tests
+        show_backend_logs(lines=30)
+        # Re-raise to fail the entire test suite
+        raise AssertionError(f"Test 2 (Direct Auth with Immediate Sync) failed: {e}")
 
     # =============================
     # Test 3: OAuth Browser (Creates shell only in CI)
@@ -481,9 +550,37 @@ def test_source_connections(
         print(f"  ⚠️ OAuth browser test skipped: {e}")
 
     # =============================
-    # Test 3.5: Minimal OAuth Payload (No auth, no name)
+    # Test 3.5: OAuth BYOC Flow (REQUIRED)
     # =============================
-    print("\n📌 Test 3.5: Minimal OAuth Payload")
+    print("\n📌 Test 3.5: OAuth BYOC (Bring Your Own Credentials)")
+
+    # Require BYOC credentials for Google Drive
+    google_client_id = os.environ.get("TEST_GOOGLE_CLIENT_ID")
+    google_client_secret = os.environ.get("TEST_GOOGLE_CLIENT_SECRET")
+
+    if not google_client_id:
+        raise AssertionError(
+            "TEST_GOOGLE_CLIENT_ID environment variable is required for OAuth BYOC tests."
+        )
+    if not google_client_secret:
+        raise AssertionError(
+            "TEST_GOOGLE_CLIENT_SECRET environment variable is required for OAuth BYOC tests."
+        )
+
+    oauth_byoc_test = OAuthBYOCTest(api_url, headers, collection_id)
+    try:
+        conn_id = oauth_byoc_test.run_test("google_drive", google_client_id, google_client_secret)
+        if conn_id:
+            created_connections.append(conn_id)
+            print("  ✅ OAuth BYOC shell creation test passed")
+    except Exception as e:
+        print(f"  ❌ OAuth BYOC test failed: {e}")
+        raise AssertionError(f"OAuth BYOC test failed: {e}")
+
+    # =============================
+    # Test 3.6: Minimal OAuth Payload (No auth, no name)
+    # =============================
+    print("\n📌 Test 3.6: Minimal OAuth Payload")
     try:
         # Create connection with minimal payload - should default to OAuth browser flow
         minimal_payload = {
@@ -511,70 +608,116 @@ def test_source_connections(
 
         print(f"  ✅ Minimal OAuth payload test passed: {minimal_conn_id}")
 
-    except Exception as e:
-        print(f"  ⚠️ Minimal payload test failed: {e}")
+    except (AssertionError, Exception) as e:
+        print(f"  ❌ Minimal payload test failed: {e}")
+        show_backend_logs(lines=30)
+        # Re-raise to fail the entire test suite
+        raise AssertionError(f"Test 3.6 (Minimal OAuth Payload) failed: {e}")
 
     # =============================
-    # Test 4: OAuth Token Injection (if tokens available)
+    # Test 4: OAuth Token Injection (REQUIRED)
     # =============================
     print("\n📌 Test 4: OAuth Token Injection")
-    # Check for GitHub token in environment
-    github_token = os.environ.get("TEST_GITHUB_TOKEN")
-    if github_token:
-        oauth_token_test = OAuthTokenTest(api_url, headers, collection_id)
-        try:
-            conn_id = oauth_token_test.run_test("github", github_token)
-            if conn_id:
-                created_connections.append(conn_id)
-                print("  ✅ OAuth token injection test passed")
-        except Exception as e:
-            print(f"  ⚠️ OAuth token test failed: {e}")
-    else:
-        print("  ℹ️ OAuth token test skipped - no TEST_GITHUB_TOKEN in environment")
 
-    # Check for Google tokens
-    google_access_token = os.environ.get("TEST_GOOGLE_ACCESS_TOKEN")
-    google_refresh_token = os.environ.get("TEST_GOOGLE_REFRESH_TOKEN")
-    if google_access_token:
-        oauth_token_test = OAuthTokenTest(api_url, headers, collection_id)
-        try:
-            conn_id = oauth_token_test.run_test(
-                "google_drive", google_access_token, google_refresh_token
-            )
-            if conn_id:
-                created_connections.append(conn_id)
-                print("  ✅ Google OAuth token test passed")
-        except Exception as e:
-            print(f"  ⚠️ Google OAuth token test failed: {e}")
+    # Require Notion token
+    notion_token = os.environ.get("TEST_NOTION_TOKEN")
+    if not notion_token:
+        raise AssertionError(
+            "TEST_NOTION_TOKEN environment variable is required for OAuth token injection tests."
+        )
+
+    oauth_token_test = OAuthTokenTest(api_url, headers, collection_id)
+    conn_id = oauth_token_test.run_test("notion", notion_token)
+    if not conn_id:
+        raise AssertionError("Notion OAuth token test failed - token may be invalid")
+    created_connections.append(conn_id)
+    print("  ✅ Notion OAuth token injection test passed")
 
     # =============================
-    # Test 5: Auth Provider (if configured)
+    # Test 5: Auth Provider (REQUIRED)
     # =============================
-    print("\n📌 Test 5: Auth Provider")
-    # Check for auth provider configuration in environment
+    print("\n📌 Test 5: Auth Provider (Composio)")
+
+    # Require auth provider configuration
     auth_provider_name = os.environ.get("TEST_AUTH_PROVIDER_NAME")
-    if auth_provider_name:
-        auth_provider_test = AuthProviderTest(api_url, headers, collection_id)
-        # Parse optional provider config from environment (JSON string)
-        provider_config = None
-        config_str = os.environ.get("TEST_AUTH_PROVIDER_CONFIG")
-        if config_str:
-            try:
-                import json
+    if not auth_provider_name:
+        raise AssertionError(
+            "TEST_AUTH_PROVIDER_NAME environment variable is required. Set it to 'composio' to run tests."
+        )
 
-                provider_config = json.loads(config_str)
-            except Exception:
-                print(f"  ⚠️ Failed to parse TEST_AUTH_PROVIDER_CONFIG")
+    if auth_provider_name != "composio":
+        raise AssertionError(
+            f"Only 'composio' auth provider is supported. Got: {auth_provider_name}"
+        )
 
-        try:
-            conn_id = auth_provider_test.run_test(auth_provider_name, provider_config)
-            if conn_id:
-                created_connections.append(conn_id)
-                print("  ✅ Auth provider test passed")
-        except Exception as e:
-            print(f"  ⚠️ Auth provider test failed: {e}")
-    else:
-        print("  ℹ️ Auth provider test skipped - no TEST_AUTH_PROVIDER_NAME in environment")
+    # Require Composio API key
+    composio_api_key = os.environ.get("TEST_COMPOSIO_API_KEY")
+    if not composio_api_key:
+        raise AssertionError(
+            "TEST_COMPOSIO_API_KEY environment variable is required for Composio auth provider tests."
+        )
+
+    print(f"  Creating Composio auth provider connection...")
+
+    # Get Composio auth_config_id and account_id for Asana
+    composio_auth_config_id = os.environ.get("TEST_COMPOSIO_AUTH_CONFIG_ID")
+    composio_account_id = os.environ.get("TEST_COMPOSIO_ACCOUNT_ID")
+
+    if not composio_auth_config_id:
+        raise AssertionError(
+            "TEST_COMPOSIO_AUTH_CONFIG_ID environment variable is required for Composio auth provider tests."
+        )
+    if not composio_account_id:
+        raise AssertionError(
+            "TEST_COMPOSIO_ACCOUNT_ID environment variable is required for Composio auth provider tests."
+        )
+
+    # Create the Composio auth provider connection first
+    provider_readable_id = f"composio-test-{int(time.time())}"
+    auth_provider_payload = {
+        "name": "Test Composio Provider for Asana",
+        "short_name": "composio",
+        "readable_id": provider_readable_id,
+        "auth_fields": {"api_key": composio_api_key},
+        "config_fields": {
+            "auth_config_id": composio_auth_config_id,
+            "account_id": composio_account_id,
+        },
+    }
+
+    # Call the auth provider connect endpoint
+    auth_provider_response = requests.put(
+        f"{api_url}/auth-providers/connect", json=auth_provider_payload, headers=headers
+    )
+
+    if auth_provider_response.status_code != 200:
+        print(f"  ❌ Failed to create Composio auth provider: {auth_provider_response.text}")
+        raise AssertionError(
+            f"Failed to create Composio auth provider: {auth_provider_response.text}"
+        )
+
+    auth_provider_conn = auth_provider_response.json()
+    actual_provider_id = auth_provider_conn["readable_id"]
+    print(f"  ✓ Created Composio auth provider connection: {actual_provider_id}")
+
+    # Now test creating a source connection using the auth provider
+    auth_provider_test = AuthProviderTest(api_url, headers, collection_id, actual_provider_id)
+
+    # Create provider config with auth_config_id and account_id for Asana
+    provider_config = {
+        "auth_config_id": composio_auth_config_id,
+        "account_id": composio_account_id,
+    }
+
+    try:
+        conn_id = auth_provider_test.run_test(auth_provider_name, provider_config)
+        if not conn_id:
+            raise AssertionError(f"Auth provider test returned None - failed to create connection")
+        created_connections.append(conn_id)
+        print("  ✅ Auth provider test passed")
+    except Exception as e:
+        print(f"  ❌ Auth provider test failed: {e}")
+        raise AssertionError(f"Auth provider test failed: {e}")
 
     # =============================
     # Test 6: Error Handling
@@ -593,15 +736,26 @@ def test_source_connections(
     # =============================
     print("\n📌 Test 7: List Operations")
     try:
-        # List all connections
-        response = requests.get(f"{api_url}/source-connections?limit=100", headers=headers)
+        # List connections for our test collection (to avoid pagination issues)
+        response = requests.get(
+            f"{api_url}/source-connections?collection={collection_id}&limit=100", headers=headers
+        )
         assert response.status_code == 200, f"Failed to list connections: {response.text}"
 
         all_connections = response.json()
         assert isinstance(all_connections, list), "Response should be a list"
 
-        # Find our created connections
-        our_connections = [c for c in all_connections if c["id"] in created_connections]
+        # All connections should be from our test collection
+        print(f"    Created connection IDs: {created_connections}")
+        print(f"    Total connections in collection: {len(all_connections)}")
+
+        # Convert both to strings for comparison
+        created_conn_strs = [str(cid) for cid in created_connections if cid is not None]
+        our_connections = [c for c in all_connections if str(c["id"]) in created_conn_strs]
+
+        print(
+            f"    Found {len(our_connections)} of our {len(created_conn_strs)} created connections"
+        )
         assert len(our_connections) > 0, "Should find at least one of our connections"
 
         # Verify list item has auth_method field (new in refactored API)

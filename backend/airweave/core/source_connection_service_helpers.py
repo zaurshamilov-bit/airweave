@@ -509,9 +509,46 @@ class SourceConnectionHelpers:
         from airweave.schemas.source_connection import compute_status, determine_auth_method
 
         # Build authentication details
-        auth_method = determine_auth_method(source_conn)
+        actual_auth_method = None
+
+        # First check if this is an auth provider connection
+        if (
+            hasattr(source_conn, "readable_auth_provider_id")
+            and source_conn.readable_auth_provider_id
+        ):
+            actual_auth_method = schemas.AuthenticationMethod.AUTH_PROVIDER
+        # Otherwise, load the connection and its credential to get the actual auth method
+        elif source_conn.connection_id:
+            from airweave.crud import connection as crud_connection
+            from airweave.crud import integration_credential as crud_credential
+
+            # Load the connection
+            connection = await crud_connection.get(db, id=source_conn.connection_id, ctx=ctx)
+            if connection and connection.integration_credential_id:
+                # Load the credential
+                credential = await crud_credential.get(
+                    db, id=connection.integration_credential_id, ctx=ctx
+                )
+                if credential and hasattr(credential, "authentication_method"):
+                    # Map the stored authentication method string to the API enum
+                    auth_method_str = credential.authentication_method
+                    if auth_method_str == "oauth_token":
+                        actual_auth_method = schemas.AuthenticationMethod.OAUTH_TOKEN
+                    elif auth_method_str == "oauth_browser":
+                        actual_auth_method = schemas.AuthenticationMethod.OAUTH_BROWSER
+                    elif auth_method_str == "oauth_byoc":
+                        actual_auth_method = schemas.AuthenticationMethod.OAUTH_BYOC
+                    elif auth_method_str == "direct":
+                        actual_auth_method = schemas.AuthenticationMethod.DIRECT
+                    elif auth_method_str == "auth_provider":
+                        actual_auth_method = schemas.AuthenticationMethod.AUTH_PROVIDER
+
+        # Fall back to the deprecated method if we couldn't determine from credential
+        if actual_auth_method is None:
+            actual_auth_method = determine_auth_method(source_conn)
+
         auth_info = {
-            "method": auth_method,
+            "method": actual_auth_method,
             "authenticated": source_conn.is_authenticated,
         }
 
