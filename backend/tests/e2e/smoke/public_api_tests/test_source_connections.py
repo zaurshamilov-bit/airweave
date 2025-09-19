@@ -481,6 +481,40 @@ def test_source_connections(
         print(f"  ⚠️ OAuth browser test skipped: {e}")
 
     # =============================
+    # Test 3.5: Minimal OAuth Payload (No auth, no name)
+    # =============================
+    print("\n📌 Test 3.5: Minimal OAuth Payload")
+    try:
+        # Create connection with minimal payload - should default to OAuth browser flow
+        minimal_payload = {
+            "short_name": "notion",  # Notion supports OAuth
+            "readable_collection_id": collection_id,
+        }
+
+        response = requests.post(
+            f"{api_url}/source-connections", json=minimal_payload, headers=headers
+        )
+
+        assert response.status_code == 200, f"Failed to create minimal connection: {response.text}"
+
+        minimal_conn = response.json()
+        minimal_conn_id = minimal_conn["id"]
+        created_connections.append(minimal_conn_id)
+
+        # Verify defaults were applied
+        assert (
+            minimal_conn["name"] == "Notion Connection"
+        ), f"Name should default to 'Notion Connection', got {minimal_conn['name']}"
+        assert minimal_conn["status"] == "pending_auth", "Should be pending auth"
+        assert minimal_conn["auth"]["method"] == "oauth_browser", "Should default to OAuth browser"
+        assert "auth_url" in minimal_conn["auth"], "Should have OAuth URL"
+
+        print(f"  ✅ Minimal OAuth payload test passed: {minimal_conn_id}")
+
+    except Exception as e:
+        print(f"  ⚠️ Minimal payload test failed: {e}")
+
+    # =============================
     # Test 4: OAuth Token Injection (if tokens available)
     # =============================
     print("\n📌 Test 4: OAuth Token Injection")
@@ -563,8 +597,8 @@ def test_source_connections(
         response = requests.get(f"{api_url}/source-connections?limit=100", headers=headers)
         assert response.status_code == 200, f"Failed to list connections: {response.text}"
 
-    all_connections = response.json()
-    assert isinstance(all_connections, list), "Response should be a list"
+        all_connections = response.json()
+        assert isinstance(all_connections, list), "Response should be a list"
 
         # Find our created connections
         our_connections = [c for c in all_connections if c["id"] in created_connections]
@@ -581,21 +615,21 @@ def test_source_connections(
                 "auth_provider",
             ]
 
-        # Filter by collection
-    response = requests.get(
+            # Filter by collection
+        response = requests.get(
             f"{api_url}/source-connections?collection={collection_id}", headers=headers
-    )
-        assert response.status_code == 200, f"Failed to filter by collection: {response.text}"
-
-    collection_connections = response.json()
-    assert all(
-            c["readable_collection_id"] == collection_id for c in collection_connections
-    ), "Collection filter not working"
-
-    print(
-            f"  ✅ List operations passed ({len(all_connections)} total, {len(collection_connections)} in collection)"
         )
 
+        assert response.status_code == 200, f"Failed to filter by collection: {response.text}"
+
+        collection_connections = response.json()
+        assert all(
+            c["readable_collection_id"] == collection_id for c in collection_connections
+        ), "Collection filter not working"
+
+        print(
+            f"  ✅ List operations passed ({len(all_connections)} total, {len(collection_connections)} in collection)"
+        )
     except AssertionError as e:
         print(f"  ❌ List operations test failed: {e}")
         raise

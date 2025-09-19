@@ -45,6 +45,25 @@ from airweave.schemas.source_connection import (
 class SourceConnectionHelpers:
     """Helper methods for source connection service."""
 
+    def _get_default_cron_schedule(self, ctx: ApiContext) -> str:
+        """Generate a default daily cron schedule based on current UTC time.
+
+        Returns:
+            A cron expression for daily execution at the current UTC time.
+        """
+        from datetime import datetime, timezone
+
+        now_utc = datetime.now(timezone.utc)
+        minute = now_utc.minute
+        hour = now_utc.hour
+        # Format: minute hour day_of_month month day_of_week
+        # e.g., "30 14 * * *" = run at 14:30 every day
+        cron_schedule = f"{minute} {hour} * * *"
+        ctx.logger.info(
+            f"No cron schedule provided, defaulting to daily at {hour:02d}:{minute:02d} UTC"
+        )
+        return cron_schedule
+
     async def reconstruct_context_from_session(
         self, db: AsyncSession, init_session: ConnectionInitSession
     ) -> ApiContext:
@@ -126,7 +145,7 @@ class SourceConnectionHelpers:
         raise TypeError(f"config_fields must be mapping-like; got {type(value).__name__}")
 
     async def validate_auth_fields(
-        self, db: AsyncSession, short_name: str, auth_fields: Any, ctx: ApiContext
+        self, db: AsyncSession, short_name: str, auth_fields: dict, ctx: ApiContext
     ) -> AuthConfig:
         """Validate authentication fields against source schema."""
         source = await crud.source.get_by_short_name(db, short_name=short_name)
@@ -141,7 +160,7 @@ class SourceConnectionHelpers:
 
         try:
             auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
-            auth_config = auth_config_class(**auth_fields.model_dump())
+            auth_config = auth_config_class(**auth_fields)
             return auth_config
         except Exception as e:
             from pydantic import ValidationError
@@ -1049,15 +1068,7 @@ class SourceConnectionHelpers:
             # the source_connection hasn't been updated with sync_id yet
             cron_schedule = payload.get("cron_schedule")
             if cron_schedule is None:
-                from datetime import datetime, timezone
-
-                now_utc = datetime.now(timezone.utc)
-                minute = now_utc.minute
-                hour = now_utc.hour
-                cron_schedule = f"{minute} {hour} * * *"
-                ctx.logger.info(
-                    f"No cron schedule provided, defaulting to daily at {hour:02d}:{minute:02d} UTC"
-                )
+                cron_schedule = self._get_default_cron_schedule(ctx)
 
             sync, sync_job = await self.create_sync_without_schedule(
                 uow.session,
