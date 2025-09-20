@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuthProvidersStore } from "@/lib/stores/authProviders";
 import { getAuthProviderIconUrl } from "@/lib/utils/icons";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import '@/styles/connection-animation.css';
 import {
     Tooltip,
@@ -371,7 +371,10 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
 
             const connection = await response.json();
 
-            // Show success message first
+            // Add a small delay to simulate connection process and show loading state
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            // Show success message after delay
             toast.success(`Successfully connected to ${authProviderName}`, {
                 description: 'Your connection is now active and ready to use.',
                 duration: 5000,
@@ -696,12 +699,20 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                         onClick={handleSubmit}
                         disabled={isSubmitting || hasEmptyRequiredFields()}
                         className={cn(
-                            "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all",
+                            "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all duration-200",
                             "disabled:opacity-50 disabled:cursor-not-allowed",
-                            "bg-blue-600 hover:bg-blue-700 text-white"
+                            "bg-blue-600 hover:bg-blue-700 text-white",
+                            "flex items-center justify-center gap-2"
                         )}
                     >
-                        {isSubmitting ? 'Connecting...' : 'Connect'}
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>Connecting...</span>
+                            </>
+                        ) : (
+                            'Connect'
+                        )}
                     </button>
                 </div>
             </div>
