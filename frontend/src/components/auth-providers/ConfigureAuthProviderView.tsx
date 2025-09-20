@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useAuthProvidersStore } from "@/lib/stores/authProviders";
 import { getAuthProviderIconUrl } from "@/lib/utils/icons";
 import { ExternalLink } from "lucide-react";
+import '@/styles/connection-animation.css';
 import {
     Tooltip,
     TooltipContent,
@@ -371,7 +372,10 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
             const connection = await response.json();
 
             // Show success message first
-            toast.success(`Successfully connected to ${authProviderName}`);
+            toast.success(`Successfully connected to ${authProviderName}`, {
+                description: 'Your connection is now active and ready to use.',
+                duration: 5000,
+            });
 
             // Navigate to detail view BEFORE refreshing connections
             console.log('🎯 [ConfigureAuthProviderView] Connection created successfully:', {
@@ -431,28 +435,98 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                         </p>
                     </div>
 
-                    {/* Auth Provider Icon - smaller, cleaner */}
+                    {/* Connection Animation */}
                     {authProviderShortName && (
                         <div className="flex justify-center py-8">
-                            <div className={cn(
-                                "w-32 h-32 flex items-center justify-center rounded-2xl p-4",
-                                isDark ? "bg-gray-800/50" : "bg-gray-50"
-                            )}>
-                                <img
-                                    src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
-                                    alt={`${authProviderName} icon`}
-                                    className="w-full h-full object-contain"
-                                    onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                        e.currentTarget.parentElement!.innerHTML = `
-                                            <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
-                                                <span class="text-3xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
-                                                    ${authProviderShortName.substring(0, 2).toUpperCase()}
-                                                </span>
-                                            </div>
-                                        `;
-                                    }}
-                                />
+                            <div className="flex items-center gap-8">
+                                {/* Airweave Logo */}
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className={cn(
+                                        "w-16 h-16 rounded-xl flex items-center justify-center p-3",
+                                        isDark ? "bg-gray-800/50" : "bg-white/80",
+                                        "shadow-lg"
+                                    )}>
+                                        <img
+                                            src={isDark ? "/airweave-logo-svg-white-darkbg.svg" : "/airweave-logo-svg-lightbg-blacklogo.svg"}
+                                            alt="Airweave"
+                                            className="w-full h-full object-contain"
+                                            onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.parentElement!.innerHTML = `
+                                                    <div class="w-full h-full rounded flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
+                                                        <span class="text-xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
+                                                            AW
+                                                        </span>
+                                                    </div>
+                                                `;
+                                            }}
+                                        />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground">Airweave</span>
+                                </div>
+
+                                {/* Connection Line with Data Packet Animation */}
+                                <div className="relative flex flex-col items-center gap-2">
+                                    {/* Shimmery Waiting Text - Above the animation */}
+                                    <p className={cn(
+                                        "text-sm font-medium relative",
+                                        "bg-clip-text text-transparent",
+                                        isDark
+                                            ? "bg-gradient-to-r from-gray-400 via-white to-gray-400"
+                                            : "bg-gradient-to-r from-gray-500 via-gray-900 to-gray-500"
+                                    )}
+                                        style={{
+                                            backgroundSize: '200% 100%',
+                                            animation: 'textShimmer 2.5s ease-in-out infinite'
+                                        }}>
+                                        Waiting for connection...
+                                    </p>
+
+                                    {/* Connection container with overflow hidden for animation */}
+                                    <div className="relative w-32 h-2 overflow-hidden">
+                                        {/* Animated data packet going right (Airweave to Pipedream) */}
+                                        <div
+                                            className={cn(
+                                                "absolute w-3 h-1 top-1/2 transform -translate-y-1/2 rounded-full",
+                                                "shadow-sm",
+                                                isDark
+                                                    ? "bg-gradient-to-r from-white to-gray-200 shadow-white/50"
+                                                    : "bg-gradient-to-r from-gray-100 to-gray-300 shadow-gray-400/50"
+                                            )}
+                                            style={{
+                                                animationDelay: '0s',
+                                                transform: 'translateY(-50%) translateX(0px)',
+                                                animation: 'slideRight 2s ease-in-out infinite'
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Auth Provider Logo */}
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className={cn(
+                                        "w-16 h-16 rounded-xl flex items-center justify-center p-3",
+                                        isDark ? "bg-gray-800/50" : "bg-white/80",
+                                        "shadow-lg"
+                                    )}>
+                                        <img
+                                            src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
+                                            alt={authProviderName}
+                                            className="w-full h-full object-contain"
+                                            onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.parentElement!.innerHTML = `
+                                                    <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
+                                                        <span class="text-xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
+                                                            ${authProviderShortName.substring(0, 2).toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                `;
+                                            }}
+                                        />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground">{authProviderName}</span>
+                                </div>
                             </div>
                         </div>
                     )}

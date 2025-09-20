@@ -9,6 +9,7 @@ import { getAuthProviderIconUrl } from "@/lib/utils/icons";
 import { format } from "date-fns";
 import { useAuthProvidersStore } from "@/lib/stores/authProviders";
 import { clearStoredErrorDetails } from "@/lib/error-utils";
+import '@/styles/connection-animation.css';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -428,28 +429,99 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
             {/* Content area - scrollable with better spacing */}
             <div className="flex-1 overflow-y-auto px-6 py-6">
                 <div className="space-y-6 pb-6">
-                    {/* Auth Provider Icon - more integrated */}
+
+                    {/* Connected Animation */}
                     {authProviderShortName && (
-                        <div className="flex justify-center py-4">
-                            <div className={cn(
-                                "w-20 h-20 flex items-center justify-center rounded-xl p-3",
-                                isDark ? "bg-gray-800/30" : "bg-gray-50/70"
-                            )}>
-                                <img
-                                    src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
-                                    alt={`${authProviderName} icon`}
-                                    className="w-full h-full object-contain"
-                                    onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                        e.currentTarget.parentElement!.innerHTML = `
-                                            <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900/50' : 'bg-blue-50'}">
-                                                <span class="text-xl font-semibold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
-                                                    ${authProviderShortName.substring(0, 2).toUpperCase()}
-                                                </span>
-                                            </div>
-                                        `;
-                                    }}
-                                />
+                        <div className="flex justify-center py-6">
+                            <div className="flex items-center gap-8">
+                                {/* Airweave Logo */}
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className={cn(
+                                        "w-16 h-16 rounded-xl flex items-center justify-center p-3",
+                                        isDark ? "bg-gray-800/50" : "bg-white/80",
+                                        "shadow-lg"
+                                    )}>
+                                        <img
+                                            src={isDark ? "/airweave-logo-svg-white-darkbg.svg" : "/airweave-logo-svg-lightbg-blacklogo.svg"}
+                                            alt="Airweave"
+                                            className="w-full h-full object-contain"
+                                            onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.parentElement!.innerHTML = `
+                                                    <div class="w-full h-full rounded flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
+                                                        <span class="text-xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
+                                                            AW
+                                                        </span>
+                                                    </div>
+                                                `;
+                                            }}
+                                        />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground">Airweave</span>
+                                </div>
+
+                                {/* Connection Line with Data Packet Animation */}
+                                <div className="relative flex flex-col items-center gap-2">
+                                    {/* Connected Status Text */}
+                                    <p className={cn(
+                                        "text-sm font-medium relative",
+                                        "bg-clip-text text-transparent",
+                                        isDark
+                                            ? "bg-gradient-to-r from-green-400 via-green-300 to-green-400"
+                                            : "bg-gradient-to-r from-green-500 via-green-600 to-green-500"
+                                    )}
+                                        style={{
+                                            backgroundSize: '200% 100%',
+                                            animation: 'textShimmer 2.5s ease-in-out infinite'
+                                        }}>
+                                        Active connection
+                                    </p>
+
+                                    {/* Connection container with overflow hidden for animation */}
+                                    <div className="relative w-32 h-2 overflow-hidden">
+                                        {/* Animated data packet going right (Airweave to Pipedream) */}
+                                        <div
+                                            className={cn(
+                                                "absolute w-3 h-1 top-1/2 transform -translate-y-1/2 rounded-full",
+                                                "shadow-sm",
+                                                isDark
+                                                    ? "bg-gradient-to-r from-green-400 to-green-300 shadow-green-400/50"
+                                                    : "bg-gradient-to-r from-green-500 to-green-400 shadow-green-500/50"
+                                            )}
+                                            style={{
+                                                animationDelay: '0s',
+                                                transform: 'translateY(-50%) translateX(0px)',
+                                                animation: 'slideRight 2s ease-in-out infinite'
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Auth Provider Logo */}
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className={cn(
+                                        "w-16 h-16 rounded-xl flex items-center justify-center p-3",
+                                        isDark ? "bg-gray-800/50" : "bg-white/80",
+                                        "shadow-lg ring-2 ring-green-500/30"
+                                    )}>
+                                        <img
+                                            src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
+                                            alt={authProviderName}
+                                            className="w-full h-full object-contain"
+                                            onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.parentElement!.innerHTML = `
+                                                    <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
+                                                        <span class="text-xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
+                                                            ${authProviderShortName.substring(0, 2).toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                `;
+                                            }}
+                                        />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground">{authProviderName}</span>
+                                </div>
                             </div>
                         </div>
                     )}

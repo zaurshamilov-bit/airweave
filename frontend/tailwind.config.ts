@@ -130,11 +130,24 @@ export default {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-10px)" },
         },
+        pulse: {
+          "0%": { opacity: "0.3", transform: "translateX(-50%) scale(0.8)" },
+          "50%": { opacity: "1", transform: "translateX(-50%) scale(1.2)" },
+          "100%": { opacity: "0.3", transform: "translateX(-50%) scale(0.8)" },
+        },
+        slideRight: {
+          "0%": { left: "-6px", opacity: "0" },
+          "20%": { opacity: "1" },
+          "80%": { opacity: "1" },
+          "100%": { left: "100%", opacity: "0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         float: "float 3s ease-in-out infinite",
+        pulse: "pulse 1.5s ease-in-out",
+        slideRight: "slideRight 2s ease-in-out infinite",
       },
       backdropBlur: {
         xs: '2px',
