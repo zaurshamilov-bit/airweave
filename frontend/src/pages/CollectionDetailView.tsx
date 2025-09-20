@@ -1117,6 +1117,8 @@ const Collections = () => {
                                 key={selectedConnection.id}
                                 sourceConnectionId={selectedConnection.id}
                                 sourceConnectionData={selectedConnection}
+                                collectionId={collection?.readable_id}
+                                collectionName={collection?.name}
                                 onConnectionDeleted={() => {
                                     // Clear selection and reload connections
                                     setSelectedConnection(null);

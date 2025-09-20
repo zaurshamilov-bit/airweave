@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, ArrowRight, Loader2 } from 'lucide-react';
+import { Copy, ArrowRight, Loader2, Trash2, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
 import { getAppIconUrl } from '@/lib/utils/icons';
@@ -19,6 +19,7 @@ interface SourceAuthenticationViewProps {
   onRefreshUrl?: () => void;
   isRefreshing?: boolean;
   showBorder?: boolean; // Optional border for collection detail view
+  onDelete?: () => void; // Callback for delete action
 }
 
 export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> = ({
@@ -27,7 +28,8 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
   authenticationUrl,
   onRefreshUrl,
   isRefreshing = false,
-  showBorder = false
+  showBorder = false,
+  onDelete
 }) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
@@ -54,7 +56,7 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
   };
 
   if (!authenticationUrl) {
-    // Error state - minimal and helpful
+    // Neutral state - solution-focused design
     return (
       <div className={cn(
         "rounded-xl p-6",
@@ -62,37 +64,64 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
         showBorder && (isDark ? "border-gray-800" : "border-gray-200"),
         isDark ? "bg-gray-900/20" : "bg-gray-50"
       )}>
-        <div>
-          <p className={cn(
-            "text-sm font-medium mb-2",
-            isDark ? "text-gray-300" : "text-gray-700"
-          )}>
-            Unable to generate authentication link
-          </p>
-          {onRefreshUrl && (
-            <button
-              onClick={onRefreshUrl}
-              disabled={isRefreshing}
-              className={cn(
-                "inline-flex items-center gap-1.5",
-                "px-3 py-1.5 rounded-lg",
-                "text-xs font-medium",
-                "transition-all",
-                isRefreshing
-                  ? "bg-muted text-muted-foreground cursor-not-allowed"
-                  : "bg-primary text-primary-foreground hover:bg-primary/90"
-              )}
-            >
-              {isRefreshing ? (
-                <>
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  <span>Refreshing</span>
-                </>
-              ) : (
-                <span>Try again</span>
-              )}
-            </button>
-          )}
+        <div className="space-y-4">
+          {/* Header with icon and title */}
+          <div className="flex items-start gap-3">
+            <div className={cn(
+              "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
+              isDark ? "bg-gray-800/50" : "bg-gray-100"
+            )}>
+              <Settings className={cn(
+                "h-4 w-4",
+                isDark ? "text-gray-400" : "text-gray-500"
+              )} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className={cn(
+                "text-sm font-semibold mb-1",
+                isDark ? "text-gray-200" : "text-gray-800"
+              )}>
+                Connection Setup Required
+              </h3>
+              <p className={cn(
+                "text-sm",
+                isDark ? "text-gray-400" : "text-gray-600"
+              )}>
+                This {sourceName} needs to be reconfigured.
+              </p>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex justify-start pt-2">
+            {onDelete && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={onDelete}
+                      className={cn(
+                        "inline-flex items-center justify-center gap-2",
+                        "px-4 py-2.5 rounded-lg",
+                        "text-sm font-medium",
+                        "transition-all duration-200",
+                        "border border-gray-200 hover:border-gray-300",
+                        "bg-white text-gray-700 hover:bg-gray-50",
+                        "shadow-sm hover:shadow-md",
+                        isDark && "bg-gray-800 text-gray-200 hover:bg-gray-700 border-gray-600 hover:border-gray-500"
+                      )}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Reconfigure</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Delete this connection so you can create a new one</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
         </div>
       </div>
     );
