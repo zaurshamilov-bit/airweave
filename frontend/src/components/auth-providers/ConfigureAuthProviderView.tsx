@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuthProvidersStore } from "@/lib/stores/authProviders";
 import { getAuthProviderIconUrl } from "@/lib/utils/icons";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2, Key } from "lucide-react";
 import '@/styles/connection-animation.css';
 import {
     Tooltip,
@@ -440,14 +440,15 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
 
                     {/* Connection Animation */}
                     {authProviderShortName && (
-                        <div className="flex justify-center py-8">
-                            <div className="flex items-center gap-8">
+                        <div className="flex justify-center py-6">
+                            <div className="relative flex items-center gap-8">
                                 {/* Airweave Logo */}
                                 <div className="flex flex-col items-center gap-2">
                                     <div className={cn(
                                         "w-16 h-16 rounded-xl flex items-center justify-center p-3",
+                                        "transition-all duration-500 ease-in-out",
                                         isDark ? "bg-gray-800/50" : "bg-white/80",
-                                        "shadow-lg"
+                                        "shadow-lg ring-2 ring-gray-400/30"
                                     )}>
                                         <img
                                             src={isDark ? "/airweave-logo-svg-white-darkbg.svg" : "/airweave-logo-svg-lightbg-blacklogo.svg"}
@@ -465,14 +466,12 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                                             }}
                                         />
                                     </div>
-                                    <span className="text-xs text-muted-foreground">Airweave</span>
                                 </div>
 
-                                {/* Connection Line with Data Packet Animation */}
-                                <div className="relative flex flex-col items-center gap-2">
-                                    {/* Shimmery Waiting Text - Above the animation */}
+                                {/* Connecting Status Text */}
+                                <div className="flex items-center justify-center">
                                     <p className={cn(
-                                        "text-sm font-medium relative",
+                                        "text-sm font-medium relative transition-all duration-500 ease-in-out",
                                         "bg-clip-text text-transparent",
                                         isDark
                                             ? "bg-gradient-to-r from-gray-400 via-white to-gray-400"
@@ -484,33 +483,15 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                                         }}>
                                         Waiting for connection...
                                     </p>
-
-                                    {/* Connection container with overflow hidden for animation */}
-                                    <div className="relative w-32 h-2 overflow-hidden">
-                                        {/* Animated data packet going right (Airweave to Pipedream) */}
-                                        <div
-                                            className={cn(
-                                                "absolute w-3 h-1 top-1/2 transform -translate-y-1/2 rounded-full",
-                                                "shadow-sm",
-                                                isDark
-                                                    ? "bg-gradient-to-r from-white to-gray-200 shadow-white/50"
-                                                    : "bg-gradient-to-r from-gray-100 to-gray-300 shadow-gray-400/50"
-                                            )}
-                                            style={{
-                                                animationDelay: '0s',
-                                                transform: 'translateY(-50%) translateX(0px)',
-                                                animation: 'slideRight 2s ease-in-out infinite'
-                                            }}
-                                        />
-                                    </div>
                                 </div>
 
                                 {/* Auth Provider Logo */}
                                 <div className="flex flex-col items-center gap-2">
                                     <div className={cn(
                                         "w-16 h-16 rounded-xl flex items-center justify-center p-3",
+                                        "transition-all duration-500 ease-in-out",
                                         isDark ? "bg-gray-800/50" : "bg-white/80",
-                                        "shadow-lg"
+                                        "shadow-lg ring-2 ring-gray-400/30"
                                     )}>
                                         <img
                                             src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
@@ -528,7 +509,6 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                                             }}
                                         />
                                     </div>
-                                    <span className="text-xs text-muted-foreground">{authProviderName}</span>
                                 </div>
                             </div>
                         </div>

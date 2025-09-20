@@ -3,7 +3,7 @@ import type { DialogViewProps } from "@/components/types/dialog";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
-import { Copy, Check, Trash, Pencil, AlertTriangle, AlertCircle, Loader2 } from "lucide-react";
+import { Copy, Check, Trash, Pencil, AlertTriangle, AlertCircle, Loader2, Key } from "lucide-react";
 import { toast } from "sonner";
 import { getAuthProviderIconUrl } from "@/lib/utils/icons";
 import { format } from "date-fns";
@@ -433,14 +433,38 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                     {/* Connected Animation */}
                     {authProviderShortName && (
                         <div className="flex justify-center py-6">
-                            <div className="flex items-center gap-8">
+                            <div className="relative flex items-center gap-8">
+                                {/* Connection Lines */}
+                                <div className="absolute left-0 right-0 top-1/2 transform -translate-y-1/2 flex items-center pointer-events-none z-10">
+                                    <div className="w-16" />
+                                    <div className={cn(
+                                        "h-0.5",
+                                        isDark ? "bg-green-400/30" : "bg-green-500/30"
+                                    )} style={{ width: '2rem' }} />
+                                    <div className="w-8" />
+                                    <div className={cn(
+                                        "h-0.5",
+                                        isDark ? "bg-green-400/30" : "bg-green-500/30"
+                                    )} style={{ width: '2rem' }} />
+                                    <div className="w-16" />
+                                </div>
+
                                 {/* Airweave Logo */}
                                 <div className="flex flex-col items-center gap-2">
                                     <div className={cn(
                                         "w-16 h-16 rounded-xl flex items-center justify-center p-3",
+                                        "transition-all duration-500 ease-in-out",
                                         isDark ? "bg-gray-800/50" : "bg-white/80",
-                                        "shadow-lg"
-                                    )}>
+                                        "shadow-lg relative"
+                                    )}
+                                        style={{
+                                            '--tw-ring-color': isDark ? 'rgba(34, 197, 94, 0.3)' : 'rgba(34, 197, 94, 0.2)',
+                                            '--tw-ring-opacity': '1',
+                                            '--tw-ring-offset-width': '0px',
+                                            '--tw-ring-width': '2px',
+                                            boxShadow: `0 0 0 2px ${isDark ? 'rgba(34, 197, 94, 0.3)' : 'rgba(34, 197, 94, 0.2)'}`,
+                                            animation: 'textShimmer 3s ease-in-out infinite'
+                                        }}>
                                         <img
                                             src={isDark ? "/airweave-logo-svg-white-darkbg.svg" : "/airweave-logo-svg-lightbg-blacklogo.svg"}
                                             alt="Airweave"
@@ -457,43 +481,57 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                                             }}
                                         />
                                     </div>
-                                    <span className="text-xs text-muted-foreground">Airweave</span>
                                 </div>
 
-                                {/* Connection Line with Data Packet Animation */}
-                                <div className="relative flex flex-col items-center gap-2">
-                                    {/* Connected Status Text */}
-                                    <p className={cn(
-                                        "text-sm font-medium relative",
-                                        "bg-clip-text text-transparent",
-                                        isDark
-                                            ? "bg-gradient-to-r from-green-400 via-green-300 to-green-400"
-                                            : "bg-gradient-to-r from-green-500 via-green-600 to-green-500"
-                                    )}
-                                        style={{
-                                            backgroundSize: '200% 100%',
-                                            animation: 'textShimmer 2.5s ease-in-out infinite'
-                                        }}>
-                                        Active connection
-                                    </p>
-
-                                    {/* Connection container with overflow hidden for animation */}
-                                    <div className="relative w-32 h-2 overflow-hidden">
-                                        {/* Animated data packet going right (Airweave to Pipedream) */}
-                                        <div
-                                            className={cn(
-                                                "absolute w-3 h-1 top-1/2 transform -translate-y-1/2 rounded-full",
-                                                "shadow-sm",
-                                                isDark
-                                                    ? "bg-gradient-to-r from-green-400 to-green-300 shadow-green-400/50"
-                                                    : "bg-gradient-to-r from-green-500 to-green-400 shadow-green-500/50"
+                                {/* Unlock Animation with Key */}
+                                <div className="flex items-center justify-center">
+                                    {/* Unlock Animation Container */}
+                                    <div className="relative flex items-center justify-center z-20">
+                                        {/* Key Animation */}
+                                        <div className="relative">
+                                            <div className={cn(
+                                                "w-8 h-8 rounded-full flex items-center justify-center",
+                                                "transition-all duration-500 ease-in-out",
+                                                isDark ? "bg-green-900/50" : "bg-green-100"
                                             )}
-                                            style={{
-                                                animationDelay: '0s',
-                                                transform: 'translateY(-50%) translateX(0px)',
-                                                animation: 'slideRight 2s ease-in-out infinite'
-                                            }}
-                                        />
+                                                style={{
+                                                    animation: 'unlockGlow 2s ease-in-out infinite'
+                                                }}>
+                                                <Key className={cn(
+                                                    "h-4 w-4",
+                                                    isDark ? "text-green-300" : "text-green-500"
+                                                )}
+                                                    style={{
+                                                        animation: 'unlockKey 2s ease-in-out infinite',
+                                                        transformOrigin: 'center'
+                                                    }} />
+                                            </div>
+
+                                            {/* Unlock Ring Animation */}
+                                            <div className={cn(
+                                                "absolute inset-0 rounded-full border-2",
+                                                "animate-spin",
+                                                isDark ? "border-green-400/30" : "border-green-500/30"
+                                            )}
+                                                style={{
+                                                    animationDuration: '3s',
+                                                    animationTimingFunction: 'linear'
+                                                }}
+                                            />
+
+                                            {/* Unlock Ring Animation - Reverse */}
+                                            <div className={cn(
+                                                "absolute inset-0 rounded-full border-2",
+                                                "animate-spin",
+                                                isDark ? "border-green-300/20" : "border-green-600/20"
+                                            )}
+                                                style={{
+                                                    animationDuration: '4s',
+                                                    animationDirection: 'reverse',
+                                                    animationTimingFunction: 'linear'
+                                                }}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
@@ -501,9 +539,18 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                                 <div className="flex flex-col items-center gap-2">
                                     <div className={cn(
                                         "w-16 h-16 rounded-xl flex items-center justify-center p-3",
+                                        "transition-all duration-500 ease-in-out",
                                         isDark ? "bg-gray-800/50" : "bg-white/80",
-                                        "shadow-lg ring-2 ring-green-500/30"
-                                    )}>
+                                        "shadow-lg relative"
+                                    )}
+                                        style={{
+                                            '--tw-ring-color': isDark ? 'rgba(34, 197, 94, 0.3)' : 'rgba(34, 197, 94, 0.2)',
+                                            '--tw-ring-opacity': '1',
+                                            '--tw-ring-offset-width': '0px',
+                                            '--tw-ring-width': '2px',
+                                            boxShadow: `0 0 0 2px ${isDark ? 'rgba(34, 197, 94, 0.3)' : 'rgba(34, 197, 94, 0.2)'}`,
+                                            animation: 'textShimmer 3s ease-in-out infinite'
+                                        }}>
                                         <img
                                             src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
                                             alt={authProviderName}
@@ -520,7 +567,6 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                                             }}
                                         />
                                     </div>
-                                    <span className="text-xs text-muted-foreground">{authProviderName}</span>
                                 </div>
                             </div>
                         </div>
