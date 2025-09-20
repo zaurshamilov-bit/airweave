@@ -26,6 +26,36 @@ interface SourceSelectViewProps {
   isAddingToExisting?: boolean;
 }
 
+// Function to get comprehensive, specific descriptions for each source
+const getSourceDescription = (shortName: string, fallbackDescription?: string): string => {
+  const descriptions: Record<string, string> = {
+    'notion': 'Connect to Notion to sync pages, databases, and workspace content. Includes notes, documents, project databases, property entities, and collaborative workspace data with full content aggregation.',
+    'postgresql': 'Connect to PostgreSQL to sync tables, views, schemas, and database records. Dynamically creates entities for each table based on schema structure with all relational data and metadata.',
+    'jira': 'Connect to Jira to sync issues, projects, and team workflows. Includes tickets, project details, issue summaries, descriptions, status tracking, and project management information.',
+    'hubspot': 'Connect to HubSpot to sync contacts, companies, deals, tickets, and CRM data. Includes sales pipeline information, marketing campaigns, customer relationship data, and business intelligence.',
+    'google_calendar': 'Connect to Google Calendar to sync events, calendars, meetings, and scheduling data. Includes recurring events, attendees, calendar metadata, and scheduling information.',
+    'google_drive': 'Connect to Google Drive to sync files, folders, documents, and sharing information. Includes file metadata, permissions, collaborative document data, shared drives, and file versions.',
+    'gmail': 'Connect to Gmail to sync email threads, individual messages, and file attachments. Includes inbox organization, labels, email conversation history, and message metadata.',
+    'confluence': 'Connect to Confluence to sync pages, spaces, knowledge base content, and collaborative documentation. Includes page hierarchies, comments, team knowledge, and documentation structure.',
+    'todoist': 'Connect to Todoist to sync projects, tasks, sections, comments, and productivity data. Includes task hierarchies, due dates, project management, and personal organization features.',
+    'github': 'Connect to GitHub to sync repositories, repository contents, directories, and code files. Includes repository metadata, file contents, directory structures, and development information.',
+    'stripe': 'Connect to Stripe to sync balance, transactions, charges, customers, events, invoices, payment intents, payment methods, payouts, refunds, and subscriptions.',
+    'dropbox': 'Connect to Dropbox to sync files, folders, sharing information, and cloud storage data. Includes file versions, collaboration features, storage metadata, and account information.',
+    'asana': 'Connect to Asana to sync workspaces, projects, tasks, sections, comments, and file attachments. Includes project hierarchies, team assignments, progress tracking, and workflow management.',
+    'outlook_calendar': 'Connect to Outlook Calendar to sync events, meetings, calendars, and scheduling data. Includes recurring appointments, attendees, calendar organization, and meeting details.',
+    'outlook_mail': 'Connect to Outlook Mail to sync emails, folders, message data, and inbox organization. Includes email threads, attachments, mailbox structure, and message metadata.',
+    'onedrive': 'Connect to OneDrive to sync files, folders, document sharing, and cloud storage data. Includes file collaboration, version history, storage metadata, and sharing permissions.',
+    'monday': 'Connect to Monday to sync boards, items, workflow data, and project management information. Includes team collaboration, progress tracking, workflow automation, and board structures.',
+    'bitbucket': 'Connect to Bitbucket to sync repositories, pull requests, code, and development collaboration data. Includes commits, branches, code review information, and repository metadata.',
+    'linear': 'Connect to Linear to sync issues, projects, development cycles, and engineering workflow data. Includes bug tracking, feature requests, development progress, and team collaboration.',
+    'ctti_aact': 'Connect to CTTI AACT to sync clinical trials, research data, and medical study information. Includes trial protocols, patient data, research outcomes, and clinical study metadata.',
+    'composio': 'Connect to Composio to sync integrated app data, workflows, and automation connections. Includes multi-platform integrations, workflow orchestration, and API connections.',
+    'pipedream': 'Connect to Pipedream to sync automation workflows, app connections, and integration data. Includes workflow triggers, data transformations, API connections, and automation metadata.'
+  };
+
+  return descriptions[shortName] || fallbackDescription || `Connect to ${shortName} to sync your data and keep your workspace organized.`;
+};
+
 export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadableId, isAddingToExisting = false }) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
@@ -279,7 +309,7 @@ export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadabl
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground leading-relaxed">
-                        {source.description || `Connect to ${source.name} to sync your data.`}
+                        {getSourceDescription(source.short_name, source.description)}
                       </p>
                       {source.labels && source.labels.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
