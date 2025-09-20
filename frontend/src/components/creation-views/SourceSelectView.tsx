@@ -5,6 +5,12 @@ import { ArrowLeft, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
 import { getAppIconUrl } from '@/lib/utils/icons';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface Source {
   short_name: string;
@@ -205,51 +211,97 @@ export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadabl
         ) : (
           <div className="grid grid-cols-4 gap-3">
             {filteredSources.map((source) => (
-              <button
-                key={source.short_name}
-                onClick={() => handleSelectSource(source)}
-                className={cn(
-                  "group relative p-3 rounded-lg border transition-all duration-200",
-                  "flex flex-col items-center gap-2",
-                  isDark
-                    ? "bg-gray-900/50 border-gray-800 hover:border-gray-700 hover:bg-gray-900"
-                    : "bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                )}
-                title={source.description || source.name}
-              >
-                {/* Source icon */}
-                <div className="w-10 h-10 rounded-md overflow-hidden flex items-center justify-center relative">
-                  <img
-                    src={getAppIconUrl(source.short_name, resolvedTheme)}
-                    alt={source.name}
-                    className="w-full h-full object-contain"
-                    onError={(e) => {
-                      // Hide the image and show fallback
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = 'none';
-                    }}
-                  />
-                  {/* Fallback - always rendered but hidden by default */}
-                  <div
-                    className={cn(
-                      "absolute inset-0 flex items-center justify-center text-lg font-semibold rounded-md",
-                      isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"
-                    )}
-                    style={{
-                      display: 'none',
-                      // Show if image is hidden
-                      ...(sources.find(s => s.short_name === source.short_name) && {})
-                    }}
-                  >
-                    {source.name.charAt(0).toUpperCase()}
-                  </div>
-                </div>
+              <TooltipProvider key={source.short_name}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => handleSelectSource(source)}
+                      className={cn(
+                        "group relative p-3 rounded-lg border transition-all duration-200",
+                        "flex flex-col items-center gap-2",
+                        isDark
+                          ? "bg-gray-900/50 border-gray-800 hover:border-gray-700 hover:bg-gray-900"
+                          : "bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                      )}
+                    >
+                      {/* Source icon */}
+                      <div className="w-10 h-10 rounded-md overflow-hidden flex items-center justify-center relative">
+                        <img
+                          src={getAppIconUrl(source.short_name, resolvedTheme)}
+                          alt={source.name}
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            // Hide the image and show fallback
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                          }}
+                        />
+                        {/* Fallback - always rendered but hidden by default */}
+                        <div
+                          className={cn(
+                            "absolute inset-0 flex items-center justify-center text-lg font-semibold rounded-md",
+                            isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"
+                          )}
+                          style={{
+                            display: 'none',
+                            // Show if image is hidden
+                            ...(sources.find(s => s.short_name === source.short_name) && {})
+                          }}
+                        >
+                          {source.name.charAt(0).toUpperCase()}
+                        </div>
+                      </div>
 
-                {/* Source name */}
-                <span className="text-xs font-medium text-gray-900 dark:text-white text-center line-clamp-1">
-                  {source.name}
-                </span>
-              </button>
+                      {/* Source name */}
+                      <span className="text-xs font-medium text-gray-900 dark:text-white text-center line-clamp-1">
+                        {source.name}
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    className={cn(
+                      "max-w-sm p-4 border shadow-lg",
+                      isDark
+                        ? "bg-gray-900 border-gray-700 text-gray-100"
+                        : "bg-white border-gray-200 text-gray-900"
+                    )}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={getAppIconUrl(source.short_name, resolvedTheme)}
+                          alt={`${source.short_name} icon`}
+                          className="h-5 w-5 rounded-sm"
+                        />
+                        <span className="text-sm font-semibold text-foreground">
+                          {source.name}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {source.description || `Connect to ${source.name} to sync your data.`}
+                      </p>
+                      {source.labels && source.labels.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {source.labels.map((label, index) => (
+                            <span
+                              key={index}
+                              className={cn(
+                                "text-xs px-2 py-1 rounded-full",
+                                isDark
+                                  ? "bg-gray-800 text-gray-300"
+                                  : "bg-gray-100 text-gray-600"
+                              )}
+                            >
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             ))}
           </div>
         )}
