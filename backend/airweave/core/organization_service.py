@@ -19,8 +19,8 @@ from airweave.models import Organization, User, UserOrganization
 from airweave.schemas.api_key import APIKeyCreate
 
 if settings.STRIPE_ENABLED:
-    from airweave.core.billing_service import billing_service
     from airweave.integrations.stripe_client import stripe_client
+    from airweave.platform.billing import billing_service
 
 
 class OrganizationService:
@@ -35,7 +35,7 @@ class OrganizationService:
         small_uuid = str(uuid.uuid4())[:8]
         return f"airweave-{org_data.name.lower().replace(' ', '-')}-{small_uuid}"
 
-    async def create_organization_with_integrations(
+    async def create_organization_with_integrations(  # noqa: C901
         self, db: AsyncSession, org_data: schemas.OrganizationCreate, owner_user: User
     ) -> schemas.Organization:
         """Create organization with Auth0 and optionally Stripe integration.
@@ -157,7 +157,7 @@ class OrganizationService:
                     )
 
                     # Create billing record
-                    _ = await billing_service.create_billing_record_with_transaction(
+                    _ = await billing_service.create_billing_record(
                         db=db,
                         organization=local_org_schema,
                         stripe_customer_id=stripe_customer.id,
