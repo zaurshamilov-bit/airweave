@@ -92,13 +92,20 @@ class NotionSource(BaseSource):
         except Exception:
             pass
         try:
-            instance.batch_size = int(config.get("batch_size", instance.batch_size))
+            instance.batch_size = int(config.get("batch_size", 30))
         except Exception:
             pass
         # Rebuild the gate in case batch_size changed
         instance._materialize_semaphore = asyncio.Semaphore(instance.batch_size)
 
         return instance
+
+    async def validate(self) -> bool:
+        """Validate the Notion source."""
+        return await self._validate_oauth2(
+            ping_url="https://api.notion.com/v1/users/me",
+            headers={"Notion-Version": "2022-06-28"},
+        )
 
     def __init__(self):
         """Initialize rate limiting state and tracking."""
@@ -1377,4 +1384,5 @@ class NotionSource(BaseSource):
         except Exception as e:
             self.logger.error(f"Error processing pre-signed file {file_entity.name}: {e}")
             return None
+
     # Removed lazy page entity creation and related helpers to simplify to eager-only generation
