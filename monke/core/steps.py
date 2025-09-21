@@ -170,7 +170,7 @@ class SyncStep(TestStep):
     def _latest_job_id(self, client: Any) -> Optional[str]:
         try:
             sc = client.source_connections.get(self.config._source_connection_id)
-            latest = getattr(sc, "latest_sync_job_id", None)
+            latest = getattr(sc, "last_sync_job_id", None)
             if latest:
                 return str(latest)
         except Exception:
@@ -219,7 +219,7 @@ class SyncStep(TestStep):
         if not target_job_id:
             target_job_id = self._find_active_job_id(client)
 
-        # If still none, fall back to observing latest_sync_job_id
+        # If still none, fall back to observing last_sync_job_id
         if not target_job_id:
             self.logger.info(
                 "ℹ️ No job id available; discovering via latest_sync_job_id …"
@@ -229,7 +229,7 @@ class SyncStep(TestStep):
 
             while time.monotonic() - start < timeout_seconds:
                 sc = client.source_connections.get(self.config._source_connection_id)
-                latest = getattr(sc, "latest_sync_job_id", None)
+                latest = getattr(sc, "last_sync_job_id", None)
                 if latest and latest != prev_latest:
                     target_job_id = latest
                     self.logger.info(f"🆔 Detected sync job id: {target_job_id}")
