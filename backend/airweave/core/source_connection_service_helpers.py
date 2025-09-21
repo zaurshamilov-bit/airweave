@@ -33,6 +33,7 @@ from airweave.models.source_connection import SourceConnection
 from airweave.models.sync import Sync
 from airweave.models.sync_job import SyncJob
 from airweave.platform.auth.services import oauth2_service
+from airweave.platform.configs._base import ConfigValues
 from airweave.platform.configs.auth import AuthConfig
 from airweave.platform.locator import resource_locator
 from airweave.platform.temporal.schedule_service import temporal_schedule_service
@@ -232,12 +233,13 @@ class SourceConnectionHelpers:
         db: AsyncSession,
         source: schemas.Source,
         auth_fields: AuthConfig,
+        config_fields: Optional[ConfigValues],
         ctx: ApiContext,
     ) -> Dict[str, Any]:
         """Validate direct authentication credentials."""
         try:
             source_cls = resource_locator.get_source(source)
-            source_instance = await source_cls.create(auth_fields, config=None)
+            source_instance = await source_cls.create(auth_fields, config=config_fields)
             source_instance.set_logger(ctx.logger)
 
             if hasattr(source_instance, "validate"):
@@ -262,12 +264,15 @@ class SourceConnectionHelpers:
         db: AsyncSession,
         source: schemas.Source,
         access_token: str,
+        config_fields: Optional[ConfigValues],
         ctx: ApiContext,
     ) -> Dict[str, Any]:
         """Validate OAuth access token."""
         try:
             source_cls = resource_locator.get_source(source)
-            source_instance = await source_cls.create(access_token=access_token, config=None)
+            source_instance = await source_cls.create(
+                access_token=access_token, config=config_fields
+            )
             source_instance.set_logger(ctx.logger)
 
             if hasattr(source_instance, "validate"):
