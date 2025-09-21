@@ -345,7 +345,7 @@ class SourceConnectionService:
         )
 
         # Validate credentials with source
-        await self._validate_direct_auth(db, source, validated_auth, ctx)
+        await self._validate_direct_auth(db, source, validated_auth, validated_config, ctx)
 
         async with UnitOfWork(db) as uow:
             # Get collection
@@ -552,12 +552,14 @@ class SourceConnectionService:
         if obj_in.authentication.expires_at:
             oauth_creds["expires_at"] = obj_in.authentication.expires_at.isoformat()
 
-        # Validate token
-        await self._validate_oauth_token(db, source, obj_in.authentication.access_token, ctx)
-
         # Validate config
         validated_config = await self._validate_config_fields(
             db, obj_in.short_name, obj_in.config, ctx
+        )
+
+        # Validate token
+        await self._validate_oauth_token(
+            db, source, obj_in.authentication.access_token, validated_config, ctx
         )
 
         async with UnitOfWork(db) as uow:
@@ -1036,6 +1038,7 @@ class SourceConnectionService:
             db,
             await crud.source.get_by_short_name(db, short_name=init_session.short_name),
             token_response.access_token,
+            None,
             ctx,
         )
 

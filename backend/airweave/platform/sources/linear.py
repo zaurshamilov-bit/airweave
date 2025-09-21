@@ -952,4 +952,4 @@ class LinearSource(BaseSource):
             return False
         except Exception as e:
             self.logger.error(f"Unexpected error during Linear validation: {e}")
-            return False            
+            return False
