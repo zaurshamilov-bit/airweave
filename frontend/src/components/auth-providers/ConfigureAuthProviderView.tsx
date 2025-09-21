@@ -424,19 +424,25 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
     }
 
     return (
-        <div className="h-full flex flex-col min-h-0">
+        <div className="h-full flex flex-col max-h-[90vh]">
+            {/* Fixed header */}
+            <div className={cn(
+                "px-6 pt-6 pb-4 border-b",
+                isDark ? "border-gray-800/50" : "border-gray-100"
+            )}>
+                <div>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        Connect to {authProviderName}
+                    </h2>
+                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                        Create a connection to {authProviderName} that can be used to authenticate to data sources
+                    </p>
+                </div>
+            </div>
+
             {/* Content area - scrollable */}
             <div className="px-8 py-10 flex-1 overflow-auto min-h-0">
                 <div className="space-y-8">
-                    {/* Header */}
-                    <div>
-                        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                            Connect to {authProviderName}
-                        </h2>
-                        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                            Create a connection to {authProviderName} that can be used to authenticate to data sources
-                        </p>
-                    </div>
 
                     {/* Connection Animation */}
                     {authProviderShortName && (
