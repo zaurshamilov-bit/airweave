@@ -96,7 +96,8 @@ Follow similar steps for Google Drive, GitHub, or other source integrations.
 To create source connections, you'll need these identifiers:
 
 1. **project_id**: Found in the URL when viewing your project (e.g., `proj_JPsD74a`)
-2. **account_id**: Retrieved via Pipedream API:
+2. **account_id**: Retrieved via Pipedream UI or API
+3. **external_user_id**: Retrieved via Pipedream UI or API
 
 ```bash
 curl -X GET "https://api.pipedream.com/v1/connect/{project_id}/accounts?include_credentials=true" \
@@ -104,6 +105,10 @@ curl -X GET "https://api.pipedream.com/v1/connect/{project_id}/accounts?include_
 ```
 
 The response will include account IDs like `apn_gyha5Ky`.
+
+<Callout type="warning">
+**Breaking Change (v2.0.0)**: The `external_user_id` field is now required in the auth provider configuration. This field helps map Pipedream accounts to users in your system. Existing integrations will need to be updated to include this field.
+</Callout>
 
 ### Step 6: Create source connections
 
@@ -123,8 +128,8 @@ source_connection = client.source_connections.create_source_connection(
     auth_provider_config={
         "project_id": "proj_JPsD74a",      # From Pipedream
         "account_id": "apn_gyha5Ky",       # From Pipedream API
+        "external_user_id": "user123"      # Required: unique user identifier
         "environment": "production",        # Optional, defaults to "production"
-        "external_user_id": "user123"      # Optional, for user mapping
     }
 )
 
@@ -146,8 +151,8 @@ const sourceConnection = await client.sourceConnections.createSourceConnection({
   authProviderConfig: {
     project_id: "proj_JPsD74a",      // From Pipedream
     account_id: "apn_gyha5Ky",       // From Pipedream API
+    external_user_id: "user123"      // Required: unique user identifier
     environment: "production",      // Optional, defaults to "production"
-    external_user_id: "user123"      // Optional, for user mapping
   }
 });
 
@@ -295,7 +300,8 @@ source_connection = client.source_connections.create_source_connection(
     auth_provider_config={
         "project_id": "proj_JPsD74a",
         "account_id": "apn_gyha5Ky",
-        "environment": "production"
+        "external_user_id": "user123",
+        "environment": "production"         # Optional, defaults to "production"
     }
 )
 ```
@@ -314,7 +320,8 @@ const sourceConnection = await client.sourceConnections.createSourceConnection({
   authProviderConfig: {
     projectId: "proj_JPsD74a",
     accountId: "apn_gyha5Ky",
-    environment: "production"
+    externalUserId: "user123",
+    environment: "production"      // Optional, defaults to "production"
   }
 });
 ```
@@ -330,6 +337,7 @@ curl -X POST 'https://app.airweave.ai/source-connections' \
   "auth_provider_config": {
     "project_id": "proj_JPsD74a",
     "account_id": "apn_gyha5Ky",
+    "external_user_id": "user123",
     "environment": "production"
   }
 }'

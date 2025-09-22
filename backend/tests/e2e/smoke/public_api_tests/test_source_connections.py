@@ -734,7 +734,13 @@ def test_source_connections(
     pipedream_environment = os.environ.get("TEST_PIPEDREAM_ENVIRONMENT", "development")
 
     if not all(
-        [pipedream_client_id, pipedream_client_secret, pipedream_project_id, pipedream_account_id]
+        [
+            pipedream_client_id,
+            pipedream_client_secret,
+            pipedream_project_id,
+            pipedream_account_id,
+            pipedream_external_user_id,
+        ]
     ):
         print("    ⚠️ Skipping Pipedream proxy test - missing required environment variables:")
         if not pipedream_client_id:
