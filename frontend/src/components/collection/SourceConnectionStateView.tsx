@@ -314,7 +314,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
   }, [fetchSourceConnection]);
 
   useEffect(() => {
-    const isNotAuthorized = sourceConnectionData?.status === 'not_yet_authorized' || !sourceConnectionData?.auth?.authenticated;
+    const isNotAuthorized = sourceConnectionData?.status === 'pending_auth' || !sourceConnectionData?.auth?.authenticated;
 
     // Only initialize mediator if authenticated
     if (!isNotAuthorized) {
@@ -355,7 +355,8 @@ const SourceConnectionStateView: React.FC<Props> = ({
         // Check the store for active sync job after initialization
         const currentState = useEntityStateStore.getState().getConnection(sourceConnectionId);
         if (currentState?.last_sync_job?.id &&
-          (currentState.last_sync_job.status === 'in_progress' ||
+          ((currentState.last_sync_job.status as any) === 'running' ||
+            currentState.last_sync_job.status === 'in_progress' ||
             currentState.last_sync_job.status === 'pending' ||
             currentState.last_sync_job.status === 'created')) {
           console.log('Subscribing to active sync job:', currentState.last_sync_job.id);
@@ -611,13 +612,14 @@ const SourceConnectionStateView: React.FC<Props> = ({
 
   // Sync states - use real-time updates from store if available, otherwise use source connection data
   const currentSyncJob = storeConnection?.last_sync_job || sourceConnection?.last_sync_job;
-  const isRunning = currentSyncJob?.status === 'in_progress';
+  const jobStatus = currentSyncJob?.status as unknown as string | undefined;
+  const isRunning = jobStatus === 'running' || jobStatus === 'in_progress';
   const isPending = currentSyncJob?.status === 'pending' || currentSyncJob?.status === 'created';
   const isSyncing = isRunning || isPending;
 
   // Get sync status display
   const getSyncStatusDisplay = () => {
-    if (sourceConnection?.status === 'not_yet_authorized' || !sourceConnection?.auth?.authenticated) {
+    if (sourceConnection?.status === 'pending_auth' || !sourceConnection?.auth?.authenticated) {
       return { text: 'Not Authenticated', color: 'bg-cyan-500', icon: null };
     }
     if (currentSyncJob?.status === 'failed') return { text: 'Failed', color: 'bg-red-500', icon: null };
@@ -628,7 +630,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
   };
 
   const syncStatus = getSyncStatusDisplay();
-  const isNotAuthorized = sourceConnection?.status === 'not_yet_authorized' || !sourceConnection?.auth?.authenticated;
+  const isNotAuthorized = sourceConnection?.status === 'pending_auth' || !sourceConnection?.auth?.authenticated;
 
   return (
     <div className={cn("space-y-4", DESIGN_SYSTEM.typography.sizes.body)}>
@@ -728,61 +730,61 @@ const SourceConnectionStateView: React.FC<Props> = ({
             )}
           </div>
 
-        {/* Settings and Action Buttons */}
-        <div className="flex gap-1.5 items-center">
-          {/* Refresh/Cancel Button */}
-          <TooltipProvider delayDuration={100}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={isSyncing ? handleCancelSync : handleRunSync}
-                  disabled={isRunningSync || isCancelling}
-                  className={cn(
-                    "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
-                    isSyncing
-                      ? isCancelling
-                        ? isDark
-                          ? "bg-orange-900/30 border-orange-700 hover:bg-orange-900/50 cursor-not-allowed"
-                          : "bg-orange-50 border-orange-200 hover:bg-orange-100 cursor-not-allowed"
-                        : isDark
-                          ? "bg-red-900/30 border-red-700 hover:bg-red-900/50 cursor-pointer"
-                          : "bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer"
-                      : isRunningSync
-                        ? "bg-muted border-border cursor-not-allowed"
-                        : isDark
-                          ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
-                          : "bg-white border-border hover:bg-muted cursor-pointer"
-                  )}
-                  title={isSyncing ? (isCancelling ? "Cancelling sync..." : "Cancel sync") : (isRunningSync ? "Starting sync..." : "Refresh data")}
-                >
-                  {isSyncing ? (
-                    isCancelling ? (
-                      <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
+          {/* Settings and Action Buttons */}
+          <div className="flex gap-1.5 items-center">
+            {/* Refresh/Cancel Button */}
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={isSyncing ? handleCancelSync : handleRunSync}
+                    disabled={isRunningSync || isCancelling}
+                    className={cn(
+                      "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
+                      isSyncing
+                        ? isCancelling
+                          ? isDark
+                            ? "bg-orange-900/30 border-orange-700 hover:bg-orange-900/50 cursor-not-allowed"
+                            : "bg-orange-50 border-orange-200 hover:bg-orange-100 cursor-not-allowed"
+                          : isDark
+                            ? "bg-red-900/30 border-red-700 hover:bg-red-900/50 cursor-pointer"
+                            : "bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer"
+                        : isRunningSync
+                          ? "bg-muted border-border cursor-not-allowed"
+                          : isDark
+                            ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
+                            : "bg-white border-border hover:bg-muted cursor-pointer"
+                    )}
+                    title={isSyncing ? (isCancelling ? "Cancelling sync..." : "Cancel sync") : (isRunningSync ? "Starting sync..." : "Refresh data")}
+                  >
+                    {isSyncing ? (
+                      isCancelling ? (
+                        <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
+                      ) : (
+                        <Square className="h-3 w-3 text-red-500" />
+                      )
                     ) : (
-                      <Square className="h-3 w-3 text-red-500" />
-                    )
-                  ) : (
-                    <RefreshCw className={cn(
-                      "h-3 w-3 text-muted-foreground",
-                      isRunningSync && "animate-spin"
-                    )} />
-                  )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">
-                  {isSyncing
-                    ? isCancelling
-                      ? "Cancelling sync..."
-                      : "Cancel sync"
-                    : isRunningSync
-                      ? "Starting sync..."
-                      : "Refresh data"}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                      <RefreshCw className={cn(
+                        "h-3 w-3 text-muted-foreground",
+                        isRunningSync && "animate-spin"
+                      )} />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">
+                    {isSyncing
+                      ? isCancelling
+                        ? "Cancelling sync..."
+                        : "Cancel sync"
+                      : isRunningSync
+                        ? "Starting sync..."
+                        : "Refresh data"}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
             {/* Settings Menu */}
             {sourceConnection && (
