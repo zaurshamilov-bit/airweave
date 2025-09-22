@@ -1151,7 +1151,7 @@ class NotionSource(BaseSource):
         }
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with self.http_client() as client:
                 # Phase 1 & 2: Discover and yield databases with their schemas
                 self.logger.info("Phase 1 & 2: Streaming database discovery and schema analysis")
                 async for entity in self._stream_database_discovery(client):

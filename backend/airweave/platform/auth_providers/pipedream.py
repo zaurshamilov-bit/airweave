@@ -8,7 +8,28 @@ from fastapi import HTTPException
 
 from airweave.core.credential_sanitizer import safe_log_credentials
 from airweave.platform.auth_providers._base import BaseAuthProvider
+from airweave.platform.auth_providers.auth_result import AuthResult
 from airweave.platform.decorators import auth_provider
+
+
+class PipedreamDefaultOAuthException(Exception):
+    """Raised when trying to access credentials for a Pipedream default OAuth client.
+
+    This happens when the connected account uses Pipedream's built-in OAuth client
+    rather than a custom OAuth client. In this case, credentials cannot be retrieved
+    directly and the proxy must be used.
+    """
+
+    def __init__(self, source_short_name: str, message: str = None):
+        """Initialize the exception."""
+        self.source_short_name = source_short_name
+        if message is None:
+            message = (
+                f"Cannot retrieve credentials for {source_short_name}. "
+                "This account uses Pipedream's default OAuth client. "
+                "Proxy mode must be used for this connection."
+            )
+        super().__init__(message)
 
 
 @auth_provider(
@@ -100,8 +121,8 @@ class PipedreamAuthProvider(BaseAuthProvider):
         instance.client_secret = credentials["client_secret"]
         instance.project_id = config["project_id"]
         instance.account_id = config["account_id"]
+        instance.external_user_id = config["external_user_id"]
         instance.environment = config.get("environment", "production")
-        instance.external_user_id = config.get("external_user_id")
 
         # Initialize token management
         instance._access_token = None
@@ -312,11 +333,7 @@ class PipedreamAuthProvider(BaseAuthProvider):
                     "❌ [Pipedream] No credentials in response. This usually means the account "
                     "was created with Pipedream's default OAuth client, not a custom one."
                 )
-                raise HTTPException(
-                    status_code=422,
-                    detail="Credentials not available. Pipedream only exposes credentials for "
-                    "accounts created with custom OAuth clients, not default Pipedream OAuth.",
-                )
+                raise PipedreamDefaultOAuthException(source_short_name)
 
             self.logger.info(
                 f"✅ [Pipedream] Found account '{account_data.get('name')}' "
@@ -407,3 +424,43 @@ class PipedreamAuthProvider(BaseAuthProvider):
         )
 
         return found_credentials
+
+    async def get_auth_result(
+        self, source_short_name: str, source_auth_config_fields: List[str]
+    ) -> AuthResult:
+        """Get auth result with explicit mode for Pipedream.
+
+        Determines whether to use direct credentials or proxy based on OAuth client type.
+        """
+        # Check if source is in blocked list (must use proxy)
+        if source_short_name in self.BLOCKED_SOURCES:
+            self.logger.info(f"Source {source_short_name} is in blocked list - using proxy mode")
+            return AuthResult.proxy(
+                {
+                    "reason": "blocked_source",
+                    "source": source_short_name,
+                }
+            )
+
+        # Try to get credentials to determine OAuth client type
+        try:
+            credentials = await self.get_creds_for_source(
+                source_short_name, source_auth_config_fields
+            )
+            # Custom OAuth client - can use direct access
+            self.logger.info(
+                f"Custom OAuth client detected for {source_short_name} - using direct mode"
+            )
+            return AuthResult.direct(credentials)
+
+        except PipedreamDefaultOAuthException:
+            # Default OAuth client - must use proxy
+            self.logger.info(
+                f"Default OAuth client detected for {source_short_name} - using proxy mode"
+            )
+            return AuthResult.proxy(
+                {
+                    "reason": "default_oauth",
+                    "source": source_short_name,
+                }
+            )

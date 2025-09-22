@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from airweave.core.logging import logger
+from airweave.platform.auth_providers.auth_result import AuthResult
 
 
 class BaseAuthProvider(ABC):
@@ -53,3 +54,22 @@ class BaseAuthProvider(ABC):
             source_auth_config_fields: The fields required for the source auth config
         """
         pass
+
+    async def get_auth_result(
+        self, source_short_name: str, source_auth_config_fields: List[str]
+    ) -> AuthResult:
+        """Get auth result with explicit mode (direct vs proxy).
+
+        Default implementation calls get_creds_for_source and returns direct mode.
+        Subclasses can override to return proxy mode when needed.
+
+        Args:
+            source_short_name: The short name of the source
+            source_auth_config_fields: The fields required for the source auth config
+
+        Returns:
+            AuthResult with explicit mode and credentials/config
+        """
+        # Default: try to get credentials directly
+        credentials = await self.get_creds_for_source(source_short_name, source_auth_config_fields)
+        return AuthResult.direct(credentials)

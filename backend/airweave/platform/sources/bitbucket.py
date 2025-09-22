@@ -491,7 +491,7 @@ class BitbucketSource(BaseSource):
         if not hasattr(self, "workspace") or not self.workspace:
             raise ValueError("Workspace must be specified")
 
-        async with httpx.AsyncClient() as client:
+        async with self.http_client() as client:
             # First, yield the workspace entity
             workspace_entity = await self._get_workspace_info(client, self.workspace)
             yield workspace_entity
@@ -547,7 +547,7 @@ class BitbucketSource(BaseSource):
             return False
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with self.http_client(timeout=10.0) as client:
                 # Build Basic auth header
                 creds = f"{self.username}:{self.app_password}"
                 encoded = base64.b64encode(creds.encode()).decode()
