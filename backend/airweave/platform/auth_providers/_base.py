@@ -53,3 +53,15 @@ class BaseAuthProvider(ABC):
             source_auth_config_fields: The fields required for the source auth config
         """
         pass
+
+    @abstractmethod
+    async def validate_connection(self) -> bool:
+        """Validate that the auth provider connection works.
+
+        Returns:
+            True if the connection is valid, False otherwise
+
+        Raises:
+            HTTPException: If validation fails with detailed error message
+        """
+        pass

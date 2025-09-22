@@ -104,6 +104,7 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
     const [authProviderDetails, setAuthProviderDetails] = useState<any>(null);
     const [authFieldValues, setAuthFieldValues] = useState<Record<string, any>>({});
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [formError, setFormError] = useState<string | null>(null);
 
     // Log loading state changes
     useEffect(() => {
@@ -236,6 +237,11 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
             });
         }
 
+        // Clear form error when user starts typing
+        if (formError) {
+            setFormError(null);
+        }
+
         if (previousNameRef.current && newName === "" && !userEditedId) {
             randomSuffixRef.current = generateRandomSuffix();
         }
@@ -334,6 +340,11 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                 return updated;
             });
         }
+
+        // Clear form error when user starts typing (gives them a chance to retry)
+        if (formError) {
+            setFormError(null);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -352,6 +363,7 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
         if (!validateAuthFields()) return;
 
         setIsSubmitting(true);
+        setFormError(null); // Clear any previous form errors
 
         try {
             // Create auth provider connection
@@ -407,9 +419,36 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
             }
         } catch (error) {
             console.error("Error creating auth provider connection:", error);
-            if (onError) {
-                onError(error instanceof Error ? error : new Error(String(error)), authProviderName);
+
+            // Extract error message from the response
+            let errorMessage = "Failed to create connection";
+            if (error instanceof Error) {
+                errorMessage = error.message;
+
+                // Try to extract more specific error from API response
+                if (errorMessage.includes("Failed to create auth provider connection:")) {
+                    const apiError = errorMessage.replace("Failed to create auth provider connection:", "").trim();
+                    try {
+                        // Try to parse as JSON in case it's a structured error
+                        const parsedError = JSON.parse(apiError);
+                        errorMessage = parsedError.detail || apiError;
+                    } catch {
+                        // If not JSON, use as-is
+                        errorMessage = apiError;
+                    }
+                }
             }
+
+            // Set form error state for inline display
+            setFormError(errorMessage);
+
+            // Also show error as a toast for better visibility
+            toast.error("Connection Failed", {
+                description: errorMessage,
+                duration: 8000, // Longer duration for error messages
+            });
+
+            // Don't call onError to avoid redirect - just stay on the form
         } finally {
             setIsSubmitting(false);
         }
@@ -669,6 +708,30 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                 "px-8 py-6 border-t flex-shrink-0",
                 isDark ? "border-gray-800" : "border-gray-200"
             )}>
+                {/* Form Error Display */}
+                {formError && (
+                    <div className={cn(
+                        "mb-4 p-4 rounded-lg border",
+                        "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800/50"
+                    )}>
+                        <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0">
+                                <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="text-sm font-medium text-red-800 dark:text-red-200">
+                                    Connection Failed
+                                </h4>
+                                <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                                    {formError}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="flex gap-3">
                     <button
                         onClick={onCancel}
