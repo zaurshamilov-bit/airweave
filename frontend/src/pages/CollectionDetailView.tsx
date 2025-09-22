@@ -774,8 +774,8 @@ const Collections = () => {
                     <div className="w-full max-w-[1000px] flex items-center justify-between py-4">
                         <div className="flex items-center gap-3">
                             {/* Source Icons */}
-                            <div className="flex justify-start" style={{ minWidth: "3.5rem" }}>
-                                {sourceConnections.map((connection, index) => (
+                            <div className="flex justify-start items-center" style={{ minWidth: "3.5rem" }}>
+                                {sourceConnections.slice(0, 3).map((connection, index) => (
                                     <div
                                         key={connection.id}
                                         className={cn(
@@ -784,7 +784,7 @@ const Collections = () => {
                                         )}
                                         style={{
                                             marginLeft: index > 0 ? `-${Math.min(index * 8, 24)}px` : "0px",
-                                            zIndex: sourceConnections.length - index
+                                            zIndex: 3 - index
                                         }}
                                     >
                                         <img
@@ -794,6 +794,11 @@ const Collections = () => {
                                         />
                                     </div>
                                 ))}
+                                {sourceConnections.length > 3 && (
+                                    <div className="ml-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+                                        +{sourceConnections.length - 3}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="flex flex-col justify-center">
@@ -855,43 +860,59 @@ const Collections = () => {
                         {/* Header action buttons */}
                         <div className="flex gap-1.5 items-center">
                             {/* Refresh Page Button - EXACT match to refresh source button */}
-                            <button
-                                type="button"
-                                onClick={reloadData}
-                                disabled={isReloading}
-                                className={cn(
-                                    "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
-                                    isReloading
-                                        ? isDark
-                                            ? "bg-gray-900 border-border cursor-not-allowed"
-                                            : "bg-white border-border cursor-not-allowed"
-                                        : isDark
-                                            ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
-                                            : "bg-white border-border hover:bg-muted cursor-pointer"
-                                )}
-                                title="Reload page"
-                            >
-                                <RotateCw className={cn(
-                                    "h-3 w-3 text-muted-foreground",
-                                    "transition-transform duration-500",
-                                    isReloading && "animate-spin"
-                                )} />
-                            </button>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            type="button"
+                                            onClick={reloadData}
+                                            disabled={isReloading}
+                                            className={cn(
+                                                "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
+                                                isReloading
+                                                    ? isDark
+                                                        ? "bg-gray-900 border-border cursor-not-allowed"
+                                                        : "bg-white border-border cursor-not-allowed"
+                                                    : isDark
+                                                        ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
+                                                        : "bg-white border-border hover:bg-muted cursor-pointer"
+                                            )}
+                                        >
+                                            <RotateCw className={cn(
+                                                "h-3 w-3 text-muted-foreground",
+                                                "transition-transform duration-500",
+                                                isReloading && "animate-spin"
+                                            )} />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>Reload page</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
 
                             {/* Delete Collection Button - EXACT match to refresh button styling */}
-                            <button
-                                type="button"
-                                onClick={() => setShowDeleteDialog(true)}
-                                className={cn(
-                                    "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
-                                    isDark
-                                        ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
-                                        : "bg-white border-border hover:bg-muted cursor-pointer"
-                                )}
-                                title="Delete collection"
-                            >
-                                <Trash className="h-3 w-3 text-muted-foreground" />
-                            </button>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowDeleteDialog(true)}
+                                            className={cn(
+                                                "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
+                                                isDark
+                                                    ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
+                                                    : "bg-white border-border hover:bg-muted cursor-pointer"
+                                            )}
+                                        >
+                                            <Trash className="h-3 w-3 text-muted-foreground" />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>Delete collection</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         </div>
                     </div>
 
@@ -925,8 +946,8 @@ const Collections = () => {
                                             DESIGN_SYSTEM.transitions.standard,
                                             selectedConnection?.id === connection.id
                                                 ? isDark
-                                                    ? "border border-blue-500/40 bg-gray-900"
-                                                    : "border border-blue-400/30 bg-white"
+                                                    ? "border border-blue-500 bg-blue-500/10 shadow-lg shadow-blue-500/20 ring-2 ring-blue-500/30"
+                                                    : "border border-blue-500 bg-blue-50 shadow-lg shadow-blue-500/20 ring-2 ring-blue-500/30"
                                                 : isDark
                                                     ? "border border-gray-800/50 bg-gray-900 hover:bg-muted"
                                                     : "border border-gray-200/60 bg-white hover:bg-muted"
@@ -1096,6 +1117,8 @@ const Collections = () => {
                                 key={selectedConnection.id}
                                 sourceConnectionId={selectedConnection.id}
                                 sourceConnectionData={selectedConnection}
+                                collectionId={collection?.readable_id}
+                                collectionName={collection?.name}
                                 onConnectionDeleted={() => {
                                     // Clear selection and reload connections
                                     setSelectedConnection(null);
