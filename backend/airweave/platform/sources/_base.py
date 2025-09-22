@@ -114,9 +114,8 @@ class BaseSource:
                 try:
                     yield client
                 finally:
-                    # Clean up if client has a close method
-                    if hasattr(client, "close"):
-                        await client.close()
+                    if hasattr(client, "aclose"):
+                        await client.aclose()
         else:
             # Use vanilla httpx
             async with httpx.AsyncClient(**kwargs) as client:

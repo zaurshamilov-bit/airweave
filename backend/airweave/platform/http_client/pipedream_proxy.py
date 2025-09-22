@@ -217,7 +217,7 @@ class PipedreamProxyClient:
         return self._client.stream(method, proxy_url, **kwargs)
 
     # Additional httpx compatibility methods
-    async def close(self):
+    async def aclose(self):
         """Close the underlying HTTP client."""
         await self._client.aclose()
 
