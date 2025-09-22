@@ -2,6 +2,9 @@
 
 import asyncio
 import time
+import os
+from types import SimpleNamespace
+import httpx
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -97,11 +100,14 @@ class SyncStep(TestStep):
         # then START OUR OWN sync and wait for it too.
         target_job_id: Optional[str] = None
         try:
-            run_resp = client.source_connections.run(self.config._source_connection_id)
+            run_resp = self._http_post(
+                f"/source-connections/{self.config._source_connection_id}/run",
+                json=None,
+            )
             target_job_id = (
-                getattr(run_resp, "id", None)
-                or getattr(run_resp, "job_id", None)
-                or getattr(run_resp, "sync_job_id", None)
+                str(run_resp.get("id"))
+                or str(run_resp.get("job_id"))
+                or str(run_resp.get("sync_job_id"))
             )
         except Exception as e:
             msg = str(e).lower()
@@ -125,13 +131,14 @@ class SyncStep(TestStep):
                 )
 
                 # IMPORTANT: after the previous job completes, start *our* job
-                run_resp = client.source_connections.run(
-                    self.config._source_connection_id
+                run_resp = self._http_post(
+                    f"/source-connections/{self.config._source_connection_id}/run",
+                    json=None,
                 )
                 target_job_id = (
-                    getattr(run_resp, "id", None)
-                    or getattr(run_resp, "job_id", None)
-                    or getattr(run_resp, "sync_job_id", None)
+                    str(run_resp.get("id"))
+                    or str(run_resp.get("job_id"))
+                    or str(run_resp.get("sync_job_id"))
                 )
             else:
                 raise  # unknown error
@@ -142,13 +149,16 @@ class SyncStep(TestStep):
     def _get_airweave_client(self) -> Any:
         return getattr(self.config, "_airweave_client", None)
 
-    def _jobs_sorted(self, client: Any) -> List[Any]:
+    def _jobs_sorted(self, client: Any) -> List[Dict[str, Any]]:
         jobs = (
-            client.source_connections.list_jobs(self.config._source_connection_id) or []
+            self._http_get(
+                f"/source-connections/{self.config._source_connection_id}/jobs"
+            )
+            or []
         )
 
-        def _ts(j):
-            return getattr(j, "started_at", None) or getattr(j, "created_at", None) or 0
+        def _ts(j: Dict[str, Any]):
+            return j.get("started_at") or j.get("created_at") or 0
 
         return sorted(jobs, key=_ts, reverse=True)
 
@@ -168,23 +178,15 @@ class SyncStep(TestStep):
         return None
 
     def _latest_job_id(self, client: Any) -> Optional[str]:
-        try:
-            sc = client.source_connections.get(self.config._source_connection_id)
-            latest = getattr(sc, "last_sync_job_id", None)
-            if latest:
-                return str(latest)
-        except Exception:
-            pass
-
-        # Fallback to the newest job in the list
+        # Determine latest via newest job in the list
         try:
             jobs_sorted = self._jobs_sorted(client)
             if jobs_sorted:
                 j = jobs_sorted[0]
                 return (
-                    str(getattr(j, "id", ""))  # type: ignore
-                    or str(getattr(j, "job_id", ""))  # type: ignore
-                    or str(getattr(j, "sync_job_id", ""))  # type: ignore
+                    str(j.get("id", ""))
+                    or str(j.get("job_id", ""))
+                    or str(j.get("sync_job_id", ""))
                 )
         except Exception:
             pass
@@ -241,25 +243,19 @@ class SyncStep(TestStep):
 
         start = time.monotonic()
         while time.monotonic() - start < timeout_seconds:
-            # Prefer a direct job lookup when available
+            # Fetch job by listing and matching id (no direct get endpoint)
             job = None
             try:
-                if hasattr(client.source_connections, "get_job"):
-                    job = client.source_connections.get_job(
-                        source_connection_id=self.config._source_connection_id,
-                        job_id=target_job_id,
+                jobs_sorted = self._jobs_sorted(client)
+                for j in jobs_sorted:
+                    jid = (
+                        str(j.get("id", ""))
+                        or str(j.get("job_id", ""))
+                        or str(j.get("sync_job_id", ""))
                     )
-                else:
-                    jobs_sorted = self._jobs_sorted(client)
-                    for j in jobs_sorted:
-                        jid = (
-                            str(getattr(j, "id", ""))  # type: ignore
-                            or str(getattr(j, "job_id", ""))  # type: ignore
-                            or str(getattr(j, "sync_job_id", ""))  # type: ignore
-                        )
-                        if jid == str(target_job_id):
-                            job = j
-                            break
+                    if jid == str(target_job_id):
+                        job = j
+                        break
             except Exception as e:
                 self.logger.warning(f"⚠️ Error fetching job status: {e}")
                 job = None
@@ -268,7 +264,11 @@ class SyncStep(TestStep):
                 await asyncio.sleep(2.0)
                 continue
 
-            fields = _job_status_fields(job)
+            fields = (
+                _job_status_fields(SimpleNamespace(**job))
+                if isinstance(job, dict)
+                else _job_status_fields(job)
+            )
             self.logger.info(
                 f"🔍 Job {target_job_id} status={fields['status']}, complete={fields['is_complete']}"
             )
@@ -296,6 +296,34 @@ class SyncStep(TestStep):
             await asyncio.sleep(0.5)
 
         raise TimeoutError("Sync timeout reached")
+
+    # ----- HTTP helpers (avoid SDK schema mismatches during transition) -----
+    def _http_headers(self) -> Dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        api_key = os.getenv("AIRWEAVE_API_KEY")
+        if api_key:
+            headers["x-api-key"] = api_key
+        return headers
+
+    def _base_url(self) -> str:
+        return os.getenv("AIRWEAVE_API_URL", "http://localhost:8001").rstrip("/")
+
+    def _http_get(self, path: str) -> Any:
+        resp = httpx.get(
+            f"{self._base_url()}{path}", headers=self._http_headers(), timeout=30.0
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def _http_post(self, path: str, json: Optional[Dict[str, Any]]) -> Any:
+        resp = httpx.post(
+            f"{self._base_url()}{path}",
+            headers=self._http_headers(),
+            json=json,
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
 
 
 # ---------- Shared search helpers ----------

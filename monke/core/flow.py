@@ -2,6 +2,8 @@
 
 import time
 import os
+from types import SimpleNamespace
+import httpx
 from typing import Any, Dict, List, Optional
 
 from monke.core.config import TestConfig
@@ -145,6 +147,26 @@ class TestFlow:
             return False
 
     async def _setup_infrastructure(self, bongo, airweave_client):
+        def _create_source_connection_via_http(
+            payload: Dict[str, Any],
+        ) -> SimpleNamespace:
+            base_url = os.getenv("AIRWEAVE_API_URL", "http://localhost:8001").rstrip(
+                "/"
+            )
+            headers = {"Content-Type": "application/json"}
+            api_key = os.getenv("AIRWEAVE_API_KEY")
+            if api_key:
+                headers["x-api-key"] = api_key
+            response = httpx.post(
+                f"{base_url}/source-connections",
+                json=payload,
+                headers=headers,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return SimpleNamespace(id=data.get("id"))
+
         collection_name = f"monke-{self.config.connector.type}-test-{int(time.time())}"
         collection = airweave_client.collections.create(name=collection_name)
         self.config._collection_id = collection.id
@@ -172,16 +194,21 @@ class TestFlow:
                 self.logger.warning(
                     "Auth provider requested but DM_AUTH_PROVIDER_ID not set; falling back to explicit auth_fields if provided"
                 )
-                source_connection = airweave_client.source_connections.create(
-                    name=f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
-                    short_name=self.config.connector.type,
-                    collection=self.config._collection_readable_id,
-                    auth_fields=(
-                        bongo.credentials
-                        if hasattr(bongo, "credentials")
-                        else self.config.connector.auth_fields
-                    ),
-                    config_fields=self.config.connector.config_fields,
+                # New API (v0.6) via HTTP: nested authentication + readable_collection_id + config
+                source_connection = _create_source_connection_via_http(
+                    {
+                        "name": f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
+                        "short_name": self.config.connector.type,
+                        "readable_collection_id": self.config._collection_readable_id,
+                        "authentication": {
+                            "credentials": (
+                                bongo.credentials
+                                if hasattr(bongo, "credentials")
+                                else self.config.connector.auth_fields
+                            )
+                        },
+                        "config": self.config.connector.config_fields,
+                    }
                 )
             else:
                 src_upper = self.config.connector.type.upper()
@@ -222,36 +249,35 @@ class TestFlow:
                     self.logger.error(msg)
                     raise RuntimeError(msg)
 
-                kwargs = dict(
-                    name=f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
-                    short_name=self.config.connector.type,
-                    collection=self.config._collection_readable_id,
-                    auth_provider=auth_provider_id,
-                    # Always pass through any connector config fields
-                    config_fields=self.config.connector.config_fields,
-                )
-                if auth_provider_config:
-                    kwargs["auth_provider_config"] = auth_provider_config
+                # New API (v0.6) via HTTP: pass auth provider via nested authentication
+                payload = {
+                    "name": f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
+                    "short_name": self.config.connector.type,
+                    "readable_collection_id": self.config._collection_readable_id,
+                    "authentication": {
+                        "provider_readable_id": auth_provider_id,
+                        **(
+                            {"provider_config": auth_provider_config}
+                            if auth_provider_config
+                            else {}
+                        ),
+                    },
+                    "config": self.config.connector.config_fields,
+                }
 
-                try:
-                    source_connection = airweave_client.source_connections.create(
-                        **kwargs
-                    )
-                except Exception as create_err:
-                    hint = (
-                        "Failed to create source connection via auth provider. "
-                        "Verify auth_provider is valid and auth_provider_config contains both "
-                        "auth_config_id and account_id."
-                    )
-                    self.logger.error(f"{hint} Raw error: {create_err}")
-                    raise
+                source_connection = _create_source_connection_via_http(payload)
         else:
-            source_connection = airweave_client.source_connections.create(
-                name=f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
-                short_name=self.config.connector.type,
-                collection=self.config._collection_readable_id,
-                auth_fields=self.config.connector.auth_fields,
-                config_fields=self.config.connector.config_fields,
+            # New API (v0.6) via HTTP: nested authentication + readable_collection_id + config
+            source_connection = _create_source_connection_via_http(
+                {
+                    "name": f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
+                    "short_name": self.config.connector.type,
+                    "readable_collection_id": self.config._collection_readable_id,
+                    "authentication": {
+                        "credentials": self.config.connector.auth_fields
+                    },
+                    "config": self.config.connector.config_fields,
+                }
             )
 
         self.config._source_connection_id = source_connection.id
