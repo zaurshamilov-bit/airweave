@@ -55,7 +55,7 @@ class BaseAuthProvider(ABC):
         pass
 
     @abstractmethod
-    async def validate_connection(self) -> bool:
+    async def validate(self) -> bool:
         """Validate that the auth provider connection works.
 
         Returns:
