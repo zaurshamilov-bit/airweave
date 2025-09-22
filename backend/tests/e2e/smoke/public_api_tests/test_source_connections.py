@@ -204,11 +204,14 @@ class AuthProviderTest(SourceConnectionTestBase):
         super().__init__(api_url, headers, collection_id)
         self.provider_readable_id = provider_readable_id
 
-    def create_payload(self, provider_name: str, provider_config: Optional[dict] = None) -> dict:
+    def create_payload(
+        self, provider_readable_id: str, provider_config: Optional[dict] = None
+    ) -> dict:
         """Create payload for auth provider connection"""
-        # Use provider_name for the auth provider connection (matches AuthProviderAuthentication schema)
+        # Use provider_readable_id for the auth provider connection (matches AuthProviderAuthentication schema)
         auth = {
-            "provider_name": self.provider_readable_id or f"composio-test-{int(time.time())}",
+            "provider_readable_id": self.provider_readable_id
+            or f"composio-test-{int(time.time())}",
         }
 
         # Add Composio-specific config if provided
@@ -216,7 +219,7 @@ class AuthProviderTest(SourceConnectionTestBase):
             auth["provider_config"] = provider_config
 
         return {
-            "name": f"Test {provider_name} Auth Provider Source",
+            "name": f"Test {provider_readable_id} Auth Provider Source",
             "short_name": "asana",  # Using Asana for auth provider test
             "readable_collection_id": self.collection_id,
             "description": "Testing auth provider authentication with Asana",
@@ -224,16 +227,18 @@ class AuthProviderTest(SourceConnectionTestBase):
             "sync_immediately": False,
         }
 
-    def run_test(self, provider_name: str, provider_config: Optional[dict] = None) -> Optional[str]:
+    def run_test(
+        self, provider_readable_id: str, provider_config: Optional[dict] = None
+    ) -> Optional[str]:
         """Run auth provider test"""
-        print(f"  Testing Auth Provider ({provider_name})...")
+        print(f"  Testing Auth Provider ({provider_readable_id})...")
 
         # Step 1: Create connection with auth provider
-        payload = self.create_payload(provider_name, provider_config)
+        payload = self.create_payload(provider_readable_id, provider_config)
         response = self.create_connection(payload)
 
         if response.status_code == 404:
-            print(f"    ⚠️ Auth provider '{provider_name}' not found in this environment")
+            print(f"    ⚠️ Auth provider '{provider_readable_id}' not found in this environment")
             return None
 
         if response.status_code != 200:
@@ -252,7 +257,7 @@ class AuthProviderTest(SourceConnectionTestBase):
         assert conn["status"] == "active", f"Expected active status, got {conn['status']}"
 
         print(f"    ✓ Connection created via auth provider: {conn_id}")
-        print(f"    ✓ Provider: {provider_name}")
+        print(f"    ✓ Provider: {provider_readable_id}")
 
         return conn_id
 
@@ -642,15 +647,15 @@ def test_source_connections(
     print("\n  📌 Test 5a: Composio Auth Provider")
 
     # Require auth provider configuration
-    auth_provider_name = os.environ.get("TEST_AUTH_PROVIDER_NAME")
-    if not auth_provider_name:
+    auth_provider_readable_id = os.environ.get("TEST_AUTH_PROVIDER_NAME")
+    if not auth_provider_readable_id:
         raise AssertionError(
             "TEST_AUTH_PROVIDER_NAME environment variable is required. Set it to 'composio' to run tests."
         )
 
-    if auth_provider_name != "composio":
+    if auth_provider_readable_id != "composio":
         raise AssertionError(
-            f"Only 'composio' auth provider is supported. Got: {auth_provider_name}"
+            f"Only 'composio' auth provider is supported. Got: {auth_provider_readable_id}"
         )
 
     # Require Composio API key
@@ -713,7 +718,7 @@ def test_source_connections(
     }
 
     try:
-        conn_id = auth_provider_test.run_test(auth_provider_name, provider_config)
+        conn_id = auth_provider_test.run_test(auth_provider_readable_id, provider_config)
         if not conn_id:
             raise AssertionError(f"Auth provider test returned None - failed to create connection")
         created_connections.append(conn_id)
@@ -799,7 +804,7 @@ def test_source_connections(
                 "readable_collection_id": collection_id,
                 "description": "Testing Google Drive with Pipedream proxy authentication",
                 "authentication": {
-                    "provider_name": actual_pipedream_id,
+                    "provider_readable_id": actual_pipedream_id,
                     "provider_config": {
                         "project_id": pipedream_project_id,
                         "account_id": pipedream_account_id,
