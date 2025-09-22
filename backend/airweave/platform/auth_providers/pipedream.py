@@ -114,7 +114,7 @@ class PipedreamAuthProvider(BaseAuthProvider):
         if credentials is None:
             raise ValueError("credentials parameter is required")
         if config is None:
-            raise ValueError("config parameter is required")
+            config = {}
 
         instance = cls()
         instance.client_id = credentials["client_id"]
@@ -289,6 +289,63 @@ class PipedreamAuthProvider(BaseAuthProvider):
                 f"\n🔑 [Pipedream] Retrieved credentials for '{source_short_name}':",
             )
             return found_credentials
+
+    async def validate(self) -> bool:
+        """Validate that the Pipedream connection works by testing client credentials.
+
+        Returns:
+            True if the connection is valid
+
+        Raises:
+            HTTPException: If validation fails with detailed error message
+        """
+        try:
+            self.logger.info("🔍 [Pipedream] Validating client credentials...")
+
+            async with httpx.AsyncClient() as client:
+                # Test OAuth token generation with client credentials
+                token_data = {
+                    "grant_type": "client_credentials",
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                }
+
+                response = await client.post(self.TOKEN_ENDPOINT, data=token_data)
+                response.raise_for_status()
+
+                token_response = response.json()
+                if "access_token" not in token_response:
+                    raise HTTPException(
+                        status_code=422, detail="Pipedream API returned invalid token response"
+                    )
+
+                self.logger.info("✅ [Pipedream] Client credentials validated successfully")
+                return True
+
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Pipedream client credentials validation failed: {e.response.status_code}"
+            if e.response.status_code == 401:
+                error_msg += " - Invalid client credentials"
+            elif e.response.status_code == 400:
+                try:
+                    error_detail = e.response.json().get("error_description", e.response.text)
+                    error_msg += f" - {error_detail}"
+                except Exception:
+                    error_msg += " - Bad request"
+            else:
+                try:
+                    error_detail = e.response.json().get("error", e.response.text)
+                    error_msg += f" - {error_detail}"
+                except Exception:
+                    error_msg += f" - {e.response.text}"
+
+            self.logger.error(f"❌ [Pipedream] {error_msg}")
+            raise HTTPException(status_code=422, detail=error_msg)
+
+        except Exception as e:
+            error_msg = f"Pipedream client credentials validation failed: {str(e)}"
+            self.logger.error(f"❌ [Pipedream] {error_msg}")
+            raise HTTPException(status_code=422, detail=error_msg)
 
     async def _get_account_with_credentials(
         self, client: httpx.AsyncClient, pipedream_app_slug: str, source_short_name: str

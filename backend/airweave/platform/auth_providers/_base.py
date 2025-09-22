@@ -55,6 +55,18 @@ class BaseAuthProvider(ABC):
         """
         pass
 
+    @abstractmethod
+    async def validate(self) -> bool:
+        """Validate that the auth provider connection works.
+
+        Returns:
+            True if the connection is valid, False otherwise
+
+        Raises:
+            HTTPException: If validation fails with detailed error message
+        """
+        pass
+
     async def get_auth_result(
         self, source_short_name: str, source_auth_config_fields: List[str]
     ) -> AuthResult:
