@@ -368,7 +368,7 @@ class ComposioAuthProvider(BaseAuthProvider):
 
         return found_credentials
 
-    async def validate_connection(self) -> bool:
+    async def validate(self) -> bool:
         """Validate that the Composio connection works by testing API access.
 
         Returns:
