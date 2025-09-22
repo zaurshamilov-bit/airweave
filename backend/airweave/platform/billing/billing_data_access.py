@@ -170,6 +170,50 @@ class BillingRepository:
 
         return schemas.OrganizationBilling.model_validate(updated, from_attributes=True)
 
+    # ------------------------------ Yearly Prepay ------------------------------ #
+
+    async def record_yearly_prepay_started(
+        self,
+        db: AsyncSession,
+        organization_id: UUID,
+        *,
+        amount_cents: int,
+        started_at: datetime,
+        expected_expires_at: datetime,
+        coupon_id: Optional[str],
+        payment_intent_id: Optional[str],
+        ctx: ApiContext,
+    ) -> schemas.OrganizationBilling:
+        """Mark yearly prepay as started/pending in the billing record."""
+        # Do not mark has_yearly_prepay yet; only after successful payment/finalization
+        updates = OrganizationBillingUpdate(
+            yearly_prepay_amount_cents=amount_cents,
+            yearly_prepay_started_at=started_at,
+            yearly_prepay_expires_at=expected_expires_at,
+            yearly_prepay_coupon_id=coupon_id,
+            yearly_prepay_payment_intent_id=payment_intent_id,
+        )
+        return await self.update_billing_by_org(db, organization_id, updates, ctx)
+
+    async def record_yearly_prepay_finalized(
+        self,
+        db: AsyncSession,
+        organization_id: UUID,
+        *,
+        coupon_id: str,
+        payment_intent_id: str,
+        expires_at: datetime,
+        ctx: ApiContext,
+    ) -> schemas.OrganizationBilling:
+        """Finalize yearly prepay after successful payment and subscription setup."""
+        updates = OrganizationBillingUpdate(
+            has_yearly_prepay=True,
+            yearly_prepay_coupon_id=coupon_id,
+            yearly_prepay_payment_intent_id=payment_intent_id,
+            yearly_prepay_expires_at=expires_at,
+        )
+        return await self.update_billing_by_org(db, organization_id, updates, ctx)
+
     async def create_billing_period(
         self,
         db: AsyncSession,

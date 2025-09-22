@@ -111,14 +111,22 @@ class StripeClient:
         customer_id: str,
         price_id: str,
         metadata: Optional[Dict[str, str]] = None,
+        coupon_id: Optional[str] = None,
+        default_payment_method: Optional[str] = None,
     ) -> stripe.Subscription:
         """Create a subscription directly (no checkout)."""
         try:
-            return await stripe.Subscription.create_async(
-                customer=customer_id,
-                items=[{"price": price_id}],
-                metadata=self._clean_metadata(metadata),
-            )
+            params: Dict[str, Any] = {
+                "customer": customer_id,
+                "items": [{"price": price_id}],
+                "metadata": self._clean_metadata(metadata),
+            }
+            if coupon_id:
+                params["coupon"] = coupon_id
+            if default_payment_method:
+                params["default_payment_method"] = default_payment_method
+
+            return await stripe.Subscription.create_async(**params)
         except StripeError as e:
             raise ExternalServiceError(
                 service_name="Stripe",
@@ -141,6 +149,7 @@ class StripeClient:
         price_id: Optional[str] = None,
         cancel_at_period_end: Optional[bool] = None,
         proration_behavior: str = "create_prorations",
+        default_payment_method: Optional[str] = None,
     ) -> stripe.Subscription:
         """Update a subscription."""
         try:
@@ -164,6 +173,10 @@ class StripeClient:
             # Handle cancellation flag
             if cancel_at_period_end is not None:
                 update_params["cancel_at_period_end"] = cancel_at_period_end
+
+            # Handle default payment method
+            if default_payment_method:
+                update_params["default_payment_method"] = default_payment_method
 
             return await stripe.Subscription.modify_async(subscription_id, **update_params)
         except StripeError as e:
@@ -322,6 +335,204 @@ class StripeClient:
             pass
 
         return price_ids
+
+    # --------------------------- Yearly Prepay Helpers --------------------------- #
+
+    async def create_prepay_checkout_session(
+        self,
+        *,
+        customer_id: str,
+        amount_cents: int,
+        currency: str = "usd",
+        success_url: str,
+        cancel_url: str,
+        metadata: Optional[Dict[str, str]] = None,
+    ) -> stripe.checkout.Session:
+        """Create a one-time payment checkout session for yearly prepay credit.
+
+        Uses Payment mode instead of Subscription mode.
+        """
+        try:
+            clean_metadata = self._clean_metadata(metadata)
+            return await stripe.checkout.Session.create_async(
+                customer=customer_id,
+                mode="payment",
+                success_url=self._sanitize_text(success_url),
+                cancel_url=self._sanitize_text(cancel_url),
+                line_items=[
+                    {
+                        "price_data": {
+                            "currency": currency,
+                            "product_data": {"name": "Yearly prepay credit"},
+                            "unit_amount": int(amount_cents),
+                        },
+                        "quantity": 1,
+                    }
+                ],
+                payment_intent_data={
+                    "setup_future_usage": "off_session",  # Save payment method for future use
+                },
+                metadata=clean_metadata,
+            )
+        except StripeError as e:
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=f"Failed to create prepay checkout session: {str(e)}",
+            ) from e
+
+    async def get_customer_balance_cents(self, *, customer_id: str) -> int:
+        """Return the customer's current account balance in cents.
+
+        Stripe semantics: positive balance = amount owed; negative balance = credit.
+        We return the raw integer (can be negative). Remaining credit is max(0, -balance).
+        """
+        try:
+            customer = await stripe.Customer.retrieve_async(customer_id)
+            balance = getattr(customer, "balance", 0) or 0
+            return int(balance)
+        except StripeError as e:
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=f"Failed to retrieve customer balance: {str(e)}",
+            ) from e
+
+    async def get_subscription_coupon_id(self, *, subscription_id: str) -> Optional[str]:
+        """Return active coupon id applied to the subscription, if any."""
+        try:
+            sub = await stripe.Subscription.retrieve_async(subscription_id)
+            coupon_id: Optional[str] = None
+            try:
+                discount = getattr(sub, "discount", None)
+                if discount is not None:
+                    coupon = getattr(discount, "coupon", None)
+                    if coupon is not None:
+                        cid = getattr(coupon, "id", None)
+                        if cid:
+                            coupon_id = str(cid)
+                # dict-like fallback
+                if coupon_id is None and isinstance(sub, dict):
+                    d = sub.get("discount")
+                    if isinstance(d, dict):
+                        c = d.get("coupon")
+                        if isinstance(c, dict):
+                            cid2 = c.get("id")
+                            if cid2:
+                                coupon_id = str(cid2)
+            except Exception:
+                coupon_id = None
+            return coupon_id
+        except StripeError as e:
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=f"Failed to retrieve subscription coupon: {str(e)}",
+            ) from e
+
+    async def create_or_get_yearly_coupon(
+        self,
+        *,
+        percent_off: int,
+        duration: str = "repeating",
+        duration_in_months: int = 12,
+        idempotency_key: Optional[str] = None,
+        metadata: Optional[Dict[str, str]] = None,
+    ) -> stripe.Coupon:
+        """Create a reusable coupon for yearly prepay discount or retrieve by metadata key.
+
+        We use metadata keys to dedupe (e.g., organization_id + plan + year marker).
+        Default: 20% off for 12 months (repeating duration).
+        """
+        try:
+            # Try to search existing coupon by metadata idempotency key if provided
+            if idempotency_key:
+                try:
+                    coupons = stripe.Coupon.search(
+                        query=f"metadata['idempotency_key']:'{idempotency_key}'"
+                    )
+                    if getattr(coupons, "data", []):
+                        return coupons.data[0]
+                except Exception:
+                    pass
+
+            params: Dict[str, Any] = {
+                "percent_off": percent_off,
+                "duration": duration,
+                "metadata": self._clean_metadata({"idempotency_key": idempotency_key or ""})
+                if idempotency_key
+                else self._clean_metadata(metadata),
+            }
+
+            # Add duration_in_months only if duration is "repeating"
+            if duration == "repeating":
+                params["duration_in_months"] = duration_in_months
+
+            return await stripe.Coupon.create_async(**params)
+        except StripeError as e:
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=f"Failed to create yearly coupon: {str(e)}",
+            ) from e
+
+    async def apply_coupon_to_subscription(
+        self,
+        *,
+        subscription_id: str,
+        coupon_id: str,
+    ) -> stripe.Subscription:
+        """Apply a coupon to an existing subscription."""
+        try:
+            return await stripe.Subscription.modify_async(
+                subscription_id,
+                coupon=coupon_id,
+            )
+        except StripeError as e:
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=f"Failed to apply coupon to subscription: {str(e)}",
+            ) from e
+
+    async def remove_subscription_discount(self, *, subscription_id: str) -> None:
+        """Remove any active discount/coupon from a subscription."""
+        try:
+            # The Stripe Python SDK uses a sync method here; it's fine to call synchronously
+            stripe.Subscription.delete_discount(subscription_id)
+        except StripeError as e:
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=f"Failed to remove subscription discount: {str(e)}",
+            ) from e
+
+    async def delete_coupon(self, *, coupon_id: str) -> None:
+        """Delete a coupon (cleanup)."""
+        try:
+            await stripe.Coupon.delete_async(coupon_id)
+        except StripeError:
+            # Best-effort cleanup
+            pass
+
+    async def credit_customer_balance(
+        self,
+        *,
+        customer_id: str,
+        amount_cents: int,
+        currency: str = "usd",
+        description: Optional[str] = None,
+    ) -> Any:
+        """Credit customer's balance by the given amount (in cents).
+
+        Stripe expects credits as negative amounts.
+        """
+        try:
+            return stripe.Customer.create_balance_transaction(
+                customer_id,
+                amount=-int(amount_cents),
+                currency=currency,
+                description=self._sanitize_text(description or "Yearly prepay credit"),
+            )
+        except StripeError as e:
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=f"Failed to credit customer balance: {str(e)}",
+            ) from e
 
 
 # Singleton instance

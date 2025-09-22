@@ -150,6 +150,7 @@ export const Onboarding = () => {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [hasOrganizations, setHasOrganizations] = useState(false);
+  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [formData, setFormData] = useState<OnboardingData>({
     organizationName: '',
     organizationSize: '',
@@ -325,7 +326,12 @@ export const Onboarding = () => {
           return;
         }
 
-        const checkoutResponse = await apiClient.post('/billing/checkout-session', {
+        const isEligibleForYearly = ['pro', 'team'].includes(formData.subscriptionPlan);
+        const endpoint = billingPeriod === 'yearly' && isEligibleForYearly
+          ? '/billing/yearly/checkout-session'
+          : '/billing/checkout-session';
+
+        const checkoutResponse = await apiClient.post(endpoint, {
           plan: formData.subscriptionPlan,
           success_url: `${window.location.origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${window.location.origin}/billing/cancel`,
@@ -712,6 +718,59 @@ export const Onboarding = () => {
               )}
             </div>
 
+            {/* Monthly/Yearly Toggle - Only show when auth is enabled */}
+            {authConfig.authEnabled && (
+              <div className="flex justify-center relative">
+                <div className="relative">
+                  <div className="relative inline-flex items-center p-1 bg-muted rounded-lg shadow-sm border">
+                    {/* Sliding background indicator - dynamically sized */}
+                    <div
+                      className={cn(
+                        'absolute top-1 h-[calc(100%-8px)] rounded-md bg-blue/20 shadow-sm transition-all duration-200',
+                        billingPeriod === 'monthly' ? 'left-1 w-[80px]' : 'left-[80px] w-[140px]'
+                      )}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setBillingPeriod('monthly')}
+                      className={cn(
+                        'relative z-10 px-4 py-2 text-sm rounded-md transition-all w-[80px]',
+                        billingPeriod === 'monthly'
+                          ? 'text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      Monthly
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBillingPeriod('yearly')}
+                      className={cn(
+                        'relative z-10 px-4 py-2 text-sm rounded-md transition-all flex items-center gap-2 w-[140px] justify-center',
+                        billingPeriod === 'yearly'
+                          ? 'text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      Yearly
+                      <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                        Save 20%
+                      </span>
+                    </button>
+                  </div>
+                  {/* Absolute positioned message - doesn't affect layout */}
+                  <div className={cn(
+                    "absolute top-full mt-1 left-1/2 -translate-x-1/2 transition-opacity duration-200",
+                    billingPeriod === 'yearly' ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                  )}>
+                    <p className="text-xs text-muted-foreground text-center whitespace-nowrap">
+                      After 12 months, your plan will renew at monthly rates. You can re-enable yearly billing anytime to keep the discount.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-4">
               {SUBSCRIPTION_PLANS.map((plan) => (
                 <button
@@ -741,13 +800,21 @@ export const Onboarding = () => {
                     </div>
                     <div className="text-right">
                       <div className="text-2xl font-light">
-                        {!authConfig.authEnabled ? 'Free' : plan.price}
+                        {!authConfig.authEnabled ? 'Free' : (
+                          billingPeriod === 'yearly' && (plan.value === 'pro' || plan.value === 'team')
+                            ? (plan.value === 'pro' ? '$16' : '$239')
+                            : plan.price
+                        )}
                       </div>
                       {plan.period && !authConfig.authEnabled && (
                         <div className="text-xs text-muted-foreground">local dev</div>
                       )}
                       {plan.period && authConfig.authEnabled && (
-                        <div className="text-xs text-muted-foreground">{plan.period}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {billingPeriod === 'yearly' && (plan.value === 'pro' || plan.value === 'team')
+                            ? 'per month (billed yearly)'
+                            : plan.period}
+                        </div>
                       )}
                       {plan.recommended && (
                         <div className="text-xs text-primary mt-1">

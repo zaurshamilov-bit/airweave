@@ -370,3 +370,34 @@ def needs_billing_setup(
         return True
 
     return False
+
+
+# ------------------------------ Yearly Prepay ------------------------------ #
+
+
+def compute_yearly_prepay_amount_cents(plan: BillingPlan) -> int:
+    """Compute yearly prepay amount in cents.
+
+    Rules: 12 months at current monthly price with 20% discount.
+    Pricing is defined externally (Stripe), but we hardcode business expectations
+    for validation and UI hints when needed. The Stripe checkout will be the
+    ultimate source of truth for the amount actually charged.
+
+    Values per spec:
+    - PRO: 12 * 2000 * 0.8 = 19200
+    - TEAM: 12 * 29900 * 0.8 = 286,?0 -> 12 * 29900 = 358800; *0.8 = 287040
+
+    We return integers (cents), guarding against unsupported plans.
+    """
+    if plan == BillingPlan.PRO:
+        return int(12 * 2000 * 0.8)
+    if plan == BillingPlan.TEAM:
+        return int(12 * 29900 * 0.8)
+    raise ValueError("Yearly prepay only supported for pro and team plans")
+
+
+def coupon_percent_off_for_yearly_prepay(plan: BillingPlan) -> int:
+    """Return coupon percent_off for yearly prepay discount."""
+    if plan in {BillingPlan.PRO, BillingPlan.TEAM}:
+        return 20
+    raise ValueError("Yearly prepay only supported for pro and team plans")

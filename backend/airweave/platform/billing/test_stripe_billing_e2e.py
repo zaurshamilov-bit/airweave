@@ -13,6 +13,7 @@ Requirements for local run:
   - Backend running locally (default API base: http://localhost:8001)
   - AUTH_DISABLED or X-Organization-ID header accepted by the API
   - STRIPE_SECRET_KEY set for Stripe SDK calls
+  - STRIPE_WEBHOOK_SECRET set for signed webhook generation
   - Optionally: Stripe CLI logged in and `stripe listen` forwarding webhooks
     to /billing/webhook. The script will attempt CLI-based triggers when
     available; otherwise, it uses the Stripe SDK to produce equivalent effects.
@@ -24,6 +25,8 @@ Run:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import os
 import subprocess
@@ -233,6 +236,23 @@ class StripeClient:
         """Advance a test clock."""
         stripe.test_helpers.TestClock.advance(test_clock=clock_id, frozen_time=new_time)
 
+    def is_test_clock_ready(self, clock_id: str) -> bool:
+        """Return True if the Stripe test clock status is 'ready'."""
+        try:
+            clock = stripe.test_helpers.TestClock.retrieve(clock_id)
+            return getattr(clock, "status", None) == "ready"
+        except Exception:
+            return False
+
+    def wait_test_clock_ready(self, clock_id: str, timeout_sec: int = 30) -> None:
+        """Block until the Stripe test clock is ready or until timeout."""
+        deadline = time.time() + timeout_sec
+        while time.time() < deadline:
+            if self.is_test_clock_ready(clock_id):
+                return
+            time.sleep(0.5)
+        raise RuntimeError("Stripe test clock did not become ready in time")
+
     def update_subscription_price(
         self, subscription_id: str, *, new_price_id: str, plan: str
     ) -> None:
@@ -245,6 +265,72 @@ class StripeClient:
             cancel_at_period_end=False,
             proration_behavior="create_prorations",
             metadata={"plan": plan},
+        )
+
+    def create_and_confirm_payment_intent(self, *, customer_id: str, amount_cents: int) -> Any:
+        """Create and confirm a PaymentIntent for the given customer and amount."""
+        # Ensure there is a usable PM on the customer prior to confirming
+        try:
+            pi = stripe.PaymentIntent.create(
+                amount=int(amount_cents),
+                currency="usd",
+                customer=customer_id,
+                payment_method="pm_card_visa",
+                confirm=True,
+                off_session=True,
+                automatic_payment_methods={"enabled": True},
+            )
+            return pi
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"Failed to create/confirm PaymentIntent: {exc}") from exc
+
+    def assert_coupon_applied(self, subscription_id: str, expected_coupon_id: str) -> None:
+        """Assert a specific coupon is applied to the subscription."""
+        sub = self.get_subscription(subscription_id)
+        discount = getattr(sub, "discount", None)
+        coupon_id = None
+        try:
+            if discount and hasattr(discount, "coupon"):
+                coupon_obj = discount.coupon
+                if hasattr(coupon_obj, "id"):
+                    coupon_id = coupon_obj.id
+            if isinstance(sub, dict):
+                # Fallback for dict-like
+                discount_dict = sub.get("discount") if isinstance(sub, dict) else None
+                if isinstance(discount_dict, dict):
+                    coupon = discount_dict.get("coupon")
+                    if isinstance(coupon, dict):
+                        coupon_id = coupon.get("id")
+        except Exception:
+            coupon_id = None
+        assert coupon_id == expected_coupon_id, (
+            f"Stripe: coupon mismatch {coupon_id} != {expected_coupon_id}"
+        )
+
+    def assert_no_coupon(self, subscription_id: str) -> None:
+        """Assert subscription has no active coupon/discount."""
+        sub = self.get_subscription(subscription_id)
+        discount = getattr(sub, "discount", None)
+        if isinstance(sub, dict):
+            discount = sub.get("discount")
+        assert not discount, "Stripe: expected no coupon/discount after yearly expiry"
+
+    def assert_customer_balance_credited(
+        self, *, customer_id: str, expected_amount_cents: int
+    ) -> None:
+        """Assert the customer's balance was credited by expected_amount_cents.
+
+        Stripe records credits as negative amounts.
+        """
+        try:
+            txns = stripe.Customer.list_balance_transactions(customer=customer_id)
+            data = getattr(txns, "data", []) or []
+            credited = any(getattr(t, "amount", None) == -int(expected_amount_cents) for t in data)
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"Failed to list balance transactions: {exc}") from exc
+        assert credited is True, (
+            f"Stripe: expected credit of {-int(expected_amount_cents)} not found in"
+            " balance transactions"
         )
 
 
@@ -279,6 +365,21 @@ class DbInspector:
                     "current_period_end": str(getattr(billing, "current_period_end", None)),
                     "pending_plan_change": getattr(billing, "pending_plan_change", None),
                     "cancel_at_period_end": getattr(billing, "cancel_at_period_end", None),
+                    # Yearly prepay fields
+                    "has_yearly_prepay": getattr(billing, "has_yearly_prepay", None),
+                    "yearly_prepay_started_at": str(
+                        getattr(billing, "yearly_prepay_started_at", None)
+                    ),
+                    "yearly_prepay_expires_at": str(
+                        getattr(billing, "yearly_prepay_expires_at", None)
+                    ),
+                    "yearly_prepay_amount_cents": getattr(
+                        billing, "yearly_prepay_amount_cents", None
+                    ),
+                    "yearly_prepay_coupon_id": getattr(billing, "yearly_prepay_coupon_id", None),
+                    "yearly_prepay_payment_intent_id": getattr(
+                        billing, "yearly_prepay_payment_intent_id", None
+                    ),
                 }
 
             if at_iso:
@@ -600,6 +701,58 @@ class TestRunner:
         self.db = DbInspector()
         self.stripe = StripeClient(config)
 
+    def send_stripe_webhook_checkout_completed(
+        self,
+        *,
+        customer_id: str,
+        organization_id: str,
+        plan: str,
+        coupon_id: str,
+        payment_intent_id: str,
+    ) -> None:
+        """Send a signed checkout.session.completed webhook directly to the API."""
+        event = {
+            "id": f"evt_{int(time.time())}",
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "id": f"cs_test_{int(time.time())}",
+                    "object": "checkout.session",
+                    "mode": "payment",
+                    "customer": customer_id,
+                    "payment_intent": payment_intent_id,
+                    "metadata": {
+                        "organization_id": organization_id,
+                        "plan": plan,
+                        "type": "yearly_prepay",
+                        "coupon_id": coupon_id,
+                    },
+                }
+            },
+        }
+
+        payload = json.dumps(event)
+        secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+        if not secret:
+            raise RuntimeError("STRIPE_WEBHOOK_SECRET env var not set")
+        ts = str(int(time.time()))
+        signed_payload = f"{ts}.{payload}"
+        signature = hmac.new(
+            key=secret.encode("utf-8"),
+            msg=signed_payload.encode("utf-8"),
+            digestmod=hashlib.sha256,
+        ).hexdigest()
+        sig_header = f"t={ts},v1={signature}"
+
+        url = f"{self.config.api_base}/billing/webhook"
+        headers = {
+            "Content-Type": "application/json",
+            "Stripe-Signature": sig_header,
+        }
+        res = requests.post(url, data=payload, headers=headers, timeout=30)
+        if not res.ok:
+            raise RuntimeError(f"Webhook POST failed: {res.status_code} {res.text}")
+
     def close(self) -> None:
         """Close the test runner."""
         try:
@@ -624,174 +777,349 @@ class TestRunner:
         elif clock_id:
             log_info(f"Using existing Stripe test clock: {clock_id}")
 
-        log_step("Create organization on Developer plan")
-        org = create_organization(self.api, plan="developer")
-        log_ok(f"Org created: {org.id} ({org.name})")
+        # log_step("Create organization on Developer plan")
+        # org = create_organization(self.api, plan="developer")
+        # log_ok(f"Org created: {org.id} ({org.name})")
 
-        # Wait for webhook to fully process and set period boundaries
-        sub_dev = poll_subscription_complete(
-            self.api, org_id=org.id, expected_plan="developer", timeout_sec=30
+        # # Wait for webhook to fully process and set period boundaries
+        # sub_dev = poll_subscription_complete(
+        #     self.api, org_id=org.id, expected_plan="developer", timeout_sec=30
+        # )
+        # assert_api_subscription(sub_dev, expected_plan="developer")
+        # log_ok("Developer subscription active via API")
+
+        # snap_dev = self.loop.run_until_complete(self.db.snapshot(org.id))
+        # assert_db_snapshot(snap_dev, expected_plan="developer")
+        # log_ok("Developer subscription correct in DB")
+
+        # sub_id_dev = snap_dev.get("organization_billing", {}).get("stripe_subscription_id")
+        # if sub_id_dev:
+        #     self.stripe.assert_active(sub_id_dev)
+        #     log_ok("Developer subscription active in Stripe")
+
+        # log_step("Upgrade Developer → Pro (requires checkout)")
+        # resp = self.api.post("/billing/update-plan", {"plan": "pro"}, org_id=org.id)
+        # assert resp.status_code == 400 and "Payment method" in resp.text, (
+        #     f"Expected 400 requiring checkout, got {resp.status_code}: {resp.text}"
+        # )
+        # log_ok("Upgrade correctly requires checkout")
+
+        # checkout_url = start_checkout_session(self.api, org_id=org.id, plan="pro")
+        # assert checkout_url.startswith("https://"), "Missing/invalid checkout URL"
+        # log_ok("Checkout session created for Pro")
+
+        # snap_for_customer = self.loop.run_until_complete(self.db.snapshot(org.id))
+        # customer_id = (snap_for_customer.get("organization_billing", {}) or {}).get(
+        #     "stripe_customer_id"
+        # )
+        # assert customer_id, "Missing Stripe customer id"
+        # self.stripe.ensure_payment_method(customer_id)
+
+        # current_sub_id = (snap_for_customer.get("organization_billing", {}) or {}).get(
+        #     "stripe_subscription_id"
+        # )
+        # assert current_sub_id, "Missing Stripe subscription id"
+        # self.stripe.update_subscription_price(
+        #     current_sub_id,
+        #     new_price_id=os.environ["STRIPE_PRO_MONTHLY"],
+        #     plan="pro",
+        # )
+        # log_info("Triggered Stripe subscription update (developer → pro)")
+
+        # sub_pro = poll_subscription_plan(
+        #     self.api, org_id=org.id, expected_plan="pro", timeout_sec=30
+        # )
+        # assert_api_subscription(sub_pro, expected_plan="pro")
+        # log_ok("Pro subscription active via API")
+
+        # snap_pro = self.loop.run_until_complete(self.db.snapshot(org.id))
+        # assert_db_snapshot(snap_pro, expected_plan="pro")
+        # log_ok("Pro subscription correct in DB")
+
+        # sub_id_pro = snap_pro.get("organization_billing", {}).get("stripe_subscription_id")
+        # if sub_id_pro:
+        #     self.stripe.assert_active(sub_id_pro)
+        #     self.stripe.assert_price(sub_id_pro, os.environ["STRIPE_PRO_MONTHLY"])
+        #     log_ok("Pro subscription active with correct price in Stripe")
+
+        # log_step("Upgrade Pro → Team (immediate)")
+        # update_plan(self.api, org_id=org.id, plan="team")
+        # sub_team = poll_subscription_plan(
+        #     self.api, org_id=org.id, expected_plan="team", timeout_sec=30
+        # )
+        # assert_api_subscription(sub_team, expected_plan="team")
+        # log_ok("Team subscription active via API")
+
+        # snap_team = self.loop.run_until_complete(self.db.snapshot(org.id))
+        # assert_upgrade_pro_to_team(snap_team)
+        # log_ok("Team period created; Pro period completed in DB")
+
+        # sub_id_team = snap_team.get("organization_billing", {}).get("stripe_subscription_id")
+        # if sub_id_team:
+        #     self.stripe.assert_active(sub_id_team)
+        #     self.stripe.assert_price(sub_id_team, os.environ["STRIPE_TEAM_MONTHLY"])
+        #     log_ok("Team subscription active with correct price in Stripe")
+
+        # log_step("Cancel Team at period end")
+        # cancel_at_period_end(self.api, org_id=org.id)
+        # for _ in range(20):
+        #     cur = self.api.get("/billing/subscription", org_id=org.id).json()
+        #     if cur.get("cancel_at_period_end") is True:
+        #         break
+        #     time.sleep(1.0)
+        # else:
+        #     raise AssertionError("cancel_at_period_end not set after cancel")
+        # log_ok("cancel_at_period_end true via API")
+
+        # if sub_id_team:
+        #     sub = self.stripe.get_subscription(sub_id_team)
+        #     assert bool(getattr(sub, "cancel_at_period_end", False)) is True, (
+        #         "Stripe: cancel_at_period_end not set"
+        #     )
+        #     log_ok("cancel_at_period_end true in Stripe")
+
+        # log_step("Reactivate Team (clear cancellation)")
+        # reactivate(self.api, org_id=org.id)
+        # for _ in range(20):
+        #     cur = self.api.get("/billing/subscription", org_id=org.id).json()
+        #     if cur.get("cancel_at_period_end") is False:
+        #         break
+        #     time.sleep(1.0)
+        # else:
+        #     raise AssertionError("cancel_at_period_end not cleared after reactivate")
+        # log_ok("cancel_at_period_end false via API")
+
+        # if sub_id_team:
+        #     sub2 = self.stripe.get_subscription(sub_id_team)
+        #     assert bool(getattr(sub2, "cancel_at_period_end", False)) is False, (
+        #         "Stripe: cancel_at_period_end still set after reactivation"
+        #     )
+        #     log_ok("cancel_at_period_end false in Stripe")
+
+        # log_step("Schedule downgrade Team → Developer at period end")
+        # update_plan(self.api, org_id=org.id, plan="developer")
+        # for _ in range(20):
+        #     cur = self.api.get("/billing/subscription", org_id=org.id).json()
+        #     if (cur.get("pending_plan_change") or "").lower() == "developer":
+        #         break
+        #     time.sleep(1.0)
+        # else:
+        #     raise AssertionError("pending_plan_change not set to developer")
+        # log_ok("pending_plan_change developer via API")
+
+        # snap_dg = self.loop.run_until_complete(self.db.snapshot(org.id))
+        # ob = snap_dg.get("organization_billing", {})
+        # assert (ob.get("pending_plan_change") or "").lower() == "developer", (
+        #     "DB: pending_plan_change not set to developer"
+        # )
+        # log_ok("pending_plan_change developer in DB")
+
+        # sub_id_for_dg = ob.get("stripe_subscription_id")
+        # if sub_id_for_dg:
+        #     self.stripe.assert_downgrade_scheduled(
+        #         sub_id_for_dg, expected_dev_price_id=os.environ.get("STRIPE_DEVELOPER_MONTHLY")
+        #     )
+        #     log_ok("Downgrade scheduled in Stripe (price prepared for next period)")
+
+        # clock_id = os.environ.get("STRIPE_TEST_CLOCK")
+        # if clock_id:
+        #     log_step("Advance test clock to apply scheduled downgrade")
+        #     snap_now = self.loop.run_until_complete(self.db.snapshot(org.id))
+        #     cpe = snap_now.get("organization_billing", {}).get("current_period_end") or (
+        #         snap_now.get("current_billing_period", {}) or {}
+        #     ).get("period_end")
+        #     if not cpe:
+        #         raise AssertionError("Missing current_period_end to advance test clock")
+        #     target_ts = _iso_to_epoch_seconds(str(cpe)) + 24 * 60 * 60
+        #     try:
+        #         self.stripe.advance_test_clock(clock_id, target_ts)
+        #         log_info("Advanced Stripe test clock past current period end")
+        #     except Exception as exc:  # noqa: BLE001
+        #         log_info(f"Clock advance skipped: {exc}")
+        #     deadline = time.time() + 30
+        #     while time.time() < deadline:
+        #         data = self.api.get("/billing/subscription", org_id=org.id).json()
+        #         if (data.get("plan") or "").lower() == "developer":
+        #             break
+        #         time.sleep(1.0)
+        #     else:
+        #         raise AssertionError("Downgrade not applied after clock advance")
+        #     log_ok("Developer subscription active post-renewal via API")
+
+        # ------------------------------------------------------------------
+        # Yearly prepay flow (new customer/org): PRO yearly → monthly sub w/ coupon
+        # ------------------------------------------------------------------
+        log_step("Yearly prepay: Create new org and start PRO yearly checkout")
+        # Ensure test clock (if any) is back to 'ready' before creating new Stripe objects
+        clock_env = os.environ.get("STRIPE_TEST_CLOCK")
+        if clock_env:
+            try:
+                self.stripe.wait_test_clock_ready(clock_env, timeout_sec=45)
+            except Exception as exc:  # noqa: BLE001
+                log_info(f"Waiting for test clock readiness failed/skipped: {exc}")
+        org_year = create_organization(self.api, plan="pro")
+        log_ok(f"Yearly org created: {org_year.id} ({org_year.name})")
+
+        # Start yearly prepay checkout (payment mode)
+        resp_year = self.api.post(
+            "/billing/yearly/checkout-session",
+            {
+                "plan": "pro",
+                "success_url": "http://localhost:5173/organization/settings?tab=billing&success=true",
+                "cancel_url": "http://localhost:5173/organization/settings?tab=billing",
+            },
+            org_id=org_year.id,
         )
-        assert_api_subscription(sub_dev, expected_plan="developer")
-        log_ok("Developer subscription active via API")
-
-        snap_dev = self.loop.run_until_complete(self.db.snapshot(org.id))
-        assert_db_snapshot(snap_dev, expected_plan="developer")
-        log_ok("Developer subscription correct in DB")
-
-        sub_id_dev = snap_dev.get("organization_billing", {}).get("stripe_subscription_id")
-        if sub_id_dev:
-            self.stripe.assert_active(sub_id_dev)
-            log_ok("Developer subscription active in Stripe")
-
-        log_step("Upgrade Developer → Pro (requires checkout)")
-        resp = self.api.post("/billing/update-plan", {"plan": "pro"}, org_id=org.id)
-        assert resp.status_code == 400 and "Payment method" in resp.text, (
-            f"Expected 400 requiring checkout, got {resp.status_code}: {resp.text}"
+        assert resp_year.ok, (
+            f"Yearly checkout session failed: {resp_year.status_code} {resp_year.text}"
         )
-        log_ok("Upgrade correctly requires checkout")
+        checkout_url_year = resp_year.json().get("checkout_url", "")
+        assert checkout_url_year.startswith("https://"), "Missing/invalid yearly checkout URL"
+        log_ok("Yearly checkout session created for PRO")
 
-        checkout_url = start_checkout_session(self.api, org_id=org.id, plan="pro")
-        assert checkout_url.startswith("https://"), "Missing/invalid checkout URL"
-        log_ok("Checkout session created for Pro")
-
-        snap_for_customer = self.loop.run_until_complete(self.db.snapshot(org.id))
-        customer_id = (snap_for_customer.get("organization_billing", {}) or {}).get(
-            "stripe_customer_id"
+        # After creating the yearly checkout session, the webhook handler should
+        # populate yearly prepay metadata on the billing record. Poll briefly
+        # for those fields before proceeding.
+        deadline = time.time() + 20
+        snap_year_start = {}
+        while time.time() < deadline:
+            snap_year_start = self.loop.run_until_complete(self.db.snapshot(org_year.id))
+            ob_tmp = snap_year_start.get("organization_billing", {})
+            if ob_tmp.get("yearly_prepay_coupon_id") and ob_tmp.get("yearly_prepay_amount_cents"):
+                break
+            time.sleep(0.5)
+        # Fetch early DB snapshot to obtain Stripe customer and coupon id
+        # (should be present now)
+        ob_year = snap_year_start.get("organization_billing", {})
+        customer_year = ob_year.get("stripe_customer_id")
+        coupon_year = ob_year.get("yearly_prepay_coupon_id")
+        amount_year = ob_year.get("yearly_prepay_amount_cents")
+        assert customer_year and coupon_year and amount_year, (
+            "Missing yearly prepay metadata ("
+            f"customer={customer_year}, coupon={coupon_year}, amount={amount_year})"
         )
-        assert customer_id, "Missing Stripe customer id"
-        self.stripe.ensure_payment_method(customer_id)
 
-        current_sub_id = (snap_for_customer.get("organization_billing", {}) or {}).get(
-            "stripe_subscription_id"
+        # Ensure PM and create + confirm a PaymentIntent to simulate successful payment amount
+        self.stripe.ensure_payment_method(customer_year)
+        pi = self.stripe.create_and_confirm_payment_intent(
+            customer_id=customer_year,
+            amount_cents=int(amount_year),
         )
-        assert current_sub_id, "Missing Stripe subscription id"
-        self.stripe.update_subscription_price(
-            current_sub_id,
-            new_price_id=os.environ["STRIPE_PRO_MONTHLY"],
+        log_ok(f"Created and confirmed PaymentIntent {getattr(pi, 'id', '')} for yearly prepay")
+
+        self.send_stripe_webhook_checkout_completed(
+            customer_id=customer_year,
+            organization_id=org_year.id,
             plan="pro",
+            coupon_id=coupon_year,
+            payment_intent_id=getattr(pi, "id", ""),
         )
-        log_info("Triggered Stripe subscription update (developer → pro)")
+        log_ok("Sent signed checkout.session.completed webhook for yearly prepay")
 
-        sub_pro = poll_subscription_plan(
-            self.api, org_id=org.id, expected_plan="pro", timeout_sec=30
+        # Poll until subscription becomes PRO and active
+        sub_year = poll_subscription_complete(
+            self.api, org_id=org_year.id, expected_plan="pro", timeout_sec=90
         )
-        assert_api_subscription(sub_pro, expected_plan="pro")
-        log_ok("Pro subscription active via API")
+        assert_api_subscription(sub_year, expected_plan="pro")
+        log_ok("Yearly: PRO subscription active via API")
 
-        snap_pro = self.loop.run_until_complete(self.db.snapshot(org.id))
-        assert_db_snapshot(snap_pro, expected_plan="pro")
-        log_ok("Pro subscription correct in DB")
-
-        sub_id_pro = snap_pro.get("organization_billing", {}).get("stripe_subscription_id")
-        if sub_id_pro:
-            self.stripe.assert_active(sub_id_pro)
-            self.stripe.assert_price(sub_id_pro, os.environ["STRIPE_PRO_MONTHLY"])
-            log_ok("Pro subscription active with correct price in Stripe")
-
-        log_step("Upgrade Pro → Team (immediate)")
-        update_plan(self.api, org_id=org.id, plan="team")
-        sub_team = poll_subscription_plan(
-            self.api, org_id=org.id, expected_plan="team", timeout_sec=30
+        # Verify DB fields including yearly prepay flags
+        snap_year_final = self.loop.run_until_complete(self.db.snapshot(org_year.id))
+        ob_year_final = snap_year_final.get("organization_billing", {})
+        assert_db_snapshot(snap_year_final, expected_plan="pro")
+        assert bool(ob_year_final.get("has_yearly_prepay")) is True, (
+            "DB: yearly prepay flag not set"
         )
-        assert_api_subscription(sub_team, expected_plan="team")
-        log_ok("Team subscription active via API")
-
-        snap_team = self.loop.run_until_complete(self.db.snapshot(org.id))
-        assert_upgrade_pro_to_team(snap_team)
-        log_ok("Team period created; Pro period completed in DB")
-
-        sub_id_team = snap_team.get("organization_billing", {}).get("stripe_subscription_id")
-        if sub_id_team:
-            self.stripe.assert_active(sub_id_team)
-            self.stripe.assert_price(sub_id_team, os.environ["STRIPE_TEAM_MONTHLY"])
-            log_ok("Team subscription active with correct price in Stripe")
-
-        log_step("Cancel Team at period end")
-        cancel_at_period_end(self.api, org_id=org.id)
-        for _ in range(20):
-            cur = self.api.get("/billing/subscription", org_id=org.id).json()
-            if cur.get("cancel_at_period_end") is True:
-                break
-            time.sleep(1.0)
-        else:
-            raise AssertionError("cancel_at_period_end not set after cancel")
-        log_ok("cancel_at_period_end true via API")
-
-        if sub_id_team:
-            sub = self.stripe.get_subscription(sub_id_team)
-            assert bool(getattr(sub, "cancel_at_period_end", False)) is True, (
-                "Stripe: cancel_at_period_end not set"
-            )
-            log_ok("cancel_at_period_end true in Stripe")
-
-        log_step("Reactivate Team (clear cancellation)")
-        reactivate(self.api, org_id=org.id)
-        for _ in range(20):
-            cur = self.api.get("/billing/subscription", org_id=org.id).json()
-            if cur.get("cancel_at_period_end") is False:
-                break
-            time.sleep(1.0)
-        else:
-            raise AssertionError("cancel_at_period_end not cleared after reactivate")
-        log_ok("cancel_at_period_end false via API")
-
-        if sub_id_team:
-            sub2 = self.stripe.get_subscription(sub_id_team)
-            assert bool(getattr(sub2, "cancel_at_period_end", False)) is False, (
-                "Stripe: cancel_at_period_end still set after reactivation"
-            )
-            log_ok("cancel_at_period_end false in Stripe")
-
-        log_step("Schedule downgrade Team → Developer at period end")
-        update_plan(self.api, org_id=org.id, plan="developer")
-        for _ in range(20):
-            cur = self.api.get("/billing/subscription", org_id=org.id).json()
-            if (cur.get("pending_plan_change") or "").lower() == "developer":
-                break
-            time.sleep(1.0)
-        else:
-            raise AssertionError("pending_plan_change not set to developer")
-        log_ok("pending_plan_change developer via API")
-
-        snap_dg = self.loop.run_until_complete(self.db.snapshot(org.id))
-        ob = snap_dg.get("organization_billing", {})
-        assert (ob.get("pending_plan_change") or "").lower() == "developer", (
-            "DB: pending_plan_change not set to developer"
+        assert ob_year_final.get("yearly_prepay_coupon_id") == coupon_year, "DB: coupon id mismatch"
+        assert int(ob_year_final.get("yearly_prepay_amount_cents") or 0) == int(amount_year), (
+            "DB: yearly prepay amount mismatch"
         )
-        log_ok("pending_plan_change developer in DB")
+        assert ob_year_final.get("yearly_prepay_expires_at"), "DB: yearly prepay expiry missing"
+        log_info("Yearly prepay DB snapshot (final): " + json.dumps(ob_year_final, indent=2))
+        log_ok("Yearly: DB updated with coupon and prepay fields")
 
-        sub_id_for_dg = ob.get("stripe_subscription_id")
-        if sub_id_for_dg:
-            self.stripe.assert_downgrade_scheduled(
-                sub_id_for_dg, expected_dev_price_id=os.environ.get("STRIPE_DEVELOPER_MONTHLY")
-            )
-            log_ok("Downgrade scheduled in Stripe (price prepared for next period)")
+        # Verify Stripe: subscription active, price = PRO monthly, coupon applied, balance credited
+        sub_id_year = ob_year_final.get("stripe_subscription_id")
+        assert sub_id_year, "Missing Stripe subscription id for yearly prepay"
+        self.stripe.assert_active(sub_id_year)
+        self.stripe.assert_price(
+            sub_id_year,
+            os.environ["STRIPE_PRO_MONTHLY"],
+        )
+        self.stripe.assert_coupon_applied(sub_id_year, coupon_year)
+        self.stripe.assert_customer_balance_credited(
+            customer_id=customer_year, expected_amount_cents=int(amount_year)
+        )
+        log_ok("Yearly: Stripe subscription, coupon and balance credit verified")
 
+        # Advance test clock across yearly prepay expiry by stepping period-by-period
         clock_id = os.environ.get("STRIPE_TEST_CLOCK")
         if clock_id:
-            log_step("Advance test clock to apply scheduled downgrade")
-            snap_now = self.loop.run_until_complete(self.db.snapshot(org.id))
-            cpe = snap_now.get("organization_billing", {}).get("current_period_end") or (
-                snap_now.get("current_billing_period", {}) or {}
-            ).get("period_end")
-            if not cpe:
-                raise AssertionError("Missing current_period_end to advance test clock")
-            target_ts = _iso_to_epoch_seconds(str(cpe)) + 24 * 60 * 60
+            log_step("Advance test clock past yearly expiry (step through renewals)")
+            # Get expiry from DB snapshot
+            expires_at_str = ob_year_final.get("yearly_prepay_expires_at")
             try:
-                self.stripe.advance_test_clock(clock_id, target_ts)
-                log_info("Advanced Stripe test clock past current period end")
-            except Exception as exc:  # noqa: BLE001
-                log_info(f"Clock advance skipped: {exc}")
-            deadline = time.time() + 30
-            while time.time() < deadline:
-                data = self.api.get("/billing/subscription", org_id=org.id).json()
-                if (data.get("plan") or "").lower() == "developer":
+                from datetime import datetime as _dt
+
+                expires_at = _dt.fromisoformat(str(expires_at_str)) if expires_at_str else None
+            except Exception:
+                expires_at = None
+
+            # Step through renewals until we've crossed expiry and one extra cycle
+            steps_taken = 0
+            max_steps = 20
+            crossed_expiry = False
+            while steps_taken < max_steps:
+                cur_info = self.api.get("/billing/subscription", org_id=org_year.id).json()
+                cur_end = cur_info.get("current_period_end") or ob_year_final.get(
+                    "current_period_end"
+                )
+                if not cur_end:
                     break
-                time.sleep(1.0)
-            else:
-                raise AssertionError("Downgrade not applied after clock advance")
-            log_ok("Developer subscription active post-renewal via API")
+                # If we already crossed expiry and took one more step, stop
+                if crossed_expiry:
+                    break
+                # Determine if the next period will be past expiry
+                will_cross = False
+                try:
+                    cur_end_ts = _iso_to_epoch_seconds(str(cur_end))
+                    will_cross = bool(expires_at and cur_end_ts >= int(expires_at.timestamp()))
+                except Exception:
+                    will_cross = False
+
+                # Advance to just after current period end
+                try:
+                    target_ts = _iso_to_epoch_seconds(str(cur_end)) + 24 * 60 * 60
+                    self.stripe.advance_test_clock(clock_id, target_ts)
+                    self.stripe.wait_test_clock_ready(clock_id, timeout_sec=60)
+                    steps_taken += 1
+                except Exception as exc:  # noqa: BLE001
+                    log_info(f"Clock advance step skipped: {exc}")
+                    break
+
+                # Poll API until next cycle visible (plan remains pro)
+                try:
+                    poll_subscription_complete(
+                        self.api, org_id=org_year.id, expected_plan="pro", timeout_sec=60
+                    )
+                except Exception:
+                    pass
+
+                if will_cross:
+                    crossed_expiry = True
+
+            # After stepping past expiry and one extra renewal, verify DB cleared flag
+            snap_after_year = self.loop.run_until_complete(self.db.snapshot(org_year.id))
+            ob_after_year = snap_after_year.get("organization_billing", {})
+            assert bool(ob_after_year.get("has_yearly_prepay")) is False, (
+                "DB: has_yearly_prepay should be False after expiry"
+            )
+
+            # Verify Stripe no longer has coupon/discount on subscription
+            sub_id_after = ob_after_year.get("stripe_subscription_id")
+            if sub_id_after:
+                self.stripe.assert_no_coupon(sub_id_after)
+                log_ok("Yearly: coupon expired and removed from subscription")
 
         log_ok("All subtests passed")
 

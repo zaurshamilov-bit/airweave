@@ -75,6 +75,13 @@ class OrganizationBillingUpdate(BaseModel):
     last_payment_status: Optional[PaymentStatus] = None
     last_payment_at: Optional[datetime] = None
     billing_metadata: Optional[Dict[str, Any]] = None
+    # Yearly prepay fields
+    has_yearly_prepay: Optional[bool] = None
+    yearly_prepay_started_at: Optional[datetime] = None
+    yearly_prepay_expires_at: Optional[datetime] = None
+    yearly_prepay_amount_cents: Optional[int] = None
+    yearly_prepay_coupon_id: Optional[str] = None
+    yearly_prepay_payment_intent_id: Optional[str] = None
 
 
 class OrganizationBillingInDBBase(OrganizationBillingBase):
@@ -99,6 +106,13 @@ class OrganizationBillingInDBBase(OrganizationBillingBase):
     last_payment_status: Optional[str] = None
     last_payment_at: Optional[datetime] = None
     billing_metadata: Optional[Dict[str, Any]] = None
+    # Yearly prepay fields
+    has_yearly_prepay: bool = False
+    yearly_prepay_started_at: Optional[datetime] = None
+    yearly_prepay_expires_at: Optional[datetime] = None
+    yearly_prepay_amount_cents: Optional[int] = None
+    yearly_prepay_coupon_id: Optional[str] = None
+    yearly_prepay_payment_intent_id: Optional[str] = None
     created_at: datetime
     modified_at: datetime
 
@@ -150,6 +164,25 @@ class SubscriptionInfo(BaseModel):
     pending_plan_change_at: Optional[datetime] = Field(
         None, description="When the pending plan change takes effect"
     )
+    # Yearly prepay summary fields
+    has_yearly_prepay: bool = Field(
+        False, description="Whether organization has an active yearly prepay credit"
+    )
+    yearly_prepay_started_at: Optional[datetime] = Field(
+        None, description="When yearly prepay was started"
+    )
+    yearly_prepay_expires_at: Optional[datetime] = Field(
+        None, description="When yearly prepay expires"
+    )
+    yearly_prepay_amount_cents: Optional[int] = Field(
+        None, description="Total amount (in cents) credited for yearly prepay"
+    )
+    yearly_prepay_coupon_id: Optional[str] = Field(
+        None, description="Coupon ID used for yearly prepay"
+    )
+    yearly_prepay_payment_intent_id: Optional[str] = Field(
+        None, description="Payment intent ID used for yearly prepay"
+    )
 
 
 # Request/Response schemas for API endpoints
@@ -193,6 +226,10 @@ class UpdatePlanRequest(BaseModel):
     """Request to update subscription plan."""
 
     plan: str = Field(..., description="New plan (developer, startup)")
+    period: Optional[str] = Field(
+        default="monthly",
+        description="Billing period for the plan: 'monthly' or 'yearly'",
+    )
 
 
 class MessageResponse(BaseModel):

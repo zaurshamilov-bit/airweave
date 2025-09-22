@@ -60,6 +60,35 @@ async def create_checkout_session(
     return schemas.CheckoutSessionResponse(checkout_url=checkout_url)
 
 
+@router.post("/yearly/checkout-session", response_model=schemas.CheckoutSessionResponse)
+async def create_yearly_prepay_checkout_session(
+    request: schemas.CheckoutSessionRequest,
+    db: AsyncSession = Depends(deps.get_db),
+    ctx: ApiContext = Depends(deps.get_context),
+) -> schemas.CheckoutSessionResponse:
+    """Create a Stripe checkout session for yearly prepay (no existing subscription).
+
+    This creates a one-time payment for a full year at 20% discount, and records
+    the prepay intent. After payment (via webhook), we will credit balance,
+    create the monthly subscription and apply a 20% coupon.
+    """
+    if not settings.STRIPE_ENABLED:
+        raise ExternalServiceError(
+            service_name="Billing",
+            message="Billing is not enabled for this instance",
+        )
+
+    checkout_url = await billing_service.start_yearly_prepay_checkout(
+        db=db,
+        plan=request.plan,
+        success_url=request.success_url,
+        cancel_url=request.cancel_url,
+        ctx=ctx,
+    )
+
+    return schemas.CheckoutSessionResponse(checkout_url=checkout_url)
+
+
 @router.post("/portal-session", response_model=schemas.CustomerPortalResponse)
 async def create_portal_session(
     request: schemas.CustomerPortalRequest,
@@ -154,6 +183,7 @@ async def update_subscription_plan(
         db=db,
         ctx=ctx,
         new_plan=request.plan,
+        period=(request.period or "monthly"),
     )
 
     return schemas.MessageResponse(message=message)

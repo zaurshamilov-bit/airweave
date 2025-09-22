@@ -5,6 +5,7 @@ to appropriate handlers using clean separation of concerns.
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import stripe
@@ -50,6 +51,7 @@ class BillingWebhookProcessor:
             "invoice.payment_failed": self._handle_payment_failed,
             "invoice.upcoming": self._handle_invoice_upcoming,
             "checkout.session.completed": self._handle_checkout_completed,
+            "payment_intent.succeeded": self._handle_payment_intent_succeeded,
         }
 
     async def _create_context_logger(self, event: stripe.Event) -> ContextualLogger:
@@ -193,7 +195,7 @@ class BillingWebhookProcessor:
 
         log.info(f"Subscription created for org {org_id}: {plan}")
 
-    async def _handle_subscription_updated(
+    async def _handle_subscription_updated(  # noqa: C901
         self,
         event: stripe.Event,
         log: ContextualLogger,
@@ -250,6 +252,19 @@ class BillingWebhookProcessor:
             f"Inferred plan: {inferred.plan} (changed={inferred.changed}, reason={inferred.reason})"
         )
 
+        # On renewal with a pending plan, ensure Stripe price switches accordingly
+        if is_renewal and inferred.changed and inferred.should_clear_pending and self.stripe:
+            try:
+                new_price_id = self.stripe.get_price_for_plan(inferred.plan)
+                if new_price_id:
+                    await self.stripe.update_subscription(
+                        subscription_id=subscription.id,
+                        price_id=new_price_id,
+                        proration_behavior="none",
+                    )
+            except Exception as e:
+                log.warning(f"Failed to switch subscription price on renewal: {e}")
+
         # Determine if we should create a new period
         change_type = compare_plans(billing.billing_plan, inferred.plan)
         if should_create_new_period(
@@ -263,7 +278,16 @@ class BillingWebhookProcessor:
                 is_first_period=False,
             )
 
-            current_period = await self.repository.get_current_billing_period(self.db, org_id)
+            # Use Stripe period start to locate the period that was active at that time
+            # This ensures correct linkage under Stripe test clock advances
+            at_dt = (
+                datetime.utcfromtimestamp(subscription.current_period_start)
+                if is_renewal
+                else datetime.utcnow()
+            )
+            current_period = await self.repository.get_current_billing_period(
+                self.db, org_id, at=at_dt
+            )
 
             await self.repository.create_billing_period(
                 db=self.db,
@@ -304,6 +328,28 @@ class BillingWebhookProcessor:
         if is_renewal and inferred.should_clear_pending:
             updates.pending_plan_change = None
             updates.pending_plan_change_at = None
+
+        # Yearly prepay expiry handling: if we've passed the expiry window, clear the flag
+        try:
+            billing_model_current = await self.repository.get_billing_record(self.db, org_id)
+            if not billing_model_current or not billing_model_current.has_yearly_prepay:
+                pass
+            else:
+                expiry = billing_model_current.yearly_prepay_expires_at
+                # Prefer authoritative check using most recent billing period end
+                latest_period = await self.repository.get_current_billing_period(self.db, org_id)
+                latest_end = None
+                if latest_period:
+                    latest_end = latest_period.period_end
+
+                compare_time = latest_end or datetime.utcfromtimestamp(
+                    getattr(subscription, "current_period_end", 0)
+                )
+
+                if expiry and compare_time and compare_time >= expiry:
+                    updates.has_yearly_prepay = False
+        except Exception:
+            pass
 
         await self.repository.update_billing_by_org(self.db, org_id, updates, ctx)
 
@@ -425,6 +471,37 @@ class BillingWebhookProcessor:
             ctx=ctx,
         )
 
+        # Stamp the most recent ACTIVE/GRACE period with invoice details (best effort)
+        try:
+            period = await self.repository.get_current_billing_period(self.db, org_id)
+            if period and period.status in {BillingPeriodStatus.ACTIVE, BillingPeriodStatus.GRACE}:
+                from airweave import crud as _crud
+
+                inv_paid_at = None
+                try:
+                    transitions = getattr(invoice, "status_transitions", None)
+                    if transitions and isinstance(transitions, dict):
+                        paid_at_ts = transitions.get("paid_at")
+                        if paid_at_ts:
+                            inv_paid_at = datetime.utcfromtimestamp(int(paid_at_ts))
+                except Exception:
+                    inv_paid_at = None
+
+                await _crud.billing_period.update(
+                    self.db,
+                    db_obj=await _crud.billing_period.get(self.db, id=period.id, ctx=ctx),
+                    obj_in={
+                        "stripe_invoice_id": getattr(invoice, "id", None),
+                        "amount_cents": getattr(invoice, "amount_paid", None),
+                        "currency": getattr(invoice, "currency", None),
+                        "paid_at": inv_paid_at or datetime.utcnow(),
+                    },
+                    ctx=ctx,
+                )
+        except Exception:
+            # Best effort; do not fail webhook
+            pass
+
         log.info(f"Payment succeeded for org {org_id}")
 
     async def _handle_payment_failed(
@@ -537,6 +614,172 @@ class BillingWebhookProcessor:
         log.info(
             f"Checkout completed: {session.id}, "
             f"Customer: {session.customer}, "
-            f"Subscription: {session.subscription}"
+            f"Mode: {getattr(session, 'mode', None)}, "
+            f"Subscription: {getattr(session, 'subscription', None)}"
         )
-        # The subscription.created webhook will handle the actual setup
+
+        # If this is a yearly prepay payment (mode=payment), finalize yearly flow.
+        if getattr(session, "mode", None) == "payment":
+            await self._finalize_yearly_prepay(session, log)
+
+        # For subscription mode, the subscription.created webhook will handle setup
+
+    async def _handle_payment_intent_succeeded(
+        self,
+        event: stripe.Event,
+        log: ContextualLogger,
+    ) -> None:
+        """Optional handler for payment_intent.succeeded (not strictly needed)."""
+        # No-op; checkout.session.completed covers our flow.
+        return
+
+    async def _finalize_yearly_prepay(self, session: Any, log: ContextualLogger) -> None:  # noqa: C901
+        """Finalize yearly prepay: credit balance, create subscription with coupon."""
+        try:
+            if not getattr(session, "metadata", None):
+                return
+            if session.metadata.get("type") != "yearly_prepay":
+                return
+
+            org_id_str = session.metadata.get("organization_id")
+            plan_str = session.metadata.get("plan")
+            coupon_id = session.metadata.get("coupon_id")
+            payment_intent_id = getattr(session, "payment_intent", None)
+            if not (org_id_str and plan_str and coupon_id and payment_intent_id):
+                log.error("Missing metadata for yearly prepay finalization")
+                return
+
+            organization_id = UUID(org_id_str)
+
+            # Hydrate context
+            org = await self.repository.get_organization(self.db, organization_id)
+            if not org:
+                log.error(f"Organization {organization_id} not found for prepay finalization")
+                return
+            org_schema = schemas.Organization.model_validate(org, from_attributes=True)
+            ctx = self.service._create_system_context(org_schema, "stripe_webhook")
+
+            # Credit customer's balance by the captured amount
+            billing = await self.repository.get_billing_record(self.db, organization_id)
+            if not billing:
+                log.error("Billing record missing for yearly prepay finalization")
+                return
+
+            try:
+                pi = stripe.PaymentIntent.retrieve(payment_intent_id)
+                amount_received = getattr(pi, "amount_received", None)
+            except Exception:
+                amount_received = None
+
+            if amount_received and self.stripe:
+                try:
+                    await self.stripe.credit_customer_balance(
+                        customer_id=billing.stripe_customer_id,
+                        amount_cents=int(amount_received),
+                        description=f"Yearly prepay credit ({plan_str})",
+                    )
+                except Exception as e:
+                    log.warning(f"Failed to credit balance: {e}")
+
+            # Update existing subscription or create new one
+            if self.stripe:
+                price_id = self.stripe.get_price_for_plan(BillingPlan(plan_str))
+                if price_id:
+                    if billing.stripe_subscription_id:
+                        # Update existing subscription (e.g., Developer → Pro yearly)
+                        # Apply the coupon to the existing subscription
+                        try:
+                            await self.stripe.apply_coupon_to_subscription(
+                                subscription_id=billing.stripe_subscription_id,
+                                coupon_id=coupon_id,
+                            )
+                        except Exception as e:
+                            log.warning(f"Failed to apply coupon to subscription: {e}")
+
+                        # Get the payment method from the payment intent and set as default
+                        payment_method_id = None
+                        try:
+                            payment_intent_id = getattr(session, "payment_intent", None)
+                            if payment_intent_id:
+                                pi = stripe.PaymentIntent.retrieve(payment_intent_id)
+                                payment_method_id = getattr(pi, "payment_method", None)
+                        except Exception as e:
+                            log.warning(f"Failed to get payment method from payment intent: {e}")
+
+                        # Update the subscription to the new price with default payment method
+                        update_params = {
+                            "subscription_id": billing.stripe_subscription_id,
+                            "price_id": price_id,
+                            "cancel_at_period_end": False,
+                            "proration_behavior": "create_prorations",
+                        }
+                        if payment_method_id:
+                            update_params["default_payment_method"] = payment_method_id
+
+                        sub = await self.stripe.update_subscription(**update_params)
+                        log.info(
+                            f"Updated existing subscription {billing.stripe_subscription_id} "
+                            f"to {plan_str} yearly"
+                        )
+                    else:
+                        # Create new subscription (no existing subscription)
+                        # Get the payment method from the payment intent
+                        payment_method_id = None
+                        try:
+                            payment_intent_id = getattr(session, "payment_intent", None)
+                            if payment_intent_id:
+                                pi = stripe.PaymentIntent.retrieve(payment_intent_id)
+                                payment_method_id = getattr(pi, "payment_method", None)
+                        except Exception as e:
+                            log.warning(f"Failed to get payment method from payment intent: {e}")
+
+                        create_params = {
+                            "customer_id": billing.stripe_customer_id,
+                            "price_id": price_id,
+                            "metadata": {
+                                "organization_id": org_id_str,
+                                "plan": plan_str,
+                            },
+                            "coupon_id": coupon_id,
+                        }
+                        if payment_method_id:
+                            create_params["default_payment_method"] = payment_method_id
+
+                        sub = await self.stripe.create_subscription(**create_params)
+                        log.info(f"Created new subscription for {plan_str} yearly")
+
+                    # Update DB: set subscription and finalize prepay window
+                    from datetime import timedelta
+
+                    # Derive expiry based on Stripe subscription start (respects test clock)
+                    sub_start = datetime.utcfromtimestamp(sub.current_period_start)
+                    expires_at = sub_start + timedelta(days=365)
+                    # Check if subscription has payment method
+                    has_pm, pm_id = (
+                        self.stripe.detect_payment_method(sub) if self.stripe else (False, None)
+                    )
+
+                    await self.repository.update_billing_by_org(
+                        self.db,
+                        organization_id,
+                        OrganizationBillingUpdate(
+                            stripe_subscription_id=sub.id,
+                            billing_plan=BillingPlan(plan_str),
+                            payment_method_added=True,  # They just paid, so they have a pm
+                            payment_method_id=pm_id,
+                        ),
+                        ctx,
+                    )
+                    await self.repository.record_yearly_prepay_finalized(
+                        self.db,
+                        organization_id,
+                        coupon_id=coupon_id,
+                        payment_intent_id=str(payment_intent_id),
+                        expires_at=expires_at,
+                        ctx=ctx,
+                    )
+
+                    log.info(f"Yearly prepay finalized for org {organization_id}: sub {sub.id}")
+        except Exception as e:
+            log.error(f"Error finalizing yearly prepay: {e}", exc_info=True)
+            raise

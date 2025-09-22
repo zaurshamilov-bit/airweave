@@ -21,6 +21,8 @@ from airweave.platform.billing.billing_data_access import BillingRepository
 from airweave.platform.billing.plan_logic import (
     PlanChangeContext,
     analyze_plan_change,
+    compute_yearly_prepay_amount_cents,
+    coupon_percent_off_for_yearly_prepay,
     get_plan_limits,
     is_paid_plan,
 )
@@ -154,6 +156,127 @@ class BillingService:
         return billing
 
     # Subscription management
+    # ------------------------------ Helpers (internal) ------------------------------ #
+
+    async def _apply_yearly_coupon_and_credit(  # noqa: C901
+        self,
+        *,
+        billing: schemas.OrganizationBilling,
+        target_plan: BillingPlan,
+        ctx: ApiContext,
+        db: AsyncSession,
+        update_price_immediately: bool,
+    ) -> str:
+        """Apply yearly 20% coupon and credit based on remaining balance.
+
+        - Ensures only one active 20% coupon remains (removes existing if different)
+        - Credits balance for whole-year amount (or difference for plan upgrade)
+        - Optionally updates subscription price immediately
+        - Updates DB yearly fields preserving/setting expiry
+        """
+        if not self.stripe:
+            raise InvalidStateError("Stripe is not enabled")
+
+        new_price_id = self.stripe.get_price_for_plan(target_plan)
+        if not new_price_id:
+            raise InvalidStateError(f"Invalid plan: {target_plan.value}")
+
+        if update_price_immediately:
+            await self.stripe.update_subscription(
+                subscription_id=billing.stripe_subscription_id,
+                price_id=new_price_id,
+                cancel_at_period_end=False,
+                proration_behavior="create_prorations",
+            )
+
+        # Ensure a single yearly coupon (20%) is applied
+        percent_off = coupon_percent_off_for_yearly_prepay(target_plan)
+        idempotency_key = f"yearly:{ctx.organization.id}:{target_plan.value}"
+        coupon = await self.stripe.create_or_get_yearly_coupon(
+            percent_off=percent_off,
+            duration="repeating",
+            duration_in_months=12,
+            idempotency_key=idempotency_key,
+            metadata={
+                "organization_id": str(ctx.organization.id),
+                "plan": target_plan.value,
+                "type": "yearly_prepay",
+            },
+        )
+
+        # If a different coupon exists, replace it
+        try:
+            current_coupon_id = await self.stripe.get_subscription_coupon_id(
+                subscription_id=billing.stripe_subscription_id
+            )
+        except Exception:
+            current_coupon_id = None
+        if current_coupon_id and current_coupon_id != coupon.id:
+            try:
+                await self.stripe.remove_subscription_discount(
+                    subscription_id=billing.stripe_subscription_id
+                )
+            except Exception:
+                pass
+
+        await self.stripe.apply_coupon_to_subscription(
+            subscription_id=billing.stripe_subscription_id, coupon_id=coupon.id
+        )
+
+        # Compute credit based on remaining credit vs. yearly target
+        target_year_amount = compute_yearly_prepay_amount_cents(target_plan)
+
+        # Remaining credit = max(0, -balance)
+        remaining_credit = 0
+        try:
+            balance = await self.stripe.get_customer_balance_cents(
+                customer_id=billing.stripe_customer_id
+            )
+            if balance < 0:
+                remaining_credit = -int(balance)
+        except Exception:
+            remaining_credit = 0
+
+        credit_needed = max(0, int(target_year_amount) - int(remaining_credit))
+        if credit_needed > 0:
+            try:
+                await self.stripe.credit_customer_balance(
+                    customer_id=billing.stripe_customer_id,
+                    amount_cents=int(credit_needed),
+                    description=f"Yearly prepay credit ({target_plan.value})",
+                )
+            except Exception:
+                pass
+
+        # Update DB yearly fields
+        from datetime import timedelta
+
+        now = datetime.utcnow()
+        expires_at = billing.yearly_prepay_expires_at
+        if not billing.has_yearly_prepay or not expires_at:
+            expires_at = now + timedelta(days=365)
+
+        started_at = billing.yearly_prepay_started_at or now
+
+        await self.repository.update_billing_by_org(
+            db,
+            ctx.organization.id,
+            OrganizationBillingUpdate(
+                billing_plan=target_plan,
+                cancel_at_period_end=False,
+                has_yearly_prepay=True,
+                yearly_prepay_amount_cents=target_year_amount,  # Update to new plan's yearly amount
+                yearly_prepay_expires_at=expires_at,
+                yearly_prepay_started_at=started_at,
+                yearly_prepay_coupon_id=coupon.id,
+                # Update period to reflect yearly (not monthly) billing
+                current_period_start=started_at,
+                current_period_end=expires_at,
+            ),
+            ctx,
+        )
+
+        return f"Successfully upgraded to {target_plan.value} yearly"
 
     async def start_subscription_checkout(
         self,
@@ -212,13 +335,103 @@ class BillingService:
 
         return session.url
 
-    async def update_subscription_plan(
+    # ------------------------------ Yearly Prepay ------------------------------ #
+
+    async def start_yearly_prepay_checkout(
+        self,
+        db: AsyncSession,
+        *,
+        plan: str,
+        success_url: str,
+        cancel_url: str,
+        ctx: ApiContext,
+    ) -> str:
+        """Start a yearly prepay checkout flow for organizations without a subscription.
+
+        Flow:
+        - Compute yearly amount (20% discount)
+        - Create a one-time Payment checkout session for the amount
+        - Create (or ensure) a coupon for 20% off
+        - Record pending prepay intent in DB
+        - Webhook will finalize: credit balance, create subscription with coupon, update DB
+        """
+        if not self.stripe:
+            raise InvalidStateError("Stripe is not enabled")
+
+        billing = await self.repository.get_billing_record(db, ctx.organization.id)
+        if not billing:
+            raise NotFoundException("No billing record found for organization")
+
+        target_plan = BillingPlan(plan)
+        if target_plan not in {BillingPlan.PRO, BillingPlan.TEAM}:
+            raise InvalidStateError("Yearly prepay only supported for pro and team")
+
+        amount_cents = compute_yearly_prepay_amount_cents(target_plan)
+        percent_off = coupon_percent_off_for_yearly_prepay(target_plan)
+
+        # Create/get coupon now to capture ID, but final application happens after payment
+        # The coupon will apply 20% discount for exactly 12 months, then expire
+        idempotency_key = f"yearly:{ctx.organization.id}:{target_plan.value}"
+        coupon = await self.stripe.create_or_get_yearly_coupon(
+            percent_off=percent_off,
+            duration="repeating",
+            duration_in_months=12,
+            idempotency_key=idempotency_key,
+            metadata={
+                "organization_id": str(ctx.organization.id),
+                "plan": target_plan.value,
+                "type": "yearly_prepay",
+            },
+        )
+
+        # Create payment checkout session
+        metadata = {
+            "organization_id": str(ctx.organization.id),
+            "plan": target_plan.value,
+            "type": "yearly_prepay",
+            "coupon_id": coupon.id,
+        }
+        session = await self.stripe.create_prepay_checkout_session(
+            customer_id=billing.stripe_customer_id,
+            amount_cents=amount_cents,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata=metadata,
+        )
+
+        # Record prepay intent and coupon info (without marking as active yet)
+        from datetime import timedelta
+
+        expected_expires_at = datetime.utcnow() + timedelta(days=365)
+        await self.repository.record_yearly_prepay_started(
+            db,
+            ctx.organization.id,
+            amount_cents=amount_cents,
+            started_at=datetime.utcnow(),
+            expected_expires_at=expected_expires_at,
+            coupon_id=coupon.id,
+            payment_intent_id=getattr(session, "payment_intent", None),
+            ctx=ctx,
+        )
+
+        return session.url
+
+    async def update_subscription_plan(  # noqa: C901
         self,
         db: AsyncSession,
         ctx: ApiContext,
         new_plan: str,
+        period: str = "monthly",
     ) -> str:
-        """Update subscription to a new plan."""
+        """Update subscription to a new plan and optionally term (monthly/yearly).
+
+        Rules:
+        - Upgrades happen immediately
+        - Downgrades are scheduled for end of the current period
+        - With yearly prepay active, "period end" is yearly_prepay_expires_at
+        - Yearly upgrades add credit and apply 12-month 20% coupon
+        - Yearly downgrades are scheduled for after yearly expiry (no Stripe change yet)
+        """
         billing = await self.repository.get_billing_record(db, ctx.organization.id)
         if not billing:
             raise NotFoundException("No billing record found")
@@ -229,10 +442,110 @@ class BillingService:
         if not self.stripe:
             raise InvalidStateError("Stripe is not enabled")
 
+        target_plan = BillingPlan(new_plan)
+
+        # Handle YEARLY term transitions first
+        if (period or "monthly").lower() == "yearly":
+            # Only pro/team are supported for yearly
+            if target_plan not in {BillingPlan.PRO, BillingPlan.TEAM}:
+                raise InvalidStateError("Yearly billing only supported for pro and team")
+
+            # Disallow lowering plan across yearly directly (e.g., team→pro yearly)
+            from airweave.platform.billing.plan_logic import ChangeType, compare_plans
+
+            change_type = compare_plans(billing.billing_plan, target_plan)
+            if change_type == ChangeType.DOWNGRADE:
+                raise InvalidStateError(
+                    "Cannot downgrade directly to a lower yearly plan. "
+                    "At year end you'll default to monthly; then switch to yearly."
+                )
+
+            # Ensure there is an active subscription to update
+            if not billing.stripe_subscription_id:
+                raise NotFoundException("No active subscription found")
+
+            # Require payment method for crediting
+            if not billing.payment_method_added:
+                raise InvalidStateError(
+                    "Payment method required for yearly upgrade; "
+                    "use /billing/yearly/checkout-session"
+                )
+
+            # Apply yearly logic via helper (handles coupon, credit, price, DB fields)
+            update_price = target_plan != billing.billing_plan
+            result = await self._apply_yearly_coupon_and_credit(
+                billing=billing,
+                target_plan=target_plan,
+                ctx=ctx,
+                db=db,
+                update_price_immediately=update_price,
+            )
+
+            # Create new billing period for yearly commitment (resets usage)
+            # This is fair since they're pre-paying for a full year
+            # Note: The webhook handler will also create a period, but our repository
+            # handles duplicates by completing the existing one first
+            from datetime import datetime
+
+            from dateutil.relativedelta import relativedelta
+
+            from airweave.schemas.billing_period import BillingTransition
+
+            now = datetime.utcnow()
+
+            # Check if we already have an active period for the target plan
+            # This can happen if the webhook beats us to it
+            current_period = await self.repository.get_current_billing_period(
+                db, ctx.organization.id
+            )
+
+            # Only create if we don't have an active period for the target plan
+            # or if the current period is for a different plan
+            if not current_period or current_period.plan != target_plan:
+                period_end = now + relativedelta(years=1)
+
+                await self.repository.create_billing_period(
+                    db,
+                    organization_id=ctx.organization.id,
+                    period_start=now,
+                    period_end=period_end,
+                    plan=target_plan,
+                    transition=BillingTransition.UPGRADE,  # Yearly commitment is an upgrade
+                    ctx=ctx,
+                    stripe_subscription_id=billing.stripe_subscription_id,
+                )
+
+            return result
+
+        # MONTHLY term transitions (default)
+
+        # Special case: Team yearly → Team monthly (or Pro yearly → Pro monthly)
+        # While this happens automatically, we still set pending_plan_change for UI consistency
+        if billing.has_yearly_prepay and billing.billing_plan == target_plan:
+            if not billing.yearly_prepay_expires_at:
+                raise InvalidStateError("Yearly prepay expiry date not set")
+
+            # Set as pending even though it's automatic - for UI consistency
+            await self.repository.update_billing_by_org(
+                db,
+                ctx.organization.id,
+                OrganizationBillingUpdate(
+                    pending_plan_change=target_plan,
+                    pending_plan_change_at=billing.yearly_prepay_expires_at,
+                ),
+                ctx,
+            )
+
+            return (
+                f"Plan change to {target_plan.value} monthly scheduled for "
+                f"{billing.yearly_prepay_expires_at.strftime('%B %d, %Y')} "
+                "(when your yearly discount expires)"
+            )
+
         # Analyze the plan change
         context = PlanChangeContext(
             current_plan=billing.billing_plan,
-            target_plan=BillingPlan(new_plan),
+            target_plan=target_plan,
             has_payment_method=billing.payment_method_added,
             is_canceling=billing.cancel_at_period_end,
             pending_plan=billing.pending_plan_change,
@@ -247,11 +560,91 @@ class BillingService:
             raise InvalidStateError(decision.message)
 
         # Get new price ID
-        new_price_id = self.stripe.get_price_for_plan(BillingPlan(new_plan))
+        new_price_id = self.stripe.get_price_for_plan(target_plan)
         if not new_price_id:
             raise InvalidStateError(f"Invalid plan: {new_plan}")
 
-        # Apply the change
+        # Special case: currently on yearly and requesting monthly change
+        # - Upgrades (e.g., pro yearly → team monthly): remove discount and switch price immediately
+        # - Downgrades (e.g., team yearly → pro monthly/developer): schedule for yearly expiry
+        if billing.has_yearly_prepay:
+            from airweave.platform.billing.plan_logic import ChangeType, compare_plans
+
+            change_type = compare_plans(billing.billing_plan, target_plan)
+
+            if change_type == ChangeType.UPGRADE:
+                # Immediate: remove discount, change price now, keep credit window
+                try:
+                    await self.stripe.remove_subscription_discount(
+                        subscription_id=billing.stripe_subscription_id
+                    )
+                except Exception:
+                    pass
+
+                await self.stripe.update_subscription(
+                    subscription_id=billing.stripe_subscription_id,
+                    price_id=new_price_id,
+                    cancel_at_period_end=False,
+                    proration_behavior="create_prorations",
+                )
+
+                # Update billing record - clear yearly flags since moving to monthly
+                await self.repository.update_billing_by_org(
+                    db,
+                    ctx.organization.id,
+                    OrganizationBillingUpdate(
+                        billing_plan=target_plan,
+                        cancel_at_period_end=False,
+                        has_yearly_prepay=False,  # Moving to monthly, no longer yearly
+                        yearly_prepay_started_at=None,
+                        yearly_prepay_expires_at=None,
+                        yearly_prepay_coupon_id=None,
+                    ),
+                    ctx,
+                )
+
+                # Create new billing period for the upgrade
+                # This will automatically create usage records with correct limits
+                from datetime import datetime
+
+                from airweave.schemas.billing_period import BillingTransition
+
+                now = datetime.utcnow()
+                # Calculate period end (30 days for monthly)
+                from dateutil.relativedelta import relativedelta
+
+                period_end = now + relativedelta(months=1)
+
+                await self.repository.create_billing_period(
+                    db,
+                    organization_id=ctx.organization.id,
+                    period_start=now,
+                    period_end=period_end,
+                    plan=target_plan,
+                    transition=BillingTransition.UPGRADE,
+                    ctx=ctx,
+                    stripe_subscription_id=billing.stripe_subscription_id,
+                )
+
+                return f"Successfully upgraded to {target_plan.value} plan"
+
+            # Downgrades: schedule for yearly expiry
+            await self.repository.update_billing_by_org(
+                db,
+                ctx.organization.id,
+                OrganizationBillingUpdate(
+                    pending_plan_change=target_plan,
+                    pending_plan_change_at=billing.yearly_prepay_expires_at,
+                ),
+                ctx,
+            )
+
+            return (
+                f"Subscription will be downgraded to {target_plan.value} "
+                "at the end of the yearly period"
+            )
+
+        # Apply the change (standard monthly behavior)
         if decision.apply_immediately:
             # Immediate change (upgrade or reactivation)
             await self.stripe.update_subscription(
@@ -279,7 +672,7 @@ class BillingService:
             )
 
             updates = OrganizationBillingUpdate(
-                pending_plan_change=BillingPlan(new_plan),
+                pending_plan_change=target_plan,
                 pending_plan_change_at=billing.current_period_end,
             )
 
@@ -436,6 +829,13 @@ class BillingService:
                 in_trial=False,
                 trial_ends_at=None,
                 grace_period_ends_at=None,
+                # Yearly prepay defaults
+                has_yearly_prepay=False,
+                yearly_prepay_started_at=None,
+                yearly_prepay_expires_at=None,
+                yearly_prepay_amount_cents=None,
+                yearly_prepay_coupon_id=None,
+                yearly_prepay_payment_intent_id=None,
             )
 
         # Check grace period
@@ -484,6 +884,13 @@ class BillingService:
             has_active_subscription=bool(billing.stripe_subscription_id),
             in_trial=False,  # We don't track trials currently
             trial_ends_at=None,
+            # Yearly prepay fields
+            has_yearly_prepay=billing.has_yearly_prepay,
+            yearly_prepay_started_at=billing.yearly_prepay_started_at,
+            yearly_prepay_expires_at=billing.yearly_prepay_expires_at,
+            yearly_prepay_amount_cents=billing.yearly_prepay_amount_cents,
+            yearly_prepay_coupon_id=billing.yearly_prepay_coupon_id,
+            yearly_prepay_payment_intent_id=billing.yearly_prepay_payment_intent_id,
         )
 
 
