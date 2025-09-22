@@ -55,7 +55,7 @@ interface AuthenticationInfo {
   auth_url?: string;  // Backend uses 'auth_url', not 'authentication_url'
   auth_url_expires?: string;  // Backend uses 'auth_url_expires'
   provider_id?: string;  // Backend uses 'provider_id'
-  provider_name?: string;  // Backend uses 'provider_name'
+  provider_readable_id?: string;  // Backend uses 'provider_readable_id'
   redirect_url?: string;
 }
 

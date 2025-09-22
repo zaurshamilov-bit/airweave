@@ -567,7 +567,7 @@ class SourceConnectionHelpers:
             and source_conn.readable_auth_provider_id
         ):
             auth_info["provider_id"] = source_conn.readable_auth_provider_id
-            auth_info["provider_name"] = source_conn.readable_auth_provider_id
+            auth_info["provider_readable_id"] = source_conn.readable_auth_provider_id
 
         # Add OAuth pending info
         if (

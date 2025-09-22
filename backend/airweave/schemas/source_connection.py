@@ -99,7 +99,7 @@ class OAuthBrowserAuthentication(BaseModel):
 class AuthProviderAuthentication(BaseModel):
     """Authentication via external provider."""
 
-    provider_name: str = Field(..., description="Auth provider identifier")
+    provider_readable_id: str = Field(..., description="Auth provider readable ID")
     provider_config: Optional[Dict[str, Any]] = Field(
         None, description="Provider-specific configuration"
     )
@@ -251,7 +251,7 @@ class AuthenticationDetails(BaseModel):
     redirect_url: Optional[str] = None
 
     # Provider-specific
-    provider_name: Optional[str] = None
+    provider_readable_id: Optional[str] = None
     provider_id: Optional[str] = None
 
 
