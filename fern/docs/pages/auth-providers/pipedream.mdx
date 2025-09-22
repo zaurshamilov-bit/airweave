@@ -117,11 +117,11 @@ from airweave import AirweaveSDK
 client = AirweaveSDK(api_key="YOUR_API_KEY")
 
 # Create a Notion connection using Pipedream credentials
-source_connection = client.source_connections.create_source_connection(
+source_connection = client.source_connections.create(
     name="Company Notion Workspace",
     short_name="notion",
-    auth_provider="my-pipedream-connection-xyz789",  # Your Pipedream connection ID
-    auth_provider_config={
+    provider_readable_id="my-pipedream-connection-xyz789",  # Your Pipedream connection ID
+    provider_config={
         "project_id": "proj_JPsD74a",      # From Pipedream
         "account_id": "apn_gyha5Ky",       # From Pipedream API
         "external_user_id": "user123"      # Required: unique user identifier
@@ -140,11 +140,11 @@ const client = new AirweaveSDKClient({
 });
 
 // Create a Notion connection using Pipedream credentials
-const sourceConnection = await client.sourceConnections.createSourceConnection({
+const sourceConnection = await client.sourceConnections.create({
   name: "Company Notion Workspace",
   shortName: "notion",
-  authProvider: "my-pipedream-connection-xyz789",  // Your Pipedream connection ID
-  authProviderConfig: {
+  providerReadableId: "my-pipedream-connection-xyz789",  // Your Pipedream connection ID
+  providerConfig: {
     project_id: "proj_JPsD74a",      // From Pipedream
     account_id: "apn_gyha5Ky",       // From Pipedream API
     external_user_id: "user123"      // Required: unique user identifier
@@ -162,8 +162,8 @@ curl -X POST 'https://app.airweave.ai/source-connections' \
   -d '{
   "name": "Company Notion Workspace",
   "short_name": "notion",
-  "auth_provider": "my-pipedream-connection-xyz789",
-  "auth_provider_config": {
+  "provider_readable_id": "my-pipedream-connection-xyz789",
+  "provider_config": {
     "project_id": "proj_JPsD74a",
     "account_id": "apn_gyha5Ky",
     "environment": "production",
@@ -202,7 +202,7 @@ sequenceDiagram
     You->>Airweave: Configure Pipedream auth provider
     Note over You,Airweave: Uses your Pipedream OAuth client
     You->>Airweave: POST /source-connections
-    Note over You,Airweave: auth_provider: "pipedream-prod-xyz789"<br/>project_id: "proj_JPsD74a"<br/>account_id: "apn_gyha5Ky"
+    Note over You,Airweave: provider_readable_id: "pipedream-prod-xyz789"<br/>project_id: "proj_JPsD74a"<br/>account_id: "apn_gyha5Ky"
 
     Note over You,Notion: Sync data (Runtime)
     You->>Airweave: Trigger sync
@@ -289,11 +289,11 @@ from airweave import AirweaveSDK
 
 client = AirweaveSDK(api_key="YOUR_API_KEY")
 
-source_connection = client.source_connections.create_source_connection(
+source_connection = client.source_connections.create(
     name="Team Notion",
     short_name="notion",
-    auth_provider="pipedream-connection-id",
-    auth_provider_config={
+    provider_readable_id="pipedream-connection-id",
+    provider_config={
         "project_id": "proj_JPsD74a",
         "account_id": "apn_gyha5Ky",
         "external_user_id": "user123",
@@ -309,11 +309,11 @@ const client = new AirweaveSDKClient({
   apiKey: "YOUR_API_KEY"
 });
 
-const sourceConnection = await client.sourceConnections.createSourceConnection({
+const sourceConnection = await client.sourceConnections.create({
   name: "Team Notion",
   shortName: "notion",
-  authProvider: "pipedream-connection-id",
-  authProviderConfig: {
+  providerReadableId: "pipedream-connection-id",
+  providerConfig: {
     projectId: "proj_JPsD74a",
     accountId: "apn_gyha5Ky",
     externalUserId: "user123",
@@ -329,8 +329,8 @@ curl -X POST 'https://app.airweave.ai/source-connections' \
   -d '{
   "name": "Team Notion",
   "short_name": "notion",
-  "auth_provider": "pipedream-connection-id",
-  "auth_provider_config": {
+  "provider_readable_id": "pipedream-connection-id",
+  "provider_config": {
     "project_id": "proj_JPsD74a",
     "account_id": "apn_gyha5Ky",
     "external_user_id": "user123",
