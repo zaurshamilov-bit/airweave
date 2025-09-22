@@ -699,12 +699,12 @@ class SourceConnectionService:
 
         # Validate auth provider exists
         auth_provider_conn = await crud.connection.get_by_readable_id(
-            db, readable_id=obj_in.authentication.provider_name, ctx=ctx
+            db, readable_id=obj_in.authentication.provider_readable_id, ctx=ctx
         )
         if not auth_provider_conn:
             raise HTTPException(
                 status_code=404,
-                detail=f"Auth provider '{obj_in.authentication.provider_name}' not found",
+                detail=f"Auth provider '{obj_in.authentication.provider_readable_id}' not found",
             )
 
         # Validate provider config

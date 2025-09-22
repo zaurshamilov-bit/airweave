@@ -346,7 +346,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
           return;
         }
         authentication = {
-          provider_name: selectedAuthProvider,
+          provider_readable_id: selectedAuthProvider,
           provider_config: authProviderConfig && Object.keys(authProviderConfig).length > 0 ? authProviderConfig : undefined
         };
       }
