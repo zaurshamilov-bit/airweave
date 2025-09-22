@@ -106,10 +106,6 @@ curl -X GET "https://api.pipedream.com/v1/connect/{project_id}/accounts?include_
 
 The response will include account IDs like `apn_gyha5Ky`.
 
-<Callout type="warning">
-**Breaking Change (v2.0.0)**: The `external_user_id` field is now required in the auth provider configuration. This field helps map Pipedream accounts to users in your system. Existing integrations will need to be updated to include this field.
-</Callout>
-
 ### Step 6: Create source connections
 
 Create source connections that automatically retrieve credentials from Pipedream:
