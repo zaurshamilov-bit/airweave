@@ -31,7 +31,12 @@ users with advanced rate limiting and error handling for optimal performance.
 
 ### Authentication
 
-This connector uses **OAuth 2.0 authentication**. Connect this source through the Airweave UI, which will guide you through the OAuth flow.
+This connector uses **OAuth 2.0 authentication**. You can connect through the Airweave UI or API using the OAuth flow.
+
+**Supported authentication methods:**
+- OAuth Browser Flow (recommended for UI)
+- OAuth Token (for programmatic access)
+- Auth Provider (enterprise SSO)
 
 ### Configuration Options
 
@@ -131,6 +136,28 @@ metadata and content from the Linear API.
 | created_at | Optional[datetime] | When the team was created |
 | updated_at | Optional[datetime] | When the team was last updated |
 | member_count | Optional[int] | Number of members in the team |
+
+</Accordion>
+<Accordion title="LinearCommentEntity">
+
+Schema for Linear comment entities.
+
+This entity represents a comment on a Linear issue, containing all relevant
+metadata and content from the Linear API.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| issue_id | str | ID of the issue this comment belongs to |
+| issue_identifier | str | Identifier of the issue (e.g., 'ENG-123') |
+| body | str | The content/body of the comment |
+| user_id | Optional[str] | ID of the user who created the comment |
+| user_name | Optional[str] | Name of the user who created the comment |
+| created_at | Optional[datetime] | When the comment was created |
+| updated_at | Optional[datetime] | When the comment was last updated |
+| team_id | Optional[str] | ID of the team this comment belongs to |
+| team_name | Optional[str] | Name of the team this comment belongs to |
+| project_id | Optional[str] | ID of the project this comment belongs to, if any |
+| project_name | Optional[str] | Name of the project this comment belongs to, if any |
 
 </Accordion>
 <Accordion title="LinearUserEntity">

@@ -49,8 +49,8 @@ interface SourceConnection {
     short_name: string;
     collection: string;
     status?: string;
-    latest_sync_job_status?: string;
-    latest_sync_job_id?: string;
+    last_sync_job_status?: string;
+    last_sync_job_id?: string;
 }
 
 const SemanticMcp = () => {
@@ -109,8 +109,8 @@ const SemanticMcp = () => {
     // Get connection status indicator
     const getConnectionStatusIndicator = (connection: SourceConnection) => {
         // Use the status that comes directly from the API
-        // Prioritize latest_sync_job_status, then fall back to status field
-        const statusValue = connection.latest_sync_job_status || connection.status || "";
+        // Prioritize last_sync_job_status, then fall back to status field
+        const statusValue = connection.last_sync_job_status || connection.status || "";
 
         // Get the color directly from the statusConfig - same logic as StatusBadge
         const getStatusConfig = (statusKey: string = "") => {
@@ -345,10 +345,18 @@ const SemanticMcp = () => {
         }
     }, [searchParams, setSearchParams]);
 
-    // Log authValues whenever they change
+    // Log authValues metadata whenever they change (without exposing sensitive data)
     useEffect(() => {
-        console.log('🔐 [SemanticMcp] AuthValues updated:', authValues);
-        console.log('🔐 [SemanticMcp] AuthValues keys:', Object.keys(authValues));
+        const sensitiveFields = Object.keys(authValues).filter(key =>
+            /(?:token|key|secret|password|credential)/i.test(key)
+        );
+        const nonSensitiveFields = Object.keys(authValues).filter(key =>
+            !/(?:token|key|secret|password|credential)/i.test(key)
+        );
+
+        console.log('🔐 [SemanticMcp] AuthValues updated - Total fields:', Object.keys(authValues).length,
+            'Sensitive fields:', sensitiveFields.length,
+            'Non-sensitive:', nonSensitiveFields);
     }, [authValues]);
 
     // Log configValues whenever they change
@@ -458,7 +466,7 @@ const SemanticMcp = () => {
                 auth_fields: authValues
             };
 
-            console.log('🔐 [SemanticMcp] Creating credentials for non-OAuth2 source:', credentialData);
+            console.log('🔐 [SemanticMcp] Creating credentials for non-OAuth2 source:', sourceShortName, 'with', Object.keys(credentialData).length, 'fields');
 
             // Make API call to create credentials
             const response = await apiClient.post(
@@ -852,7 +860,7 @@ const SemanticMcp = () => {
                                                 : "bg-gray-100/80"
                                         )}>
                                             {React.cloneElement(getConnectionStatusIndicator(connection), {
-                                                className: `inline-flex h-4 w-4 rounded-full ${getConnectionStatusIndicator(connection).props.className.split('h-2.5 w-2.5').join('').trim()} opacity-80 ${connection.latest_sync_job_status?.toLowerCase() === "in_progress" ? 'animate-pulse' : ''}`
+                                                className: `inline-flex h-4 w-4 rounded-full ${getConnectionStatusIndicator(connection).props.className.split('h-2.5 w-2.5').join('').trim()} opacity-80 ${connection.last_sync_job_status?.toLowerCase() === "in_progress" ? 'animate-pulse' : ''}`
                                             })}
                                         </div>
 

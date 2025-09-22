@@ -59,10 +59,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setTokenInitialized(true);
           console.log('Auth initialization complete');
 
-          // Log the token for debugging
-          console.log('Token length:', accessToken.length);
-          // Print first and last 10 characters of token
-          console.log('Token preview:', accessToken.substring(0, 10) + '...' + accessToken.substring(accessToken.length - 10));
+          // Log token acquisition for debugging (without exposing token content)
+          console.log('🔑 Access token acquired successfully, length:', accessToken.length);
         } catch (error) {
           console.error('Error getting access token', error);
           setToken(null);

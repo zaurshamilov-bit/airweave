@@ -5,7 +5,10 @@ from typing import Any, Dict, List, Optional
 import httpx
 from fastapi import HTTPException
 
-from airweave.platform.auth.schemas import AuthType
+from airweave.core.credential_sanitizer import (
+    safe_log_credentials,
+    sanitize_credentials_dict,
+)
 from airweave.platform.auth_providers._base import BaseAuthProvider
 from airweave.platform.decorators import auth_provider
 
@@ -13,7 +16,6 @@ from airweave.platform.decorators import auth_provider
 @auth_provider(
     name="Composio",
     short_name="composio",
-    auth_type=AuthType.api_key,
     auth_config_class="ComposioAuthConfig",
     config_class="ComposioConfig",
 )
@@ -53,8 +55,8 @@ class ComposioAuthProvider(BaseAuthProvider):
         """
         instance = cls()
         instance.api_key = credentials["api_key"]
-        instance.auth_config_id = config["auth_config_id"]
-        instance.account_id = config["account_id"]
+        instance.auth_config_id = config.get("auth_config_id")
+        instance.account_id = config.get("account_id")
         return instance
 
     def _get_composio_slug(self, airweave_short_name: str) -> str:
@@ -80,7 +82,10 @@ class ComposioAuthProvider(BaseAuthProvider):
         return self.FIELD_NAME_MAPPING.get(airweave_field, airweave_field)
 
     async def _get_with_auth(
-        self, client: httpx.AsyncClient, url: str, params: Optional[Dict[str, Any]] = None
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Make authenticated API request using Composio API key.
 
@@ -159,7 +164,11 @@ class ComposioAuthProvider(BaseAuthProvider):
 
             # TODO: pagination
 
-            self.logger.info(f"\n🔑 [Composio] Found credentials: {found_credentials}\n")
+            safe_log_credentials(
+                found_credentials,
+                self.logger.info,
+                f"\n🔑 [Composio] Retrieved credentials for '{source_short_name}':",
+            )
             return found_credentials
 
     async def _get_source_connected_accounts(
@@ -267,12 +276,13 @@ class ComposioAuthProvider(BaseAuthProvider):
                     self.logger.info(
                         f"\n🔓 [Composio] Available credential fields: {available_fields}\n"
                     )
-                    for field, value in source_creds_dict.items():
-                        if isinstance(value, str) and len(value) > 10:
-                            preview = f"{value[:5]}...{value[-3:]}"
-                        else:
-                            preview = "<non-string or short value>"
-                        self.logger.debug(f"\n  - {field}: {preview}\n")
+                    # Log credential fields safely without exposing values
+                    sanitized_preview = sanitize_credentials_dict(
+                        source_creds_dict, show_lengths=False
+                    )
+                    self.logger.debug(
+                        f"\n🔓 [Composio] Credential fields preview: {sanitized_preview}\n"
+                    )
                 break
 
         if not source_creds_dict:
@@ -357,3 +367,47 @@ class ComposioAuthProvider(BaseAuthProvider):
         )
 
         return found_credentials
+
+    async def validate(self) -> bool:
+        """Validate that the Composio connection works by testing API access.
+
+        Returns:
+            True if the connection is valid
+
+        Raises:
+            HTTPException: If validation fails with detailed error message
+        """
+        try:
+            self.logger.info("🔍 [Composio] Validating API key...")
+
+            async with httpx.AsyncClient() as client:
+                headers = {"x-api-key": self.api_key}
+
+                # Test API access with the v3 connected accounts endpoint
+                url = "https://backend.composio.dev/api/v3/connected_accounts"
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+
+                self.logger.info("✅ [Composio] API key validated successfully")
+                return True
+
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Composio API key validation failed: {e.response.status_code}"
+            if e.response.status_code == 401:
+                error_msg += " - Invalid API key"
+            elif e.response.status_code == 403:
+                error_msg += " - Access denied"
+            else:
+                try:
+                    error_detail = e.response.json().get("message", e.response.text)
+                    error_msg += f" - {error_detail}"
+                except Exception:
+                    error_msg += f" - {e.response.text}"
+
+            self.logger.error(f"❌ [Composio] {error_msg}")
+            raise HTTPException(status_code=422, detail=error_msg)
+
+        except Exception as e:
+            error_msg = f"Composio API key validation failed: {str(e)}"
+            self.logger.error(f"❌ [Composio] {error_msg}")
+            raise HTTPException(status_code=422, detail=error_msg)
