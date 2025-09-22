@@ -241,6 +241,10 @@ Pipedream OAuth tokens have specific characteristics:
 - **Concurrency**: Token refresh is thread-safe with async locks
 - **Grant Type**: Uses `client_credentials` flow
 
+## Proxy Authentication
+
+When you connect accounts using Pipedream's default OAuth clients, credentials aren't directly exposed for security reasons. Instead, Airweave automatically routes API requests through [Pipedream's proxy endpoint](https://pipedream.com/docs/connect/api-proxy), where the actual credentials are injected server-side. This happens transparently - sources continue using the same HTTP client interface whether they're accessing credentials directly (custom OAuth) or through the proxy (default OAuth). The system automatically detects which mode to use based on the OAuth client type, ensuring your data syncs work seamlessly regardless of how the account was connected in Pipedream.
+
 ## Troubleshooting
 
 ### "Credentials not available"
