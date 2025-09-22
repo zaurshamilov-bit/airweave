@@ -138,7 +138,7 @@ async def _validate_auth_provider_credentials(
         auth_provider_instance.set_logger(ctx.logger)
 
         # Validate the connection
-        await auth_provider_instance.validate_connection()
+        await auth_provider_instance.validate()
 
         ctx.logger.info(
             f"✅ Auth provider connection validation successful for {auth_provider_short_name}"
