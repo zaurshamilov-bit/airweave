@@ -228,22 +228,33 @@ class BillingRepository:
         status: BillingPeriodStatus = BillingPeriodStatus.ACTIVE,
     ) -> schemas.BillingPeriod:
         """Create a new billing period with usage record."""
-        # Complete any active periods
-        current = await crud.billing_period.get_current_period(db, organization_id=organization_id)
+        # Complete any active periods that would overlap with the new period
+        # In test clock scenarios, we need to find periods that would be active
+        # just before the new period starts
+        from datetime import timedelta
+
+        # Check for a period active just before the new period starts
+        check_time = period_start - timedelta(seconds=1)
+        current = await crud.billing_period.get_current_period_at(
+            db, organization_id=organization_id, at=check_time
+        )
+
         if current and current.status in [BillingPeriodStatus.ACTIVE, BillingPeriodStatus.GRACE]:
             db_period = await crud.billing_period.get(db, id=current.id, ctx=ctx)
             if db_period:
-                await crud.billing_period.update(
-                    db,
-                    db_obj=db_period,
-                    obj_in={
-                        "status": BillingPeriodStatus.COMPLETED,
-                        "period_end": period_start,  # Ensure continuity
-                    },
-                    ctx=ctx,
-                )
-                if not previous_period_id:
-                    previous_period_id = db_period.id
+                # Only update if the new period actually starts after the current one
+                if db_period.period_start < period_start:
+                    await crud.billing_period.update(
+                        db,
+                        db_obj=db_period,
+                        obj_in={
+                            "status": BillingPeriodStatus.COMPLETED,
+                            "period_end": period_start,  # Ensure continuity
+                        },
+                        ctx=ctx,
+                    )
+                    if not previous_period_id:
+                        previous_period_id = db_period.id
 
         # Create new period
         period_create = BillingPeriodCreate(
