@@ -472,7 +472,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
   // Re-check when totals or sync state changes
   useEffect(() => {
     void checkEntitiesAllowed();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [
     storeConnection?.entity_states,
     sourceConnection?.entities?.total_entities,
