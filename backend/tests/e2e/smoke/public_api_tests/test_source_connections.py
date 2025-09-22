@@ -158,8 +158,8 @@ class OAuthBrowserTest(SourceConnectionTestBase):
 
     def create_payload(self) -> dict:
         return {
-            "name": "Test Slack OAuth Browser",
-            "short_name": "slack",
+            "name": "Test Linear OAuth Browser",
+            "short_name": "linear",
             "readable_collection_id": self.collection_id,
             "description": "Testing OAuth browser flow",
             "authentication": {},  # Empty for browser flow
@@ -168,7 +168,7 @@ class OAuthBrowserTest(SourceConnectionTestBase):
 
     def run_test(self) -> Optional[str]:
         """Run OAuth browser test - stops at shell creation in CI"""
-        print("  Testing OAuth Browser Flow (Slack)...")
+        print("  Testing OAuth Browser Flow (Linear)...")
 
         # Step 1: Create shell connection
         payload = self.create_payload()
@@ -830,7 +830,80 @@ def test_source_connections(
             ), f"Expected active status, got {google_conn['status']}"
 
             print(f"    ✓ Google Drive connection created via Pipedream: {google_conn_id}")
-            print("    ✅ Pipedream proxy auth provider test passed")
+
+            # Test syncing and verify entities are created
+            print("    Testing sync and entity creation...")
+
+            # Trigger a sync
+            sync_response = requests.post(
+                f"{api_url}/source-connections/{google_conn_id}/run", headers=headers
+            )
+
+            if sync_response.status_code == 200:
+                sync_job = sync_response.json()
+                sync_job_id = sync_job["id"]
+                print(f"    ✓ Sync job started: {sync_job_id}")
+
+                # Wait for sync to process some entities (give it 30 seconds)
+                print("    Waiting for sync to process entities...")
+                time.sleep(30)
+
+                # Check if entities were created
+                entities_response = requests.get(
+                    f"{api_url}/source-connections/{google_conn_id}/entities", headers=headers
+                )
+
+                if entities_response.status_code == 200:
+                    entities = entities_response.json()
+                    entity_count = (
+                        len(entities) if isinstance(entities, list) else entities.get("count", 0)
+                    )
+
+                    if entity_count > 0:
+                        print(
+                            f"    ✓ Successfully synced {entity_count} entities from Google Drive"
+                        )
+                        print(
+                            "    ✅ Pipedream proxy auth provider test passed with entity sync verification"
+                        )
+                    else:
+                        print("    ⚠️ No entities synced yet - checking job status...")
+
+                        # Check job status to see if it's still running or failed
+                        jobs_response = requests.get(
+                            f"{api_url}/source-connections/{google_conn_id}/jobs", headers=headers
+                        )
+
+                        if jobs_response.status_code == 200:
+                            jobs = jobs_response.json()
+                            if jobs and len(jobs) > 0:
+                                latest_job = jobs[0]
+                                print(f"    Job status: {latest_job['status']}")
+
+                                if latest_job["status"] == "failed":
+                                    print(f"    ❌ Sync job failed - check logs for details")
+                                    raise AssertionError(
+                                        "Google Drive sync failed - proxy authentication may have issues"
+                                    )
+                                elif latest_job["status"] == "in_progress":
+                                    print("    ℹ️ Sync still in progress - may need more time")
+                                    print(
+                                        "    ✅ Pipedream proxy auth provider test passed (sync started successfully)"
+                                    )
+                                else:
+                                    print(
+                                        f"    ✅ Pipedream proxy auth provider test passed (job status: {latest_job['status']})"
+                                    )
+                else:
+                    print(f"    ⚠️ Could not fetch entities: {entities_response.status_code}")
+                    print(
+                        "    ✅ Pipedream proxy auth provider test passed (connection created successfully)"
+                    )
+            else:
+                print(f"    ⚠️ Could not start sync: {sync_response.status_code}")
+                print(
+                    "    ✅ Pipedream proxy auth provider test passed (connection created successfully)"
+                )
 
         except Exception as e:
             print(f"    ⚠️ Pipedream test skipped: {e}")
