@@ -73,6 +73,45 @@ export interface ConfigureAuthProviderViewProps extends DialogViewProps {
     };
 }
 
+// Secure fallback components for image errors
+const AirweaveFallback: React.FC<{ isDark: boolean }> = ({ isDark }) => (
+    <div className={cn(
+        "w-full h-full rounded flex items-center justify-center",
+        isDark ? "bg-blue-900" : "bg-blue-100"
+    )}>
+        <span className={cn(
+            "text-xl font-bold",
+            isDark ? "text-blue-400" : "text-blue-600"
+        )}>
+            AW
+        </span>
+    </div>
+);
+
+const AuthProviderFallback: React.FC<{
+    authProviderShortName: string;
+    isDark: boolean
+}> = ({ authProviderShortName, isDark }) => {
+    // Safely extract initials from authProviderShortName
+    const initials = authProviderShortName
+        ? authProviderShortName.substring(0, 2).toUpperCase()
+        : "AP";
+
+    return (
+        <div className={cn(
+            "w-full h-full rounded-lg flex items-center justify-center",
+            isDark ? "bg-blue-900" : "bg-blue-100"
+        )}>
+            <span className={cn(
+                "text-xl font-bold",
+                isDark ? "text-blue-400" : "text-blue-600"
+            )}>
+                {initials}
+            </span>
+        </div>
+    );
+};
+
 export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps> = ({
     onNext,
     onCancel,
@@ -105,6 +144,10 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
     const [authFieldValues, setAuthFieldValues] = useState<Record<string, any>>({});
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string | null>(null);
+
+    // Image error state for secure fallbacks
+    const [airweaveImageError, setAirweaveImageError] = useState(false);
+    const [authProviderImageError, setAuthProviderImageError] = useState(false);
 
     // Log loading state changes
     useEffect(() => {
@@ -495,21 +538,16 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                                         isDark ? "bg-gray-800/50" : "bg-white/80",
                                         "shadow-lg ring-2 ring-gray-400/30"
                                     )}>
-                                        <img
-                                            src={isDark ? "/airweave-logo-svg-white-darkbg.svg" : "/airweave-logo-svg-lightbg-blacklogo.svg"}
-                                            alt="Airweave"
-                                            className="w-full h-full object-contain"
-                                            onError={(e) => {
-                                                e.currentTarget.style.display = 'none';
-                                                e.currentTarget.parentElement!.innerHTML = `
-                                                    <div class="w-full h-full rounded flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
-                                                        <span class="text-xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
-                                                            AW
-                                                        </span>
-                                                    </div>
-                                                `;
-                                            }}
-                                        />
+                                        {airweaveImageError ? (
+                                            <AirweaveFallback isDark={isDark} />
+                                        ) : (
+                                            <img
+                                                src={isDark ? "/airweave-logo-svg-white-darkbg.svg" : "/airweave-logo-svg-lightbg-blacklogo.svg"}
+                                                alt="Airweave"
+                                                className="w-full h-full object-contain"
+                                                onError={() => setAirweaveImageError(true)}
+                                            />
+                                        )}
                                     </div>
                                 </div>
 
@@ -538,21 +576,19 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                                         isDark ? "bg-gray-800/50" : "bg-white/80",
                                         "shadow-lg ring-2 ring-gray-400/30"
                                     )}>
-                                        <img
-                                            src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
-                                            alt={authProviderName}
-                                            className="w-full h-full object-contain"
-                                            onError={(e) => {
-                                                e.currentTarget.style.display = 'none';
-                                                e.currentTarget.parentElement!.innerHTML = `
-                                                    <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
-                                                        <span class="text-xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
-                                                            ${authProviderShortName.substring(0, 2).toUpperCase()}
-                                                        </span>
-                                                    </div>
-                                                `;
-                                            }}
-                                        />
+                                        {authProviderImageError ? (
+                                            <AuthProviderFallback
+                                                authProviderShortName={authProviderShortName || ''}
+                                                isDark={isDark}
+                                            />
+                                        ) : (
+                                            <img
+                                                src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
+                                                alt={authProviderName}
+                                                className="w-full h-full object-contain"
+                                                onError={() => setAuthProviderImageError(true)}
+                                            />
+                                        )}
                                     </div>
                                 </div>
                             </div>

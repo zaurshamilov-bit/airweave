@@ -4,6 +4,10 @@
     animation: slideInFromRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     /* Better contrast for readability */
     color: hsl(var(--foreground));
+    /* Smooth transitions for hover effects */
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Positioning context for absolutely positioned ::before elements */
+    position: relative;
 }
 
 .toast-custom[data-state="closed"] {
@@ -133,7 +137,6 @@
     box-shadow:
         0 20px 40px -5px rgba(0, 0, 0, 0.15),
         0 15px 20px -5px rgba(0, 0, 0, 0.08);
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Close button styling */
