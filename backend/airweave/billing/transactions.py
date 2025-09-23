@@ -1,4 +1,4 @@
-"""Repository pattern for billing database operations.
+"""Transactions for billing operations.
 
 This module handles all database interactions for billing,
 providing a clean interface between the service layer and CRUD operations.
@@ -14,7 +14,7 @@ from airweave import crud, schemas
 from airweave.api.context import ApiContext
 from airweave.core.exceptions import InvalidStateError, NotFoundException
 from airweave.db.unit_of_work import UnitOfWork
-from airweave.models import Organization, OrganizationBilling
+from airweave.models import OrganizationBilling
 from airweave.schemas.billing_period import (
     BillingPeriodCreate,
     BillingPeriodStatus,
@@ -29,16 +29,8 @@ from airweave.schemas.organization_billing import (
 from airweave.schemas.usage import UsageCreate
 
 
-class BillingRepository:
-    """Repository for all billing-related database operations."""
-
-    async def get_organization(
-        self,
-        db: AsyncSession,
-        organization_id: UUID,
-    ) -> Optional[Organization]:
-        """Get organization by ID."""
-        return await crud.organization.get(db, id=organization_id, skip_access_validation=True)
+class BillingTransactions:
+    """Static singleton class for all billing-related database operations."""
 
     async def get_billing_record(
         self,
@@ -338,3 +330,6 @@ class BillingRepository:
                 obj_in={"status": status},
                 ctx=ctx,
             )
+
+
+billing_transactions = BillingTransactions()  # Singleton static instance

@@ -4,28 +4,32 @@ This module coordinates billing operations by orchestrating
 between the business logic, repository, and Stripe client.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
+from dateutil.relativedelta import relativedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airweave import schemas
+from airweave import crud, schemas
 from airweave.api.context import ApiContext
-from airweave.core.exceptions import InvalidStateError, NotFoundException
-from airweave.core.logging import ContextualLogger, logger
-from airweave.db.unit_of_work import UnitOfWork
-from airweave.integrations.stripe_client import stripe_client
-from airweave.models import Organization
-from airweave.platform.billing.billing_data_access import BillingRepository
-from airweave.platform.billing.plan_logic import (
+from airweave.billing.plan_logic import (
+    ChangeType,
     PlanChangeContext,
     analyze_plan_change,
+    compare_plans,
     compute_yearly_prepay_amount_cents,
     coupon_percent_off_for_yearly_prepay,
     get_plan_limits,
     is_paid_plan,
 )
+from airweave.billing.transactions import billing_transactions
+from airweave.core.config import settings
+from airweave.core.exceptions import InvalidStateError, NotFoundException
+from airweave.core.logging import ContextualLogger, logger
+from airweave.db.unit_of_work import UnitOfWork
+from airweave.integrations.stripe_client import stripe_client
+from airweave.models import Organization
 from airweave.schemas.organization_billing import (
     BillingPlan,
     BillingStatus,
@@ -36,11 +40,6 @@ from airweave.schemas.organization_billing import (
 
 class BillingService:
     """Service for managing organization billing and subscriptions."""
-
-    def __init__(self):
-        """Initialize billing service."""
-        self.repository = BillingRepository()
-        self.stripe = stripe_client
 
     def _create_system_context(
         self,
@@ -68,7 +67,7 @@ class BillingService:
         self, db: AsyncSession, organization_id: UUID
     ) -> schemas.Organization:
         """Get organization by ID."""
-        org_model = await self.repository.get_organization(db, organization_id)
+        org_model = await crud.organization.get(db, organization_id)
         if not org_model:
             raise NotFoundException(f"Organization {organization_id} not found")
         return schemas.Organization.model_validate(org_model, from_attributes=True)
@@ -110,7 +109,7 @@ class BillingService:
                 selected_plan = BillingPlan(plan_from_metadata.lower())
 
         # Create billing record
-        billing = await self.repository.create_billing_record(
+        billing = await billing_transactions.create_billing_record(
             db=db,
             organization_id=organization.id,
             stripe_customer_id=stripe_customer_id,
@@ -123,11 +122,11 @@ class BillingService:
         log.info(f"Created billing record for org {organization.id} with plan {selected_plan}")
 
         # For free developer plan, create $0 subscription for webhook-driven periods
-        if selected_plan == BillingPlan.DEVELOPER and self.stripe:
-            price_id = self.stripe.get_price_for_plan(BillingPlan.DEVELOPER)
+        if selected_plan == BillingPlan.DEVELOPER and stripe_client:
+            price_id = stripe_client.get_price_for_plan(BillingPlan.DEVELOPER)
             if price_id:
                 try:
-                    sub = await self.stripe.create_subscription(
+                    sub = await stripe_client.create_subscription(
                         customer_id=stripe_customer_id,
                         price_id=price_id,
                         metadata={
@@ -136,7 +135,7 @@ class BillingService:
                         },
                     )
 
-                    await self.repository.update_billing_by_org(
+                    await billing_transactions.update_billing_by_org(
                         db=db,
                         organization_id=organization.id,
                         updates=OrganizationBillingUpdate(
@@ -174,15 +173,15 @@ class BillingService:
         - Optionally updates subscription price immediately
         - Updates DB yearly fields preserving/setting expiry
         """
-        if not self.stripe:
+        if not stripe_client:
             raise InvalidStateError("Stripe is not enabled")
 
-        new_price_id = self.stripe.get_price_for_plan(target_plan)
+        new_price_id = stripe_client.get_price_for_plan(target_plan)
         if not new_price_id:
             raise InvalidStateError(f"Invalid plan: {target_plan.value}")
 
         if update_price_immediately:
-            await self.stripe.update_subscription(
+            await stripe_client.update_subscription(
                 subscription_id=billing.stripe_subscription_id,
                 price_id=new_price_id,
                 cancel_at_period_end=False,
@@ -192,7 +191,7 @@ class BillingService:
         # Ensure a single yearly coupon (20%) is applied
         percent_off = coupon_percent_off_for_yearly_prepay(target_plan)
         idempotency_key = f"yearly:{ctx.organization.id}:{target_plan.value}"
-        coupon = await self.stripe.create_or_get_yearly_coupon(
+        coupon = await stripe_client.create_or_get_yearly_coupon(
             percent_off=percent_off,
             duration="repeating",
             duration_in_months=12,
@@ -206,20 +205,20 @@ class BillingService:
 
         # If a different coupon exists, replace it
         try:
-            current_coupon_id = await self.stripe.get_subscription_coupon_id(
+            current_coupon_id = await stripe_client.get_subscription_coupon_id(
                 subscription_id=billing.stripe_subscription_id
             )
         except Exception:
             current_coupon_id = None
         if current_coupon_id and current_coupon_id != coupon.id:
             try:
-                await self.stripe.remove_subscription_discount(
+                await stripe_client.remove_subscription_discount(
                     subscription_id=billing.stripe_subscription_id
                 )
             except Exception:
                 pass
 
-        await self.stripe.apply_coupon_to_subscription(
+        await stripe_client.apply_coupon_to_subscription(
             subscription_id=billing.stripe_subscription_id, coupon_id=coupon.id
         )
 
@@ -229,7 +228,7 @@ class BillingService:
         # Remaining credit = max(0, -balance)
         remaining_credit = 0
         try:
-            balance = await self.stripe.get_customer_balance_cents(
+            balance = await stripe_client.get_customer_balance_cents(
                 customer_id=billing.stripe_customer_id
             )
             if balance < 0:
@@ -240,7 +239,7 @@ class BillingService:
         credit_needed = max(0, int(target_year_amount) - int(remaining_credit))
         if credit_needed > 0:
             try:
-                await self.stripe.credit_customer_balance(
+                await stripe_client.credit_customer_balance(
                     customer_id=billing.stripe_customer_id,
                     amount_cents=int(credit_needed),
                     description=f"Yearly prepay credit ({target_plan.value})",
@@ -248,17 +247,14 @@ class BillingService:
             except Exception:
                 pass
 
-        # Update DB yearly fields
-        from datetime import timedelta
-
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expires_at = billing.yearly_prepay_expires_at
         if not billing.has_yearly_prepay or not expires_at:
             expires_at = now + timedelta(days=365)
 
         started_at = billing.yearly_prepay_started_at or now
 
-        await self.repository.update_billing_by_org(
+        await billing_transactions.update_billing_by_org(
             db,
             ctx.organization.id,
             OrganizationBillingUpdate(
@@ -287,16 +283,16 @@ class BillingService:
         ctx: ApiContext,
     ) -> str:
         """Start a subscription checkout flow."""
-        billing = await self.repository.get_billing_record(db, ctx.organization.id)
+        billing = await billing_transactions.get_billing_record(db, ctx.organization.id)
         if not billing:
             raise NotFoundException("No billing record found for organization")
 
-        if not self.stripe:
+        if not stripe_client:
             raise InvalidStateError("Stripe is not enabled")
 
         # Get price ID for plan
         billing_plan = BillingPlan(plan)
-        price_id = self.stripe.get_price_for_plan(billing_plan)
+        price_id = stripe_client.get_price_for_plan(billing_plan)
         if not price_id:
             raise InvalidStateError(f"Invalid plan: {plan}")
 
@@ -325,7 +321,7 @@ class BillingService:
         if billing.stripe_subscription_id and needs_checkout:
             metadata["previous_subscription_id"] = billing.stripe_subscription_id
 
-        session = await self.stripe.create_checkout_session(
+        session = await stripe_client.create_checkout_session(
             customer_id=billing.stripe_customer_id,
             price_id=price_id,
             success_url=success_url,
@@ -355,10 +351,10 @@ class BillingService:
         - Record pending prepay intent in DB
         - Webhook will finalize: credit balance, create subscription with coupon, update DB
         """
-        if not self.stripe:
+        if not stripe_client:
             raise InvalidStateError("Stripe is not enabled")
 
-        billing = await self.repository.get_billing_record(db, ctx.organization.id)
+        billing = await billing_transactions.get_billing_record(db, ctx.organization.id)
         if not billing:
             raise NotFoundException("No billing record found for organization")
 
@@ -372,7 +368,7 @@ class BillingService:
         # Create/get coupon now to capture ID, but final application happens after payment
         # The coupon will apply 20% discount for exactly 12 months, then expire
         idempotency_key = f"yearly:{ctx.organization.id}:{target_plan.value}"
-        coupon = await self.stripe.create_or_get_yearly_coupon(
+        coupon = await stripe_client.create_or_get_yearly_coupon(
             percent_off=percent_off,
             duration="repeating",
             duration_in_months=12,
@@ -391,7 +387,7 @@ class BillingService:
             "type": "yearly_prepay",
             "coupon_id": coupon.id,
         }
-        session = await self.stripe.create_prepay_checkout_session(
+        session = await stripe_client.create_prepay_checkout_session(
             customer_id=billing.stripe_customer_id,
             amount_cents=amount_cents,
             success_url=success_url,
@@ -403,7 +399,7 @@ class BillingService:
         from datetime import timedelta
 
         expected_expires_at = datetime.utcnow() + timedelta(days=365)
-        await self.repository.record_yearly_prepay_started(
+        await billing_transactions.record_yearly_prepay_started(
             db,
             ctx.organization.id,
             amount_cents=amount_cents,
@@ -432,14 +428,14 @@ class BillingService:
         - Yearly upgrades add credit and apply 12-month 20% coupon
         - Yearly downgrades are scheduled for after yearly expiry (no Stripe change yet)
         """
-        billing = await self.repository.get_billing_record(db, ctx.organization.id)
+        billing = await billing_transactions.get_billing_record(db, ctx.organization.id)
         if not billing:
             raise NotFoundException("No billing record found")
 
         if not billing.stripe_subscription_id:
             raise NotFoundException("No active subscription found")
 
-        if not self.stripe:
+        if not stripe_client:
             raise InvalidStateError("Stripe is not enabled")
 
         target_plan = BillingPlan(new_plan)
@@ -451,8 +447,6 @@ class BillingService:
                 raise InvalidStateError("Yearly billing only supported for pro and team")
 
             # Disallow lowering plan across yearly directly (e.g., team→pro yearly)
-            from airweave.platform.billing.plan_logic import ChangeType, compare_plans
-
             change_type = compare_plans(billing.billing_plan, target_plan)
             if change_type == ChangeType.DOWNGRADE:
                 raise InvalidStateError(
@@ -485,17 +479,14 @@ class BillingService:
             # This is fair since they're pre-paying for a full year
             # Note: The webhook handler will also create a period, but our repository
             # handles duplicates by completing the existing one first
-            from datetime import datetime
-
-            from dateutil.relativedelta import relativedelta
 
             from airweave.schemas.billing_period import BillingTransition
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
 
             # Check if we already have an active period for the target plan
             # This can happen if the webhook beats us to it
-            current_period = await self.repository.get_current_billing_period(
+            current_period = await billing_transactions.get_current_billing_period(
                 db, ctx.organization.id
             )
 
@@ -504,7 +495,7 @@ class BillingService:
             if not current_period or current_period.plan != target_plan:
                 period_end = now + relativedelta(years=1)
 
-                await self.repository.create_billing_period(
+                await billing_transactions.create_billing_period(
                     db,
                     organization_id=ctx.organization.id,
                     period_start=now,
@@ -526,7 +517,7 @@ class BillingService:
                 raise InvalidStateError("Yearly prepay expiry date not set")
 
             # Set as pending even though it's automatic - for UI consistency
-            await self.repository.update_billing_by_org(
+            await billing_transactions.update_billing_by_org(
                 db,
                 ctx.organization.id,
                 OrganizationBillingUpdate(
@@ -560,7 +551,7 @@ class BillingService:
             raise InvalidStateError(decision.message)
 
         # Get new price ID
-        new_price_id = self.stripe.get_price_for_plan(target_plan)
+        new_price_id = stripe_client.get_price_for_plan(target_plan)
         if not new_price_id:
             raise InvalidStateError(f"Invalid plan: {new_plan}")
 
@@ -568,20 +559,18 @@ class BillingService:
         # - Upgrades (e.g., pro yearly → team monthly): remove discount and switch price immediately
         # - Downgrades (e.g., team yearly → pro monthly/developer): schedule for yearly expiry
         if billing.has_yearly_prepay:
-            from airweave.platform.billing.plan_logic import ChangeType, compare_plans
-
             change_type = compare_plans(billing.billing_plan, target_plan)
 
             if change_type == ChangeType.UPGRADE:
                 # Immediate: remove discount, change price now, keep credit window
                 try:
-                    await self.stripe.remove_subscription_discount(
+                    await stripe_client.remove_subscription_discount(
                         subscription_id=billing.stripe_subscription_id
                     )
                 except Exception:
                     pass
 
-                await self.stripe.update_subscription(
+                await stripe_client.update_subscription(
                     subscription_id=billing.stripe_subscription_id,
                     price_id=new_price_id,
                     cancel_at_period_end=False,
@@ -589,7 +578,7 @@ class BillingService:
                 )
 
                 # Update billing record - clear yearly flags since moving to monthly
-                await self.repository.update_billing_by_org(
+                await billing_transactions.update_billing_by_org(
                     db,
                     ctx.organization.id,
                     OrganizationBillingUpdate(
@@ -605,17 +594,15 @@ class BillingService:
 
                 # Create new billing period for the upgrade
                 # This will automatically create usage records with correct limits
-                from datetime import datetime
 
                 from airweave.schemas.billing_period import BillingTransition
 
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 # Calculate period end (30 days for monthly)
-                from dateutil.relativedelta import relativedelta
 
                 period_end = now + relativedelta(months=1)
 
-                await self.repository.create_billing_period(
+                await billing_transactions.create_billing_period(
                     db,
                     organization_id=ctx.organization.id,
                     period_start=now,
@@ -629,7 +616,7 @@ class BillingService:
                 return f"Successfully upgraded to {target_plan.value} plan"
 
             # Downgrades: schedule for yearly expiry
-            await self.repository.update_billing_by_org(
+            await billing_transactions.update_billing_by_org(
                 db,
                 ctx.organization.id,
                 OrganizationBillingUpdate(
@@ -647,7 +634,7 @@ class BillingService:
         # Apply the change (standard monthly behavior)
         if decision.apply_immediately:
             # Immediate change (upgrade or reactivation)
-            await self.stripe.update_subscription(
+            await stripe_client.update_subscription(
                 subscription_id=billing.stripe_subscription_id,
                 price_id=new_price_id if decision.new_plan != billing.billing_plan else None,
                 cancel_at_period_end=False,
@@ -662,10 +649,10 @@ class BillingService:
                 updates.pending_plan_change = None
                 updates.pending_plan_change_at = None
 
-            await self.repository.update_billing_by_org(db, ctx.organization.id, updates, ctx)
+            await billing_transactions.update_billing_by_org(db, ctx.organization.id, updates, ctx)
         else:
             # Scheduled change (downgrade)
-            await self.stripe.update_subscription(
+            await stripe_client.update_subscription(
                 subscription_id=billing.stripe_subscription_id,
                 price_id=new_price_id,
                 proration_behavior="none",
@@ -676,7 +663,7 @@ class BillingService:
                 pending_plan_change_at=billing.current_period_end,
             )
 
-            await self.repository.update_billing_by_org(db, ctx.organization.id, updates, ctx)
+            await billing_transactions.update_billing_by_org(db, ctx.organization.id, updates, ctx)
 
         return decision.message
 
@@ -686,21 +673,21 @@ class BillingService:
         ctx: ApiContext,
     ) -> str:
         """Cancel subscription at period end."""
-        billing = await self.repository.get_billing_record(db, ctx.organization.id)
+        billing = await billing_transactions.get_billing_record(db, ctx.organization.id)
         if not billing or not billing.stripe_subscription_id:
             raise NotFoundException("No active subscription found")
 
-        if not self.stripe:
+        if not stripe_client:
             raise InvalidStateError("Stripe is not enabled")
 
         # Cancel in Stripe
-        await self.stripe.cancel_subscription(
+        await stripe_client.cancel_subscription(
             billing.stripe_subscription_id,
             at_period_end=True,
         )
 
         # Update local record
-        await self.repository.update_billing_by_org(
+        await billing_transactions.update_billing_by_org(
             db,
             ctx.organization.id,
             OrganizationBillingUpdate(cancel_at_period_end=True),
@@ -715,24 +702,24 @@ class BillingService:
         ctx: ApiContext,
     ) -> str:
         """Reactivate a canceled subscription."""
-        billing = await self.repository.get_billing_record(db, ctx.organization.id)
+        billing = await billing_transactions.get_billing_record(db, ctx.organization.id)
         if not billing or not billing.stripe_subscription_id:
             raise NotFoundException("No active subscription found")
 
         if not billing.cancel_at_period_end:
             raise InvalidStateError("Subscription is not set to cancel")
 
-        if not self.stripe:
+        if not stripe_client:
             raise InvalidStateError("Stripe is not enabled")
 
         # Reactivate in Stripe
-        await self.stripe.update_subscription(
+        await stripe_client.update_subscription(
             subscription_id=billing.stripe_subscription_id,
             cancel_at_period_end=False,
         )
 
         # Update local record
-        await self.repository.update_billing_by_org(
+        await billing_transactions.update_billing_by_org(
             db,
             ctx.organization.id,
             OrganizationBillingUpdate(cancel_at_period_end=False),
@@ -747,26 +734,26 @@ class BillingService:
         ctx: ApiContext,
     ) -> str:
         """Cancel a pending plan change."""
-        billing = await self.repository.get_billing_record(db, ctx.organization.id)
+        billing = await billing_transactions.get_billing_record(db, ctx.organization.id)
         if not billing or not billing.pending_plan_change:
             raise InvalidStateError("No pending plan change found")
 
-        if not self.stripe:
+        if not stripe_client:
             raise InvalidStateError("Stripe is not enabled")
 
         # Revert Stripe subscription to current plan
-        current_price_id = self.stripe.get_price_for_plan(billing.billing_plan)
+        current_price_id = stripe_client.get_price_for_plan(billing.billing_plan)
         if not current_price_id:
             raise InvalidStateError(f"Invalid current plan: {billing.billing_plan}")
 
-        await self.stripe.update_subscription(
+        await stripe_client.update_subscription(
             subscription_id=billing.stripe_subscription_id,
             price_id=current_price_id,
             proration_behavior="none",
         )
 
         # Clear pending change
-        await self.repository.update_billing_by_org(
+        await billing_transactions.update_billing_by_org(
             db,
             ctx.organization.id,
             OrganizationBillingUpdate(
@@ -785,14 +772,14 @@ class BillingService:
         return_url: str,
     ) -> str:
         """Create Stripe customer portal session."""
-        billing = await self.repository.get_billing_record(db, ctx.organization.id)
+        billing = await billing_transactions.get_billing_record(db, ctx.organization.id)
         if not billing:
             raise NotFoundException("No billing record found")
 
-        if not self.stripe:
+        if not stripe_client:
             raise InvalidStateError("Stripe is not enabled")
 
-        session = await self.stripe.create_portal_session(
+        session = await stripe_client.create_portal_session(
             customer_id=billing.stripe_customer_id,
             return_url=return_url,
         )
@@ -808,7 +795,7 @@ class BillingService:
         at: Optional[datetime] = None,
     ) -> SubscriptionInfo:
         """Get comprehensive subscription information."""
-        billing = await self.repository.get_billing_record(db, organization_id)
+        billing = await billing_transactions.get_billing_record(db, organization_id)
 
         if not billing:
             # Return free/OSS tier info
@@ -860,7 +847,7 @@ class BillingService:
         if grace_period_expired and billing.billing_status != BillingStatus.PAST_DUE:
             org = await self._get_organization(db, organization_id)
             ctx = self._create_system_context(org, "get_subscription_info")
-            await self.repository.update_billing_by_org(
+            await billing_transactions.update_billing_by_org(
                 db,
                 organization_id,
                 OrganizationBillingUpdate(billing_status=BillingStatus.PAST_DUE),
@@ -895,4 +882,4 @@ class BillingService:
 
 
 # Singleton instance
-billing_service = BillingService()
+billing_service = BillingService() if settings.STRIPE_ENABLED else None

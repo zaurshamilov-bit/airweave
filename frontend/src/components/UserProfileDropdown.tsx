@@ -257,7 +257,7 @@ export function UserProfileDropdown() {
           <div className="px-2 py-1.5 border-b border-border/10 bg-muted/20">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground font-medium truncate">
-                {user?.email} X
+                {user?.email}
               </p>
               {getPlanBadge()}
             </div>
