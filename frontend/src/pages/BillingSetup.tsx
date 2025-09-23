@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Loader2, CreditCard, AlertCircle, Check, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
+import authConfig from '@/config/auth';
 
 export default function BillingSetup() {
   const navigate = useNavigate();
@@ -18,6 +19,12 @@ export default function BillingSetup() {
   const isDark = resolvedTheme === 'dark';
 
   useEffect(() => {
+    // If auth is disabled (local OSS/dev), skip billing setup entirely
+    if (!authConfig.authEnabled) {
+      navigate('/');
+      return;
+    }
+
     // Check current billing status
     checkBillingStatus();
   }, []);
