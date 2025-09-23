@@ -30,6 +30,7 @@ class StripeClient:
             BillingPlan.DEVELOPER: settings.STRIPE_DEVELOPER_MONTHLY,
             BillingPlan.PRO: settings.STRIPE_PRO_MONTHLY,
             BillingPlan.TEAM: settings.STRIPE_TEAM_MONTHLY,
+            BillingPlan.ENTERPRISE: settings.STRIPE_ENTERPRISE_MONTHLY,
         }
 
     def get_price_id_mapping(self) -> dict[str, BillingPlan]:

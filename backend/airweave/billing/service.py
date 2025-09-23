@@ -121,9 +121,10 @@ class BillingService:
 
         log.info(f"Created billing record for org {organization.id} with plan {selected_plan}")
 
-        # For free developer plan, create $0 subscription for webhook-driven periods
-        if selected_plan == BillingPlan.DEVELOPER and stripe_client:
-            price_id = stripe_client.get_price_for_plan(BillingPlan.DEVELOPER)
+        # For enterprise and developer plans, create $0 subscription for webhook-driven periods
+        if selected_plan in {BillingPlan.DEVELOPER, BillingPlan.ENTERPRISE} and stripe_client:
+            price_id = stripe_client.get_price_for_plan(selected_plan)
+            plan_str = selected_plan.value
             if price_id:
                 try:
                     sub = await stripe_client.create_subscription(
@@ -131,7 +132,7 @@ class BillingService:
                         price_id=price_id,
                         metadata={
                             "organization_id": str(organization.id),
-                            "plan": "developer",
+                            "plan": plan_str,
                         },
                     )
 
@@ -145,12 +146,15 @@ class BillingService:
                     )
 
                     log.info(
-                        f"Created $0 developer subscription {sub.id} for org {organization.id}"
+                        f"Created $0 {plan_str} subscription {sub.id} for org {organization.id}"
                     )
                 except Exception as e:
-                    log.warning(f"Failed to create developer subscription: {e}")
+                    log.warning(f"Failed to create {plan_str} subscription: {e}")
             else:
-                log.warning("Developer price ID not configured; developer plan will be local-only")
+                log.warning(
+                    f"{selected_plan.value.title()} price ID not configured; "
+                    f"{plan_str} plan will be local-only"
+                )
 
         return billing
 
@@ -292,6 +296,12 @@ class BillingService:
 
         # Get price ID for plan
         billing_plan = BillingPlan(plan)
+
+        # Block public Enterprise checkout
+        if billing_plan == BillingPlan.ENTERPRISE:
+            raise InvalidStateError(
+                "Enterprise plan is only available via sales. Please contact support."
+            )
         price_id = stripe_client.get_price_for_plan(billing_plan)
         if not price_id:
             raise InvalidStateError(f"Invalid plan: {plan}")
@@ -439,6 +449,12 @@ class BillingService:
             raise InvalidStateError("Stripe is not enabled")
 
         target_plan = BillingPlan(new_plan)
+
+        # Block public Enterprise upgrades/changes (allow only internal/system)
+        if target_plan == BillingPlan.ENTERPRISE and ctx.auth_method != "internal_system":
+            raise InvalidStateError(
+                "Enterprise plan is only available via sales. Please contact support."
+            )
 
         # Handle YEARLY term transitions first
         if (period or "monthly").lower() == "yearly":
