@@ -608,11 +608,10 @@ const SourceConnectionStateView: React.FC<Props> = ({
       {isNotAuthorized && sourceConnection && (
         <SourceAuthenticationView
           sourceName={sourceConnection.name}
-          sourceShortName={sourceConnection.short_name}
           authenticationUrl={sourceConnection.auth?.auth_url}
           onRefreshUrl={handleRefreshAuthUrl}
           isRefreshing={isRefreshingAuth}
-          showBorder={false}
+          showBorder={true}
           onDelete={handleDeleteConnection}
         />
       )}
