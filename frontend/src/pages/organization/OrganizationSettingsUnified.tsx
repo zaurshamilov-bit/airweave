@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
-  Plus, Settings as SettingsIcon, Key, Users, Check, Copy, Star, CreditCard, MousePointerBan
+  Plus, Settings as SettingsIcon, Key, Users, Check, Copy, Star, CreditCard, MousePointerBan, TrendingUp
 } from 'lucide-react';
 import { APIKeysSettings } from '@/components/settings/APIKeysSettings';
 import { MembersSettings } from '@/components/settings/MembersSettings';
@@ -160,7 +160,7 @@ export const OrganizationSettingsUnified = () => {
     { id: 'settings' as TabType, label: 'Settings', icon: <SettingsIcon className="h-3.5 w-3.5" /> },
     { id: 'api-keys' as TabType, label: 'API Keys', icon: <Key className="h-3.5 w-3.5" /> },
     { id: 'members' as TabType, label: 'Members', icon: <Users className="h-3.5 w-3.5" /> },
-    { id: 'usage' as TabType, label: 'Usage', icon: <MousePointerBan className="h-3.5 w-3.5" /> },
+    { id: 'usage' as TabType, label: 'Usage', icon: <TrendingUp className="h-3.5 w-3.5" /> },
     { id: 'billing' as TabType, label: 'Billing', icon: <CreditCard className="h-3.5 w-3.5" /> }
   ];
 

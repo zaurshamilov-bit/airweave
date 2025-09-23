@@ -269,8 +269,6 @@ const Collections = () => {
     const sourceConnectionCheckDetails = actionChecks.source_connections ?? null;
     const entitiesAllowed = actionChecks.entities?.allowed ?? true;
     const entitiesCheckDetails = actionChecks.entities ?? null;
-    const syncsAllowed = actionChecks.syncs?.allowed ?? true;
-    const syncsCheckDetails = actionChecks.syncs ?? null;
 
     /********************************************
      * API AND DATA FETCHING FUNCTIONS
@@ -1091,14 +1089,14 @@ const Collections = () => {
                                                         "rounded-md",
                                                         "transition-all duration-200",
                                                         "border",
-                                                        (!sourceConnectionsAllowed || isCheckingUsage)
+                                                        (!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage)
                                                             ? "opacity-50 cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
                                                             : isDark
                                                                 ? "border-blue-500 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 hover:border-blue-400"
                                                                 : "border-blue-500 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:border-blue-600"
                                                     )}
-                                                    onClick={(!sourceConnectionsAllowed || isCheckingUsage) ? undefined : handleAddSource}
-                                                    disabled={!sourceConnectionsAllowed || isCheckingUsage}
+                                                    onClick={(!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage) ? undefined : handleAddSource}
+                                                    disabled={!sourceConnectionsAllowed || !entitiesAllowed || isCheckingUsage}
                                                 >
                                                     <Plus className="h-4 w-4 mr-1.5" strokeWidth={2} />
                                                     Connect a source

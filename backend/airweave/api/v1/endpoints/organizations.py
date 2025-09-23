@@ -15,6 +15,7 @@ from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import logger
 from airweave.core.organization_service import organization_service
+from airweave.core.shared_models import ActionType
 from airweave.models.user import User
 
 router = TrailingSlashRouter()
@@ -385,7 +386,7 @@ async def invite_user_to_organization(
 
     try:
         # Enforce team member plan limits before sending invite
-        await guard_rail.ensure_can_add_team_member()
+        await guard_rail.is_allowed(ActionType.TEAM_MEMBERS, amount=1)
         invitation = await organization_service.invite_user_to_organization(
             db=db,
             organization_id=organization_id,

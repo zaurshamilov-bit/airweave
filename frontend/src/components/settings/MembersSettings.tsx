@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api';
+import { useUsageStore } from '@/lib/stores/usage';
 
 // Member interfaces
 interface Member {
@@ -52,8 +53,11 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
   const [isLoading, setIsLoading] = useState(true);
   const [emailError, setEmailError] = useState('');
   const [emailValidationTimeout, setEmailValidationTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [teamMembersUsed, setTeamMembersUsed] = useState<number | null>(null);
-  const [teamMembersLimit, setTeamMembersLimit] = useState<number | null>(null);
+
+  // Use usage store for team member limits
+  const actionChecks = useUsageStore(state => state.actionChecks);
+  const teamMembersAllowed = actionChecks.team_members?.allowed ?? true;
+  const teamMembersCheckDetails = actionChecks.team_members;
 
   // Fetch members and invitations on mount
   useEffect(() => {
@@ -78,20 +82,7 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
         setPendingInvitations(invitationsData);
       }
 
-      // Fetch usage for team member limits
-      const usageResponse = await apiClient.get('/usage/dashboard');
-      if (usageResponse.ok) {
-        const data = await usageResponse.json();
-        const usage = data?.current_period?.usage;
-        if (usage) {
-          setTeamMembersUsed(typeof usage.team_members === 'number' ? usage.team_members : null);
-          setTeamMembersLimit(
-            usage.max_team_members === null || typeof usage.max_team_members === 'number'
-              ? usage.max_team_members
-              : null
-          );
-        }
-      }
+      // Team member limits are now handled by the usage store
 
     } catch (error) {
       console.error('Failed to fetch members and invitations:', error);
@@ -104,10 +95,13 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
   const handleInvite = async () => {
     if (!inviteEmail || emailError) return;
 
-    // Enforce frontend gating if at limit
-    const atLimit = teamMembersLimit !== null && teamMembersUsed !== null && teamMembersUsed >= teamMembersLimit;
-    if (atLimit) {
-      toast.error('Team member limit reached for your plan. Upgrade to add more members.');
+    // Check if team members are allowed
+    if (!teamMembersAllowed) {
+      const reason = teamMembersCheckDetails?.reason;
+      const message = reason === 'usage_limit_exceeded'
+        ? 'Team member limit reached for your plan. Upgrade to add more members.'
+        : 'Unable to invite team members at this time.';
+      toast.error(message);
       return;
     }
 
@@ -291,7 +285,7 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
 
   const isValidEmail = inviteEmail && !emailError;
   const canEdit = ['owner', 'admin'].includes(currentOrganization.role);
-  const atLimit = teamMembersLimit !== null && teamMembersUsed !== null && teamMembersUsed >= teamMembersLimit;
+  const atLimit = !teamMembersAllowed && teamMembersCheckDetails?.reason === 'usage_limit_exceeded';
 
   if (isLoading) {
     return (
@@ -307,16 +301,11 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
       {/* Team Members Usage */}
       <div className="flex items-center justify-between">
         <div className="text-xs text-muted-foreground">
-          Team members
-          {teamMembersUsed !== null && (
-            <>
-              : <span className="font-medium text-foreground">{teamMembersUsed}</span>
-              {teamMembersLimit !== null ? (
-                <span className="text-muted-foreground"> / {teamMembersLimit}</span>
-              ) : (
-                <span className="text-muted-foreground"> / Unlimited</span>
-              )}
-            </>
+          Team members: <span className="font-medium text-foreground">{members.length}</span>
+          {teamMembersCheckDetails?.details?.limit ? (
+            <span className="text-muted-foreground"> / {teamMembersCheckDetails.details.limit}</span>
+          ) : (
+            <span className="text-muted-foreground"> / Unlimited</span>
           )}
         </div>
         {atLimit && (

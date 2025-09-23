@@ -296,11 +296,11 @@ async def _build_previous_periods(
         db, organization_id=organization_id, limit=limit
     )
 
-    # Compute team members once (current count is sufficient for historical view)
-    members = await crud.organization.get_organization_members(
-        db, organization_id=organization_id, ctx=ctx
+    # Get team member count from guard rail service
+    team_guard_rail = GuardRailService(
+        organization_id=organization_id, logger=ctx.logger.with_context(component="guardrail")
     )
-    team_members_count = len(members)
+    team_members_count = await team_guard_rail.get_team_member_count()
 
     previous_periods = []
     for period in previous_periods_data:
@@ -378,11 +378,13 @@ async def get_usage_dashboard(
             plan_enum, GuardRailService.PLAN_LIMITS[BillingPlan.PRO]
         )
 
-        # Compute team members (current organization member count)
-        members = await crud.organization.get_organization_members(
-            db, organization_id=ctx.organization.id, ctx=ctx
+        # Get team member count from guard rail service (already injected)
+        # Note: guard_rail is not injected here, so create one
+        usage_guard_rail = GuardRailService(
+            organization_id=ctx.organization.id,
+            logger=ctx.logger.with_context(component="guardrail"),
         )
-        team_members_count = len(members)
+        team_members_count = await usage_guard_rail.get_team_member_count()
 
         # Create usage snapshot
         usage_snapshot = _create_usage_snapshot(
