@@ -19,8 +19,8 @@ from airweave.models import Organization, User, UserOrganization
 from airweave.schemas.api_key import APIKeyCreate
 
 if settings.STRIPE_ENABLED:
+    from airweave.billing.service import billing_service
     from airweave.integrations.stripe_client import stripe_client
-    from airweave.platform.billing import billing_service
 
 
 class OrganizationService:

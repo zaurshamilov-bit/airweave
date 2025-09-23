@@ -13,7 +13,7 @@ Usage:
     subscription = await billing_service.get_subscription_info(db, org_id)
 """
 
-from airweave.platform.billing.billing_service import billing_service
+from airweave.billing.service import billing_service
 
 __all__ = [
     "billing_service",

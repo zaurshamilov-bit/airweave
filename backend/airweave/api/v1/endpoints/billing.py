@@ -13,11 +13,11 @@ from airweave import schemas
 from airweave.api import deps
 from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
+from airweave.billing.service import billing_service
+from airweave.billing.webhook_handler import BillingWebhookProcessor
 from airweave.core.config import settings
 from airweave.core.exceptions import ExternalServiceError
 from airweave.integrations.stripe_client import stripe_client
-from airweave.platform.billing.billing_service import billing_service
-from airweave.platform.billing.webhook_handler import BillingWebhookProcessor
 
 router = TrailingSlashRouter()
 
