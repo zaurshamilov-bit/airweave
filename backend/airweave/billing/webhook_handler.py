@@ -145,7 +145,7 @@ class BillingWebhookProcessor:
         plan = BillingPlan(plan_str)
 
         # Create system context
-        org = await crud.organization.get(self.db, UUID(org_id))
+        org = await crud.organization.get(self.db, UUID(org_id), skip_access_validation=True)
         if not org:
             log.error(f"Organization {org_id} not found")
             return
@@ -214,7 +214,7 @@ class BillingWebhookProcessor:
         org_id = billing_model.organization_id
 
         # Create context
-        org = await crud.organization.get(self.db, org_id)
+        org = await crud.organization.get(self.db, org_id, skip_access_validation=True)
         if not org:
             log.error(f"Organization {org_id} not found")
             return
@@ -431,7 +431,7 @@ class BillingWebhookProcessor:
         org_id = billing_model.organization_id
 
         # Create context
-        org = await crud.organization.get(self.db, org_id)
+        org = await crud.organization.get(self.db, org_id, skip_access_validation=True)
         if not org:
             log.error(f"Organization {org_id} not found")
             return
@@ -506,7 +506,7 @@ class BillingWebhookProcessor:
         org_id = billing_model.organization_id
 
         # Create context
-        org = await crud.organization.get(self.db, org_id)
+        org = await crud.organization.get(self.db, org_id, skip_access_validation=True)
         if not org:
             return
 
@@ -585,7 +585,7 @@ class BillingWebhookProcessor:
         org_id = billing_model.organization_id
 
         # Create context
-        org = await crud.organization.get(self.db, org_id)
+        org = await crud.organization.get(self.db, org_id, skip_access_validation=True)
         if not org:
             return
 
@@ -713,7 +713,7 @@ class BillingWebhookProcessor:
             organization_id = UUID(org_id_str)
 
             # Hydrate context
-            org = await crud.organization.get(self.db, organization_id)
+            org = await crud.organization.get(self.db, organization_id, skip_access_validation=True)
             if not org:
                 log.error(f"Organization {organization_id} not found for prepay finalization")
                 return
