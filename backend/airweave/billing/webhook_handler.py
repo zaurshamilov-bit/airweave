@@ -155,7 +155,9 @@ class BillingWebhookProcessor:
 
         # Detect payment method
         has_pm, pm_id = (
-            stripe_client.detect_payment_method(subscription) if stripe_client else (False, None)
+            await stripe_client.detect_payment_method(subscription)
+            if stripe_client
+            else (False, None)
         )
 
         # Update billing record
@@ -347,7 +349,9 @@ class BillingWebhookProcessor:
 
         # Update billing record
         has_pm, pm_id = (
-            stripe_client.detect_payment_method(subscription) if stripe_client else (False, None)
+            await stripe_client.detect_payment_method(subscription)
+            if stripe_client
+            else (False, None)
         )
 
         # If we tried to update Stripe but failed (except for test clock issues),
@@ -855,7 +859,9 @@ class BillingWebhookProcessor:
                     expires_at = sub_start + timedelta(days=365)
                     # Check if subscription has payment method
                     has_pm, pm_id = (
-                        stripe_client.detect_payment_method(sub) if stripe_client else (False, None)
+                        await stripe_client.detect_payment_method(sub)
+                        if stripe_client
+                        else (False, None)
                     )
 
                     await billing_transactions.update_billing_by_org(

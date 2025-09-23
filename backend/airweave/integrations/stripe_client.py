@@ -258,7 +258,7 @@ class StripeClient:
 
     # Payment method operations
 
-    def detect_payment_method(
+    async def detect_payment_method(
         self, subscription: stripe.Subscription
     ) -> tuple[bool, Optional[str]]:
         """Detect if subscription has a payment method.
@@ -276,7 +276,7 @@ class StripeClient:
         try:
             customer_id = getattr(subscription, "customer", None)
             if customer_id:
-                customer = stripe.Customer.retrieve(customer_id)
+                customer = await stripe.Customer.retrieve_async(customer_id)
 
                 # Check invoice settings
                 inv_settings = getattr(customer, "invoice_settings", {})
@@ -445,7 +445,7 @@ class StripeClient:
             # Try to search existing coupon by metadata idempotency key if provided
             if idempotency_key:
                 try:
-                    coupons = stripe.Coupon.search(
+                    coupons = await stripe.Coupon.search_async(
                         query=f"metadata['idempotency_key']:'{idempotency_key}'"
                     )
                     if getattr(coupons, "data", []):
@@ -456,9 +456,11 @@ class StripeClient:
             params: Dict[str, Any] = {
                 "percent_off": percent_off,
                 "duration": duration,
-                "metadata": self._clean_metadata({"idempotency_key": idempotency_key or ""})
-                if idempotency_key
-                else self._clean_metadata(metadata),
+                "metadata": (
+                    self._clean_metadata({"idempotency_key": idempotency_key or ""})
+                    if idempotency_key
+                    else self._clean_metadata(metadata)
+                ),
             }
 
             # Add duration_in_months only if duration is "repeating"
@@ -493,8 +495,7 @@ class StripeClient:
     async def remove_subscription_discount(self, *, subscription_id: str) -> None:
         """Remove any active discount/coupon from a subscription."""
         try:
-            # The Stripe Python SDK uses a sync method here; it's fine to call synchronously
-            stripe.Subscription.delete_discount(subscription_id)
+            await stripe.Subscription.delete_discount_async(subscription_id)
         except StripeError as e:
             raise ExternalServiceError(
                 service_name="Stripe",
@@ -522,7 +523,7 @@ class StripeClient:
         Stripe expects credits as negative amounts.
         """
         try:
-            return stripe.Customer.create_balance_transaction(
+            return await stripe.Customer.create_balance_transaction_async(
                 customer_id,
                 amount=-int(amount_cents),
                 currency=currency,
