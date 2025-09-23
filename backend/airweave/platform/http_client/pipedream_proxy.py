@@ -2,6 +2,7 @@
 
 import base64
 import urllib
+from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
 import httpx
@@ -214,14 +215,26 @@ class PipedreamProxyClient:
 
         return proxy_url
 
-    async def stream(self, method: str, url: str, **kwargs):
+    def stream(self, method: str, url: str, **kwargs):
         """Stream request through proxy (returns async context manager).
 
         This mimics httpx.AsyncClient.stream() for compatibility.
+        Note: This is not an async method because httpx.AsyncClient.stream()
+        returns a context manager directly, not a coroutine.
         """
-        proxy_url, kwargs = await self._prepare_proxy_request(url, **kwargs)
-        # Return the stream context manager from underlying client
-        return self._client.stream(method, proxy_url, **kwargs)
+        return self._stream_context_manager(method, url, **kwargs)
+
+    @asynccontextmanager
+    async def _stream_context_manager(self, method: str, url: str, **kwargs):
+        """Internal async context manager for streaming requests.
+
+        This allows us to do async preparation (like getting fresh tokens)
+        before creating the actual stream.
+        """
+        proxy_url, prepared_kwargs = await self._prepare_proxy_request(url, **kwargs)
+        # Now delegate to the actual stream context manager
+        async with self._client.stream(method, proxy_url, **prepared_kwargs) as response:
+            yield response
 
     # Additional httpx compatibility methods
     async def aclose(self):
