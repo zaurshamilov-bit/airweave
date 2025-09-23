@@ -175,8 +175,9 @@ class OAuthBrowserTest(SourceConnectionTestBase):
         response = self.create_connection(payload)
 
         if response.status_code != 200:
-            print(f"    ⚠️ OAuth browser test skipped: {response.status_code}")
-            return None
+            print(f"    ❌ OAuth browser test failed: {response.status_code}")
+            print(f"    Response: {response.text}")
+            raise AssertionError(f"Failed to create OAuth browser connection: {response.text}")
 
         conn = response.json()
         conn_id = conn["id"]
@@ -238,13 +239,15 @@ class AuthProviderTest(SourceConnectionTestBase):
         response = self.create_connection(payload)
 
         if response.status_code == 404:
-            print(f"    ⚠️ Auth provider '{provider_readable_id}' not found in this environment")
-            return None
+            print(f"    ❌ Auth provider '{provider_readable_id}' not found")
+            raise AssertionError(
+                f"Auth provider '{provider_readable_id}' not found in this environment"
+            )
 
         if response.status_code != 200:
-            print(f"    ⚠️ Auth provider test failed: {response.status_code}")
+            print(f"    ❌ Auth provider test failed: {response.status_code}")
             print(f"    Response: {response.text}")
-            return None
+            raise AssertionError(f"Failed to create auth provider connection: {response.text}")
 
         conn = response.json()
         conn_id = conn["id"]
@@ -344,13 +347,14 @@ class OAuthTokenTest(SourceConnectionTestBase):
 
         if response.status_code == 400:
             # Token might be invalid or expired
-            print(f"    ⚠️ Token validation failed for {source_name}")
-            return None
+            print(f"    ❌ Token validation failed for {source_name}")
+            print(f"    Response: {response.text}")
+            raise AssertionError(f"Token validation failed for {source_name}: {response.text}")
 
         if response.status_code != 200:
-            print(f"    ⚠️ OAuth token test failed: {response.status_code}")
+            print(f"    ❌ OAuth token test failed: {response.status_code}")
             print(f"    Response: {response.text}")
-            return None
+            raise AssertionError(f"Failed to create OAuth token connection: {response.text}")
 
         conn = response.json()
         conn_id = conn["id"]
@@ -552,7 +556,8 @@ def test_source_connections(
             created_connections.append(conn_id)
             print("  ✅ OAuth browser shell creation test passed")
     except Exception as e:
-        print(f"  ⚠️ OAuth browser test skipped: {e}")
+        print(f"  ❌ OAuth browser test failed: {e}")
+        raise AssertionError(f"OAuth browser test failed: {e}")
 
     # =============================
     # Test 3.5: OAuth BYOC Flow (REQUIRED)
@@ -917,9 +922,8 @@ def test_source_connections(
                 )
 
         except Exception as e:
-            print(f"    ⚠️ Pipedream test skipped: {e}")
-            # Don't fail the entire test suite if Pipedream test fails
-            print("    ℹ️ Continuing with other tests...")
+            print(f"    ❌ Pipedream test failed: {e}")
+            raise AssertionError(f"Pipedream proxy auth provider test failed: {e}")
 
     # =============================
     # Test 6: Error Handling
@@ -1012,7 +1016,8 @@ def test_source_connections(
                 else:
                     print("  ⚠️ PubSub test timed out (may be normal for quick jobs)")
         except Exception as e:
-            print(f"  ⚠️ PubSub test skipped: {e}")
+            print(f"  ❌ PubSub test failed: {e}")
+            raise AssertionError(f"PubSub/SSE test failed: {e}")
 
     # =============================
     # Summary

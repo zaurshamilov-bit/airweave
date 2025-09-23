@@ -47,8 +47,9 @@ class PipedreamAuthProvider(BaseAuthProvider):
     Pipedream uses OAuth2 client credentials flow with access tokens that expire after 3600 seconds.
     """
 
-    # Token expiry buffer (refresh 5 minutes before expiry)
-    TOKEN_EXPIRY_BUFFER = 300  # 5 minutes in seconds
+    # Token expiry buffer (refresh 10 minutes before expiry)
+    # This ensures tokens are refreshed well before expiry during long-running syncs
+    TOKEN_EXPIRY_BUFFER = 600  # 10 minutes in seconds
 
     # Pipedream OAuth token endpoint
     TOKEN_ENDPOINT = "https://api.pipedream.com/v1/oauth/token"
