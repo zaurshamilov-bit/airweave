@@ -119,9 +119,9 @@ class PipedreamAuthProvider(BaseAuthProvider):
         instance = cls()
         instance.client_id = credentials["client_id"]
         instance.client_secret = credentials["client_secret"]
-        instance.project_id = config["project_id"]
-        instance.account_id = config["account_id"]
-        instance.external_user_id = config["external_user_id"]
+        instance.project_id = config.get("project_id")
+        instance.account_id = config.get("account_id")
+        instance.external_user_id = config.get("external_user_id")
         instance.environment = config.get("environment", "production")
 
         # Initialize token management
