@@ -148,8 +148,7 @@ class GuardRailService:
         async with self._lock:
             # Bypass all checks for local development
             if settings.LOCAL_DEVELOPMENT:
-                pass
-                # return True
+                return True
 
             # Check if organization has billing - legacy orgs are exempt
             has_billing = await self._check_has_billing()
