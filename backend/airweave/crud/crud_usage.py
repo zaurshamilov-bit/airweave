@@ -205,7 +205,8 @@ class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
                     "modified_at": updated_row.modified_at,
                 }
 
-                updated = Usage(
+                # Create SQLAlchemy model first (without team_members)
+                updated_model = Usage(
                     id=updated_values["id"],
                     organization_id=updated_values["organization_id"],
                     entities=updated_values["entities"],
@@ -214,8 +215,13 @@ class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
                     billing_period_id=updated_values["billing_period_id"],
                     created_at=updated_values["created_at"],
                     modified_at=updated_values["modified_at"],
-                    team_members=None,  # Not stored in database, populated separately
                 )
+
+                # Convert to Pydantic schema and add team_members
+                from airweave.schemas.usage import Usage as UsageSchema
+
+                updated = UsageSchema.model_validate(updated_model)
+                updated.team_members = None  # Not stored in database, populated separately
 
                 logger.info(
                     f"[increment_usage] Updated values: "
