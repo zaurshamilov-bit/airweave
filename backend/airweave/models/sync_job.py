@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.core.shared_models import SyncJobStatus
@@ -23,7 +24,9 @@ class SyncJob(OrganizationBase, UserMixin):
     sync_id: Mapped[UUID] = mapped_column(
         ForeignKey("sync.id", ondelete="CASCADE", name="fk_sync_job_sync_id"), nullable=False
     )
-    status: Mapped[str] = mapped_column(String(50), default=SyncJobStatus.PENDING.value)
+    status: Mapped[SyncJobStatus] = mapped_column(
+        SQLAlchemyEnum(SyncJobStatus), default=SyncJobStatus.PENDING
+    )
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     failed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
