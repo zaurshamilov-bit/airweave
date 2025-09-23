@@ -5,6 +5,7 @@ from .auth_provider import AuthProvider
 from .billing_period import BillingPeriod
 from .collection import Collection
 from .connection import Connection
+from .connection_init_session import ConnectionInitSession
 from .dag import DagEdge, DagNode, SyncDag
 from .destination import Destination
 from .embedding_model import EmbeddingModel
@@ -15,6 +16,8 @@ from .entity_relation import EntityRelation
 from .integration_credential import IntegrationCredential
 from .organization import Organization
 from .organization_billing import OrganizationBilling
+from .pg_field_catalog import PgFieldCatalogColumn, PgFieldCatalogTable
+from .redirect_session import RedirectSession
 from .search_query import SearchQuery
 from .source import Source
 from .source_connection import SourceConnection
@@ -26,7 +29,6 @@ from .transformer import Transformer
 from .usage import Usage
 from .user import User
 from .user_organization import UserOrganization
-from .white_label import WhiteLabel
 
 __all__ = [
     "APIKey",
@@ -36,8 +38,9 @@ __all__ = [
     "Entity",
     "EntityCount",
     "Connection",
-    "DagNode",
+    "ConnectionInitSession",
     "DagEdge",
+    "DagNode",
     "Destination",
     "EmbeddingModel",
     "EntityDefinition",
@@ -45,6 +48,9 @@ __all__ = [
     "IntegrationCredential",
     "Organization",
     "OrganizationBilling",
+    "PgFieldCatalogColumn",
+    "PgFieldCatalogTable",
+    "RedirectSession",
     "SearchQuery",
     "Source",
     "SourceConnection",
@@ -57,5 +63,4 @@ __all__ = [
     "Usage",
     "User",
     "UserOrganization",
-    "WhiteLabel",
 ]

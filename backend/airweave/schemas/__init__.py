@@ -112,16 +112,19 @@ from .source import (
     SourceUpdate,
 )
 from .source_connection import (
+    AuthenticationDetails,
+    AuthenticationMethod,
+    EntitySummary,
+    EntityTypeStats,
+    ScheduleDetails,
     SourceConnection,
-    SourceConnectionContinuousResponse,
     SourceConnectionCreate,
-    SourceConnectionCreateContinuous,
-    SourceConnectionCreateWithCredential,
-    SourceConnectionCreateWithWhiteLabel,
-    SourceConnectionInDBBase,
+    SourceConnectionJob,
     SourceConnectionListItem,
-    SourceConnectionMakeContinuous,
+    SourceConnectionSimple,
     SourceConnectionUpdate,
+    SyncDetails,
+    SyncJobDetails,
 )
 from .sync import (
     MinuteLevelScheduleConfig,
@@ -141,7 +144,6 @@ from .sync_cursor import (
     SyncCursorUpdate,
 )
 from .sync_job import (
-    SourceConnectionJob,
     SyncJob,
     SyncJobCreate,
     SyncJobInDBBase,
@@ -149,7 +151,7 @@ from .sync_job import (
 )
 from .transformer import Transformer, TransformerCreate, TransformerUpdate
 from .usage import (
-    ActionCheckResponse,
+    SingleActionCheckResponse,
     Usage,
     UsageCreate,
     UsageInDBBase,
@@ -165,4 +167,3 @@ from .user import (
     UserUpdate,
     UserWithOrganizations,
 )
-from .white_label import WhiteLabel, WhiteLabelCreate, WhiteLabelInDBBase, WhiteLabelUpdate
