@@ -1151,7 +1151,7 @@ class NotionSource(BaseSource):
         }
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with self.http_client() as client:
                 # Phase 1 & 2: Discover and yield databases with their schemas
                 self.logger.info("Phase 1 & 2: Streaming database discovery and schema analysis")
                 async for entity in self._stream_database_discovery(client):
@@ -1361,6 +1361,7 @@ class NotionSource(BaseSource):
 
         try:
             # Create stream without access token for pre-signed URLs
+            # Note: stream_file_from_url is an async generator function, not a coroutine
             file_stream = file_manager.stream_file_from_url(
                 file_entity.download_url, access_token=None, headers=None, logger=self.logger
             )
