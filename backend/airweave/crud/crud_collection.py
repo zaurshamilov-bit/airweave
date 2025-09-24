@@ -69,7 +69,7 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
             # Determine connection status based on last job
             if last_job_status == "failed":
                 failing_count += 1
-            elif last_job_status == "running":
+            elif last_job_status in ("running", "cancelling"):
                 in_progress_count += 1
             else:
                 # Active, completed, or no jobs yet

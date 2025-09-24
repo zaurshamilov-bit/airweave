@@ -43,7 +43,7 @@ class SourceConnectionService:
         Returns:
             A cron expression for daily execution at the current UTC time.
         """
-        from datetime import datetime, timezone
+        from datetime import timezone
 
         now_utc = datetime.now(timezone.utc)
         minute = now_utc.minute
@@ -931,8 +931,9 @@ class SourceConnectionService:
     ) -> schemas.SourceConnectionJob:
         """Cancel a running sync job for a source connection.
 
-        Updates the job status in the database to CANCELLED and sends
-        a cancellation request to the Temporal workflow if it's running.
+        Sends a cancellation request to the Temporal workflow and marks the
+        job as CANCELLING locally. Final CANCELLED state is set by the
+        workflow when it processes the cancellation.
         """
         # Verify source connection exists and user has access
         source_conn = await crud.source_connection.get(db, id=source_connection_id, ctx=ctx)
@@ -958,27 +959,33 @@ class SourceConnectionService:
                 status_code=400, detail=f"Cannot cancel job in {sync_job.status} state"
             )
 
-        # Update job status to CANCELLED in database
+        # Set transitional status to CANCELLING immediately
         from airweave.core.sync_job_service import sync_job_service
 
         await sync_job_service.update_status(
             sync_job_id=job_id,
-            status=SyncJobStatus.CANCELLED,
+            status=SyncJobStatus.CANCELLING,
             ctx=ctx,
-            completed_at=datetime.utcnow(),
         )
 
-        # Cancel the Temporal workflow if it's running
-        if sync_job.status == SyncJobStatus.RUNNING:
-            try:
-                cancelled = await temporal_service.cancel_sync_job_workflow(str(job_id))
-                if cancelled:
-                    ctx.logger.info(f"Successfully cancelled Temporal workflow for job {job_id}")
-                else:
-                    ctx.logger.warning(f"No running Temporal workflow found for job {job_id}")
-            except Exception as e:
-                ctx.logger.error(f"Failed to cancel Temporal workflow for job {job_id}: {e}")
-                # Continue even if Temporal cancellation fails - the DB status is already updated
+        # Fire-and-forget cancellation request to Temporal
+        cancel_ack = await temporal_service.cancel_sync_job_workflow(str(job_id), ctx)
+        if not cancel_ack:
+            # If we couldn't even request cancellation, revert status to RUNNING if it was running
+            # or leave as PENDING; provide a clear error to the caller
+            fallback_status = (
+                SyncJobStatus.RUNNING
+                if sync_job.status == SyncJobStatus.RUNNING
+                else SyncJobStatus.PENDING
+            )
+            await sync_job_service.update_status(
+                sync_job_id=job_id,
+                status=fallback_status,
+                ctx=ctx,
+            )
+            raise HTTPException(
+                status_code=502, detail="Failed to request cancellation from Temporal"
+            )
 
         # Fetch the updated job from database
         await db.refresh(sync_job)

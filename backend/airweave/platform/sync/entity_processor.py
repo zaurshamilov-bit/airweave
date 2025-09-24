@@ -470,14 +470,10 @@ class EntityProcessor:
             # points were inserted without a parent_entity_id payload
             try:
                 await destination.bulk_delete([parent_entity.entity_id], sync_context.sync.id)
-            except Exception:
+            except Exception as ex:
                 # Don't fail deletion if this secondary path is unsupported by a destination
-                sync_context.logger.debug(
-                    (
-                        f"DELETE_FALLBACK_SKIP [{entity_context}] bulk_delete by entity_id not "
-                        "supported or failed: {e}"
-                    )
-                )
+                msg = f"DELETE_FALLBACK_SKIP bulk_delete by entity_id not supported or failed: {ex}"
+                sync_context.logger.debug(msg)
 
         db_entity = None
         async with get_db_context() as db:
@@ -950,7 +946,6 @@ class EntityProcessor:
     async def _get_embeddings(
         self, texts: List[str], sync_context: SyncContext, entity_context: str
     ) -> Tuple[List[List[float]], List[SparseTextEmbedding] | None]:
-        import asyncio
         import inspect
 
         embedding_model = sync_context.embedding_model
@@ -964,11 +959,9 @@ class EntityProcessor:
         else:
             embeddings = await embedding_model.embed_many(texts)
 
-        calculate_sparse_embeddings = any(
-            await asyncio.gather(
-                *[destination.has_keyword_index() for destination in sync_context.destinations]
-            )
-        )
+        # Use precomputed destination capability from SyncContext instead of
+        # hitting destinations per batch (avoids Qdrant 408s under load).
+        calculate_sparse_embeddings = bool(getattr(sync_context, "has_keyword_index", False))
 
         if calculate_sparse_embeddings:
             sparse_embedder = sync_context.keyword_indexing_model

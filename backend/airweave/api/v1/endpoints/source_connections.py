@@ -212,7 +212,9 @@ async def get_source_connection_jobs(
 
 
 @router.post(
-    "/{source_connection_id}/jobs/{job_id}/cancel", response_model=schemas.SourceConnectionJob
+    "/{source_connection_id}/jobs/{job_id}/cancel",
+    response_model=schemas.SourceConnectionJob,
+    status_code=202,  # TODO: ask Rauf about this
 )
 async def cancel_job(
     *,
@@ -223,8 +225,9 @@ async def cancel_job(
 ) -> schemas.SourceConnectionJob:
     """Cancel a running sync job for a source connection.
 
-    This will update the job status in the database to CANCELLED and
-    send a cancellation request to the Temporal workflow if it's running.
+    This endpoint requests cancellation and marks the job as CANCELLING.
+    The workflow updates the final status to CANCELLED when it processes
+    the cancellation request.
     """
     return await source_connection_service.cancel_job(
         db,

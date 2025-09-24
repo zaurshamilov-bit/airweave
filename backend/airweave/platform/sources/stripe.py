@@ -69,7 +69,9 @@ class StripeSource(BaseSource):
         return instance
 
     @retry(
-        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        reraise=True,
     )
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> dict:
         """Make an authenticated GET request to the Stripe API.
@@ -81,7 +83,8 @@ class StripeSource(BaseSource):
         """
         # Use Basic authentication with the API key as the username and no password
         auth = httpx.BasicAuth(username=self.api_key, password="")
-        response = await client.get(url, auth=auth)
+        # Use a per-request timeout generous enough for Stripe pagination, but bounded
+        response = await client.get(url, auth=auth, timeout=20.0)
         response.raise_for_status()
         return response.json()
 
@@ -474,7 +477,8 @@ class StripeSource(BaseSource):
         - Refunds
         - Subscriptions
         """
-        async with self.http_client() as client:
+        # Slightly higher default timeout to accommodate Stripe pagination bursts
+        async with self.http_client(timeout=20.0) as client:
             # 1) Single Balance resource
             async for balance_entity in self._generate_balance_entity(client):
                 yield balance_entity

@@ -8,7 +8,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 // Match backend SyncJobStatus enum
-export type SyncJobStatus = 'created' | 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+export type SyncJobStatus = 'created' | 'pending' | 'in_progress' | 'cancelling' | 'completed' | 'failed' | 'cancelled';
 
 // Match backend nested objects
 export interface LastSyncJob {

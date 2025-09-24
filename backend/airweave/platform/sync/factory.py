@@ -247,6 +247,19 @@ class SyncFactory:
 
         cursor = SyncCursor(sync_id=sync.id, cursor_data=cursor_data, cursor_field=cursor_field)
 
+        # Precompute destination keyword-index capability once
+        has_keyword_index = False
+        try:
+            import asyncio as _asyncio
+
+            if destinations:
+                has_keyword_index = any(
+                    await _asyncio.gather(*[dest.has_keyword_index() for dest in destinations])
+                )
+        except Exception as _e:
+            logger.warning(f"Failed to precompute keyword index capability on destinations: {_e}")
+            has_keyword_index = False
+
         # Create sync context
         sync_context = SyncContext(
             source=source,
@@ -268,6 +281,7 @@ class SyncFactory:
             logger=logger,
             guard_rail=guard_rail,
             force_full_sync=force_full_sync,
+            has_keyword_index=has_keyword_index,
         )
 
         # Set cursor on source so it can access cursor data

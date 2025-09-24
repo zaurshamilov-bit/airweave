@@ -237,7 +237,7 @@ class SourceConnectionListItem(BaseModel):
                 if isinstance(self.last_job_status, str)
                 else self.last_job_status.value
             )
-            if job_status == "running":
+            if job_status in ("running", "cancelling"):
                 return SourceConnectionStatus.SYNCING
             elif job_status == "failed":
                 return SourceConnectionStatus.ERROR
@@ -431,7 +431,7 @@ def compute_status(
 
     # Check last job status if provided
     if last_job_status:
-        if last_job_status == SyncJobStatus.RUNNING:
+        if last_job_status in (SyncJobStatus.RUNNING, SyncJobStatus.CANCELLING):
             return SourceConnectionStatus.SYNCING
         elif last_job_status == SyncJobStatus.FAILED:
             return SourceConnectionStatus.ERROR
