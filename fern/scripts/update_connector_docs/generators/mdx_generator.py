@@ -119,7 +119,7 @@ def generate_mdx_content(
 """
 
                 if auth_info["docstring"]:
-                    content += f"\n{auth_info['docstring']}\n"
+                    content += f"\n{auth_info['docstring']}\n\n"
 
                 if auth_info["fields"]:
                     for field in auth_info["fields"]:
