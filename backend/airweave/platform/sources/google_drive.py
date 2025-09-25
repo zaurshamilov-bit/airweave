@@ -37,12 +37,14 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
         AuthenticationMethod.OAUTH_BROWSER,
         AuthenticationMethod.OAUTH_TOKEN,
         AuthenticationMethod.AUTH_PROVIDER,
+        AuthenticationMethod.OAUTH_BYOC,
     ],
     oauth_type=OAuthType.WITH_REFRESH,
     requires_byoc=True,
     auth_config_class=None,
     config_class="GoogleDriveConfig",
     labels=["File Storage"],
+    supports_continuous=True,
 )
 class GoogleDriveSource(BaseSource):
     """Google Drive source connector integrates with the Google Drive API to extract files.

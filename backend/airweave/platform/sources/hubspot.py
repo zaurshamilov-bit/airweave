@@ -29,6 +29,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     oauth_type=OAuthType.WITH_REFRESH,
     config_class="HubspotConfig",
     labels=["CRM", "Marketing"],
+    supports_continuous=False,
 )
 class HubspotSource(BaseSource):
     """HubSpot source connector integrates with the HubSpot CRM API to extract CRM data.

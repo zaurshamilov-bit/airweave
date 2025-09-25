@@ -36,6 +36,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     auth_config_class=None,
     config_class="JiraConfig",
     labels=["Project Management", "Issue Tracking"],
+    supports_continuous=False,
 )
 class JiraSource(BaseSource):
     """Jira source connector integrates with the Jira REST API to extract project management data.

@@ -77,17 +77,18 @@ class SourceBase(BaseModel):
             "and structure that this connector outputs."
         ),
     )
-    organization_id: Optional[UUID] = Field(
-        None,
-        description=(
-            "Organization identifier for custom source connectors. System sources have this "
-            "set to null."
-        ),
-    )
     labels: Optional[List[str]] = Field(
         None,
         description=(
             "Categorization tags to help users discover and filter sources by domain or use case."
+        ),
+    )
+    supports_continuous: bool = Field(
+        False,
+        description=(
+            "Whether this source supports cursor-based continuous syncing for incremental data "
+            "extraction. Sources with this capability can track their sync position and resume "
+            "from where they left off."
         ),
     )
 

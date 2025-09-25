@@ -88,6 +88,7 @@ class AsyncIteratorWrapper:
     auth_config_class=None,
     config_class="ConfluenceConfig",
     labels=["Knowledge Base", "Documentation"],
+    supports_continuous=False,
 )
 class ConfluenceSource(BaseSource):
     """Confluence source connector integrates with the Confluence REST API to extract content.

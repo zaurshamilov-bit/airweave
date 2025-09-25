@@ -9,6 +9,15 @@
         "${workspaceFolder}/backend"
     ],
     "python.defaultInterpreterPath": "${command:python.interpreterPath}",
+    "terminal.integrated.env.osx": {
+        "PYTHONPATH": "${workspaceFolder}/backend:${env:PYTHONPATH}"
+    },
+    "terminal.integrated.env.linux": {
+        "PYTHONPATH": "${workspaceFolder}/backend:${env:PYTHONPATH}"
+    },
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "${workspaceFolder}/backend;${env:PYTHONPATH}"
+    },
     "python.testing.pytestPath": "${command:python.interpreterPath}",
     "python.testing.autoTestDiscoverOnSaveEnabled": true,
     "python.debugOptions": [

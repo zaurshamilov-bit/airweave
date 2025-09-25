@@ -34,6 +34,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     auth_config_class=None,
     config_class="LinearConfig",
     labels=["Project Management"],
+    supports_continuous=False,
 )
 class LinearSource(BaseSource):
     """Linear source connector integrates with the Linear GraphQL API to extract project data.

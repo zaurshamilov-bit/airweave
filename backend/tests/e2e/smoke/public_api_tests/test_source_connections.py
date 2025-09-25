@@ -509,9 +509,31 @@ def test_source_connections(
         raise
 
     # =============================
-    # Test 2: Create second connection with immediate sync
+    # Test 2: CRON Schedule Updates with Temporal Validation
     # =============================
-    print("\n📌 Test 2: Direct Auth with Immediate Sync")
+    # Only run Temporal-related tests when running locally (not against dev/prod)
+    is_local = "localhost" in api_url or "127.0.0.1" in api_url or "0.0.0.0" in api_url
+
+    if is_local:
+        from .test_temporal_schedules import (
+            run_temporal_schedule_tests,
+            test_minute_level_schedules,
+        )
+
+        # Use the first created connection for schedule testing
+        if len(created_connections) > 0:
+            test_conn_id = created_connections[0]
+
+            # Run all temporal schedule tests
+            run_temporal_schedule_tests(api_url, headers, test_conn_id)
+
+            # Test minute-level schedules if we have continuous sources
+            test_minute_level_schedules(api_url, headers, created_connections)
+
+    # =============================
+    # Test 3: Direct Auth with Immediate Sync
+    # =============================
+    print("\n📌 Test 3: Direct Auth with Immediate Sync")
     try:
         payload = {
             "name": "Auto-sync Stripe Connection",
@@ -543,12 +565,12 @@ def test_source_connections(
         print(f"  ❌ Second connection test failed: {e}")
         show_backend_logs(lines=30)
         # Re-raise to fail the entire test suite
-        raise AssertionError(f"Test 2 (Direct Auth with Immediate Sync) failed: {e}")
+        raise AssertionError(f"Test 3 (Direct Auth with Immediate Sync) failed: {e}")
 
     # =============================
-    # Test 3: OAuth Browser (Creates shell only in CI)
+    # Test 4: OAuth Browser (Creates shell only in CI)
     # =============================
-    print("\n📌 Test 3: OAuth Browser Flow")
+    print("\n📌 Test 4: OAuth Browser Flow")
     oauth_browser_test = OAuthBrowserTest(api_url, headers, collection_id)
     try:
         conn_id = oauth_browser_test.run_test()
@@ -560,9 +582,9 @@ def test_source_connections(
         raise AssertionError(f"OAuth browser test failed: {e}")
 
     # =============================
-    # Test 3.5: OAuth BYOC Flow (REQUIRED)
+    # Test 4.5: OAuth BYOC Flow (REQUIRED)
     # =============================
-    print("\n📌 Test 3.5: OAuth BYOC (Bring Your Own Credentials)")
+    print("\n📌 Test 4.5: OAuth BYOC (Bring Your Own Credentials)")
 
     # Require BYOC credentials for Google Drive
     google_client_id = os.environ.get("TEST_GOOGLE_CLIENT_ID")
@@ -588,9 +610,9 @@ def test_source_connections(
         raise AssertionError(f"OAuth BYOC test failed: {e}")
 
     # =============================
-    # Test 3.6: Minimal OAuth Payload (No auth, no name)
+    # Test 4.6: Minimal OAuth Payload (No auth, no name)
     # =============================
-    print("\n📌 Test 3.6: Minimal OAuth Payload")
+    print("\n📌 Test 4.6: Minimal OAuth Payload")
     try:
         # Create connection with minimal payload - should default to OAuth browser flow
         minimal_payload = {
@@ -622,12 +644,12 @@ def test_source_connections(
         print(f"  ❌ Minimal payload test failed: {e}")
         show_backend_logs(lines=30)
         # Re-raise to fail the entire test suite
-        raise AssertionError(f"Test 3.6 (Minimal OAuth Payload) failed: {e}")
+        raise AssertionError(f"Test 4.6 (Minimal OAuth Payload) failed: {e}")
 
     # =============================
-    # Test 4: OAuth Token Injection (REQUIRED)
+    # Test 5: OAuth Token Injection (REQUIRED)
     # =============================
-    print("\n📌 Test 4: OAuth Token Injection")
+    print("\n📌 Test 5: OAuth Token Injection")
 
     # Require Notion token
     notion_token = os.environ.get("TEST_NOTION_TOKEN")
@@ -644,12 +666,12 @@ def test_source_connections(
     print("  ✅ Notion OAuth token injection test passed")
 
     # =============================
-    # Test 5: Auth Providers (Composio and Pipedream)
+    # Test 6: Auth Providers (Composio and Pipedream)
     # =============================
-    print("\n📌 Test 5: Auth Providers")
+    print("\n📌 Test 6: Auth Providers")
 
-    # Test 5a: Composio Auth Provider
-    print("\n  📌 Test 5a: Composio Auth Provider")
+    # Test 6a: Composio Auth Provider
+    print("\n  📌 Test 6a: Composio Auth Provider")
 
     # Require auth provider configuration
     auth_provider_readable_id = os.environ.get("TEST_AUTH_PROVIDER_NAME")
@@ -732,8 +754,8 @@ def test_source_connections(
         print(f"    ❌ Composio auth provider test failed: {e}")
         raise AssertionError(f"Composio auth provider test failed: {e}")
 
-    # Test 5b: Pipedream Proxy Auth Provider
-    print("\n  📌 Test 5b: Pipedream Proxy Auth Provider")
+    # Test 6b: Pipedream Proxy Auth Provider
+    print("\n  📌 Test 6b: Pipedream Proxy Auth Provider")
 
     # Check for Pipedream environment variables
     pipedream_client_id = os.environ.get("TEST_PIPEDREAM_CLIENT_ID")
@@ -926,9 +948,9 @@ def test_source_connections(
             raise AssertionError(f"Pipedream proxy auth provider test failed: {e}")
 
     # =============================
-    # Test 6: Error Handling
+    # Test 7: Error Handling
     # =============================
-    print("\n📌 Test 6: Error Handling")
+    print("\n📌 Test 7: Error Handling")
     error_test = ErrorHandlingTest(api_url, headers, collection_id)
     try:
         error_test.run_all_error_tests(stripe_api_key)
@@ -938,9 +960,9 @@ def test_source_connections(
         raise
 
     # =============================
-    # Test 7: List Operations
+    # Test 8: List Operations
     # =============================
-    print("\n📌 Test 7: List Operations")
+    print("\n📌 Test 8: List Operations")
     try:
         # List connections for our test collection (to avoid pagination issues)
         response = requests.get(
@@ -995,10 +1017,10 @@ def test_source_connections(
         raise
 
     # =============================
-    # Test 8: PubSub/SSE (if we have a running job)
+    # Test 9: PubSub/SSE (if we have a running job)
     # =============================
     if len(created_connections) > 0:
-        print("\n📌 Test 8: Sync Job Monitoring")
+        print("\n📌 Test 9: Sync Job Monitoring")
         try:
             # Get the first connection and run a sync
             conn_id = created_connections[0]
@@ -1024,9 +1046,22 @@ def test_source_connections(
     # =============================
     print("\n✅ Source Connections test completed successfully")
     print(f"   Created {len(created_connections)} connections")
-    print(
-        f"   Tests run: Direct Auth, OAuth Browser, OAuth Token, Auth Providers (Composio, Pipedream), Error Handling, List Operations"
-    )
+
+    # Build test list based on what was actually run
+    tests_run = [
+        "Direct Auth",
+        "OAuth Browser",
+        "OAuth Token",
+        "Auth Providers (Composio, Pipedream)",
+        "Error Handling",
+        "List Operations",
+    ]
+
+    # Add CRON tests only if they were run (locally)
+    if is_local:
+        tests_run.insert(5, "CRON Schedule Updates")  # Insert before "List Operations"
+
+    print(f"   Tests run: {', '.join(tests_run)}")
 
     # Return first two connection IDs (maintains compatibility with runner.py)
     conn1 = created_connections[0] if len(created_connections) > 0 else ""
