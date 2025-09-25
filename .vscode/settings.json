@@ -8,7 +8,7 @@
     "python.analysis.extraPaths": [
         "${workspaceFolder}/backend"
     ],
-    "python.defaultInterpreterPath": "${workspaceFolder}/backend/venv/bin/python",
+    "python.defaultInterpreterPath": "${command:python.interpreterPath}",
     "terminal.integrated.env.osx": {
         "PYTHONPATH": "${workspaceFolder}/backend:${env:PYTHONPATH}"
     },
