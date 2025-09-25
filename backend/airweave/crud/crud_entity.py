@@ -1,6 +1,6 @@
 """CRUD operations for entities."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -134,7 +134,7 @@ class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
             stmt = (
                 update(Entity)
                 .where(Entity.id == entity_db_id)
-                .values(hash=new_hash, modified_at=datetime.now(datetime.UTC))
+                .values(hash=new_hash, modified_at=datetime.now(timezone.utc).replace(tzinfo=None))
             )
             await db.execute(stmt)
 
@@ -146,7 +146,9 @@ class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
         sync_job_id: UUID,
     ) -> Entity:
         """Update sync job ID only."""
-        update_data = EntityUpdate(sync_job_id=sync_job_id, modified_at=datetime.now(datetime.UTC))
+        update_data = EntityUpdate(
+            sync_job_id=sync_job_id, modified_at=datetime.now(timezone.utc).replace(tzinfo=None)
+        )
 
         # Use model_dump(exclude_unset=True) to only include fields we explicitly set
         return await super().update(
