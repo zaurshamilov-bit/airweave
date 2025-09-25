@@ -55,6 +55,21 @@ class SyncOrchestrator:
             await self._process_entities()
             await self._complete_sync()
             return self.sync_context.sync
+        except asyncio.CancelledError:
+            # Cooperative cancellation: ensure pending tasks and stream are stopped
+            self.sync_context.logger.info("Cancellation requested, stopping orchestrator...")
+            try:
+                # Best-effort publish final progress and state as cancelled via finalize path
+                # We simulate a stream error to trigger task cancellation in _finalize_stream
+                await self._finalize_stream(
+                    stream=None,
+                    stream_error=Exception("cancelled"),
+                    pending_tasks=set(),
+                )
+            except Exception:
+                # Ignore cleanup errors during cancellation
+                pass
+            raise
         except Exception as e:
             await self._handle_sync_failure(e)
             raise
@@ -183,6 +198,10 @@ class SyncOrchestrator:
                 batch_buffer = []
                 flush_deadline = None
 
+        except asyncio.CancelledError as e:
+            # Propagate cancellation: set stream_error so finalize cancels tasks and stop stream
+            stream_error = e
+            self.sync_context.logger.info("Cancelled during batched processing; finalizing...")
         except Exception as e:
             stream_error = e
             self.sync_context.logger.error(f"Error during entity streaming: {get_error_message(e)}")
@@ -267,6 +286,9 @@ class SyncOrchestrator:
                 if len(pending_tasks) >= self.worker_pool.max_workers:
                     pending_tasks = await self._handle_completed_tasks(pending_tasks)
 
+        except asyncio.CancelledError as e:
+            stream_error = e
+            self.sync_context.logger.info("Cancelled during unbatched processing; finalizing...")
         except Exception as e:
             stream_error = e
             self.sync_context.logger.error(f"Error during entity streaming: {get_error_message(e)}")

@@ -2,6 +2,7 @@
 
 import asyncio
 import signal
+from datetime import timedelta
 from typing import Any
 
 from temporalio.worker import Worker
@@ -49,6 +50,13 @@ class TemporalWorker:
                     create_sync_job_activity,
                 ],
                 workflow_runner=sandbox_config,
+                max_concurrent_workflow_task_polls=8,
+                max_concurrent_activity_task_polls=16,
+                sticky_queue_schedule_to_start_timeout=timedelta(seconds=2),
+                nonsticky_to_sticky_poll_ratio=0.5,
+                # Speed up cancel delivery by flushing heartbeats frequently
+                default_heartbeat_throttle_interval=timedelta(seconds=2),
+                max_heartbeat_throttle_interval=timedelta(seconds=2),
             )
 
             self.running = True

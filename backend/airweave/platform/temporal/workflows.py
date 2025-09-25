@@ -96,7 +96,9 @@ class RunSourceConnectionWorkflow:
                     force_full_sync,
                 ],
                 start_to_close_timeout=timedelta(days=7),
-                heartbeat_timeout=timedelta(minutes=10),  # Fail if no heartbeat for 10 minutes
+                heartbeat_timeout=timedelta(
+                    seconds=30
+                ),  # quicker cancel delivery on next RPC heartbeat
                 cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
                 retry_policy=RetryPolicy(
                     initial_interval=timedelta(seconds=1),

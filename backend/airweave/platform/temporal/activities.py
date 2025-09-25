@@ -111,22 +111,19 @@ async def run_sync_activity(
 
     try:
         while True:
-            try:
-                await asyncio.wait_for(asyncio.shield(sync_task), timeout=1)
+            done, _ = await asyncio.wait({sync_task}, timeout=1)
+            if sync_task in done:
+                # Propagate result/exception (including CancelledError from inner task)
+                await sync_task
                 break
-            except asyncio.TimeoutError:
-                ctx.logger.debug("\n\nHEARTBEAT: Sync in progress\n\n")
-                activity.heartbeat("Sync in progress")
+            ctx.logger.debug("\n\nHEARTBEAT: Sync in progress\n\n")
+            activity.heartbeat("Sync in progress")
 
         ctx.logger.info(f"\n\nCompleted sync activity for job {sync_job.id}\n\n")
 
     except asyncio.CancelledError:
         ctx.logger.info(f"\n\n[ACTIVITY] Sync activity cancelled for job {sync_job.id}\n\n")
-        # Ensure the internal sync task is cancelled and awaited
-        sync_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await sync_task
-
+        # 1) Flip job status to CANCELLED immediately so UI reflects truth
         try:
             # Import inside to avoid sandbox issues
             from airweave.core.datetime_utils import utc_now_naive
@@ -143,6 +140,18 @@ async def run_sync_activity(
             ctx.logger.debug(f"\n\n[ACTIVITY] Updated job {sync_job.id} to CANCELLED\n\n")
         except Exception as status_err:
             ctx.logger.error(f"Failed to update job {sync_job.id} to CANCELLED: {status_err}")
+
+        # 2) Ensure the internal sync task is cancelled and awaited while heartbeating
+        sync_task.cancel()
+        while not sync_task.done():
+            try:
+                await asyncio.wait_for(sync_task, timeout=1)
+            except asyncio.TimeoutError:
+                activity.heartbeat("Cancelling sync...")
+        with suppress(asyncio.CancelledError):
+            await sync_task
+
+        # 3) Re-raise so Temporal records the activity as CANCELED
         raise
     except Exception as e:
         ctx.logger.error(f"Failed sync activity for job {sync_job.id}: {e}")
