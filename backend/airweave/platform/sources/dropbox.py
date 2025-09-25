@@ -29,6 +29,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     auth_config_class=None,
     config_class="DropboxConfig",
     labels=["File Storage"],
+    supports_continuous=False,
 )
 class DropboxSource(BaseSource):
     """Dropbox source connector integrates with the Dropbox API to extract and synchronize files.

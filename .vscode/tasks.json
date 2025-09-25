@@ -2,12 +2,13 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "start-docker-services",
+            "label": "🐳 Docker Services",
             "command": "docker compose -f docker/docker-compose.dev.yml up -d",
             "type": "shell",
             "presentation": {
                 "reveal": "always",
-                "panel": "new"
+                "panel": "new",
+                "group": "Infrastructure"
             },
             "isBackground": true,
             "problemMatcher": {
@@ -34,7 +35,7 @@
             }
         },
         {
-            "label": "start-frontend-dev",
+            "label": "🖥️ Frontend Dev Server",
             "command": "npm run dev",
             "type": "shell",
             "options": {
@@ -42,7 +43,8 @@
             },
             "presentation": {
                 "reveal": "always",
-                "panel": "new"
+                "panel": "new",
+                "group": "Frontend"
             },
             "isBackground": true,
             "problemMatcher": {
@@ -63,9 +65,25 @@
             "label": "start-dev-stack",
             "dependsOrder": "parallel",
             "dependsOn": [
-                "start-docker-services",
-                "start-frontend-dev"
+                "🐳 Docker Services",
+                "🖥️ Frontend Dev Server"
             ]
+        },
+        {
+            "label": "monke-setup-venv",
+            "type": "shell",
+            "command": "if [ ! -d monke/venv ]; then python3 -m venv monke/venv && monke/venv/bin/pip install -r monke/requirements.txt; fi",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "silent",
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": false,
+                "group": "Monke Setup"
+            }
         }
     ]
 }

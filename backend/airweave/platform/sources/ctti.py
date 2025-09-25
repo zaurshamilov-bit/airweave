@@ -122,6 +122,7 @@ async def _retry_with_backoff(func, *args, max_retries=3, **kwargs):
     auth_config_class="CTTIAuthConfig",
     config_class="CTTIConfig",
     labels=["Clinical Trials", "Database"],
+    supports_continuous=False,
 )
 class CTTISource(BaseSource):
     """CTTI source connector integrates with the AACT PostgreSQL database to extract trials.

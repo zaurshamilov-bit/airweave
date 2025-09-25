@@ -49,6 +49,7 @@ from airweave.schemas.source_connection import AuthenticationMethod
     auth_config_class="StripeAuthConfig",
     config_class="StripeConfig",
     labels=["Payment"],
+    supports_continuous=False,
 )
 class StripeSource(BaseSource):
     """Stripe source connector integrates with the Stripe API to extract payment and financial data.

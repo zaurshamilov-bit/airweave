@@ -33,6 +33,9 @@ class Source(Base):
     output_entity_definition_ids = Column(JSON, nullable=False)
     config_schema = Column(JSON, nullable=True)  # JSON Schema for configuration
     labels: Mapped[list[str]] = mapped_column(JSON, nullable=True, default=list)
+    supports_continuous: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="false"
+    )
 
     __table_args__ = (UniqueConstraint("name", "organization_id", name="uq_source_name_org"),)
 

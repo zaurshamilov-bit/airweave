@@ -56,6 +56,68 @@ class SourceConnectionService:
         )
         return cron_schedule
 
+    def _validate_cron_schedule_for_source(
+        self, cron_schedule: str, source: schemas.Source, ctx: ApiContext
+    ) -> None:
+        """Validate CRON schedule based on source capabilities.
+
+        Args:
+            cron_schedule: The CRON expression to validate
+            source: The source model
+            ctx: API context
+
+        Raises:
+            HTTPException: If the schedule is invalid for the source
+        """
+        import re
+
+        if not cron_schedule:
+            return
+
+        # Parse the CRON expression to check if it's minute-level
+        # We need to distinguish between:
+        # - "*/N * * * *" where N < 60 - runs every N minutes (minute-level)
+        # - "* * * * *" - runs every minute (minute-level)
+        # - "0 * * * *" - runs at minute 0 of every hour (hourly, not minute-level)
+        # - "30 2 * * *" - runs at 2:30 AM daily (daily, not minute-level)
+
+        # Check for patterns that run more frequently than hourly
+        # Pattern 1: */N where N < 60 (e.g., */5, */15, */30)
+        interval_pattern = r"^\*/([1-5]?[0-9]) \* \* \* \*$"
+        match = re.match(interval_pattern, cron_schedule)
+
+        if match:
+            interval = int(match.group(1))
+            if interval < 60:
+                # This is sub-hourly (minute-level)
+                if not source.supports_continuous:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Source '{source.short_name}' does not support continuous syncs. "
+                        f"Minimum schedule interval is 1 hour (e.g., '0 * * * *' for hourly).",
+                    )
+                # For continuous sources, sub-hourly is allowed
+                ctx.logger.info(
+                    f"Source '{source.short_name}' supports continuous syncs, "
+                    f"allowing minute-level schedule: {cron_schedule}"
+                )
+                return
+
+        # Pattern 2: * * * * * (every minute)
+        if cron_schedule == "* * * * *":
+            if not source.supports_continuous:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Source '{source.short_name}' does not support continuous syncs. "
+                    f"Minimum schedule interval is 1 hour (e.g., '0 * * * *' for hourly).",
+                )
+            ctx.logger.info(
+                f"Source '{source.short_name}' supports continuous syncs, "
+                f"allowing every-minute schedule: {cron_schedule}"
+            )
+
+        # All other patterns (including "0 * * * *" for hourly) are allowed
+
     """Clean service with automatic auth method inference.
 
     Key improvements:
@@ -225,11 +287,15 @@ class SourceConnectionService:
         ctx: ApiContext,
     ) -> SourceConnection:
         """Update a source connection."""
+        # First check if the source connection exists
         source_conn = await crud.source_connection.get(db, id=id, ctx=ctx)
         if not source_conn:
             raise HTTPException(status_code=404, detail="Source connection not found")
 
         async with UnitOfWork(db) as uow:
+            # Re-fetch the source_conn within the UoW session to avoid session mismatch
+            source_conn = await crud.source_connection.get(uow.session, id=id, ctx=ctx)
+
             # Update fields
             update_data = obj_in.model_dump(exclude_unset=True)
 
@@ -242,12 +308,21 @@ class SourceConnectionService:
                 del update_data["config"]
 
             # Handle schedule update
-            if "schedule" in update_data and update_data["schedule"]:
+            if (
+                "schedule" in update_data and update_data["schedule"]
+            ):  # TODO: only if actually different
                 if source_conn.sync_id:
+                    new_cron = update_data["schedule"].get("cron")
+                    if new_cron:
+                        # Get the source to validate schedule
+                        source = await self._get_and_validate_source(
+                            uow.session, source_conn.short_name
+                        )
+                        self._validate_cron_schedule_for_source(new_cron, source, ctx)
                     await self._update_sync_schedule(
                         uow.session,
                         source_conn.sync_id,
-                        update_data["schedule"].get("cron"),
+                        new_cron,
                         ctx,
                         uow,
                     )
@@ -255,7 +330,10 @@ class SourceConnectionService:
 
             # Handle credential update (direct auth only)
             if "credentials" in update_data:
-                auth_method = self._determine_auth_method(source_conn)
+                # Use the schema function that works with database models
+                from airweave.schemas.source_connection import determine_auth_method
+
+                auth_method = determine_auth_method(source_conn)
                 if auth_method != AuthenticationMethod.DIRECT:
                     raise HTTPException(
                         status_code=400,
@@ -365,6 +443,9 @@ class SourceConnectionService:
             if cron_schedule is None:
                 cron_schedule = self._get_default_cron_schedule(ctx)
 
+            # Validate the schedule for this source
+            self._validate_cron_schedule_for_source(cron_schedule, source, ctx)
+
             sync, sync_job = await self._create_sync_without_schedule(
                 uow.session,
                 obj_in.name,
@@ -400,6 +481,7 @@ class SourceConnectionService:
                     cron_schedule=cron_schedule,
                     db=uow.session,
                     ctx=ctx,
+                    uow=uow,
                 )
 
             # Convert to schemas while still in session
@@ -582,6 +664,9 @@ class SourceConnectionService:
             if cron_schedule is None:
                 cron_schedule = self._get_default_cron_schedule(ctx)
 
+            # Validate the schedule for this source
+            self._validate_cron_schedule_for_source(cron_schedule, source, ctx)
+
             sync, sync_job = await self._create_sync_without_schedule(
                 uow.session,
                 obj_in.name,
@@ -617,6 +702,7 @@ class SourceConnectionService:
                     cron_schedule=cron_schedule,
                     db=uow.session,
                     ctx=ctx,
+                    uow=uow,
                 )
 
             # Convert to schemas while still in session
@@ -728,6 +814,9 @@ class SourceConnectionService:
             if cron_schedule is None:
                 cron_schedule = self._get_default_cron_schedule(ctx)
 
+            # Validate the schedule for this source
+            self._validate_cron_schedule_for_source(cron_schedule, source, ctx)
+
             sync, sync_job = await self._create_sync_without_schedule(
                 uow.session,
                 obj_in.name,
@@ -765,6 +854,7 @@ class SourceConnectionService:
                     cron_schedule=cron_schedule,
                     db=uow.session,
                     ctx=ctx,
+                    uow=uow,
                 )
 
             # Convert to schemas while still in session

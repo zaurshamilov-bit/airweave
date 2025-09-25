@@ -53,6 +53,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     auth_config_class=None,
     config_class="GmailConfig",
     labels=["Communication", "Email"],
+    supports_continuous=True,
 )
 class GmailSource(BaseSource):
     """Gmail source connector integrates with the Gmail API to extract and synchronize email data.

@@ -4,6 +4,7 @@ This module sets up the FastAPI application and the middleware to log incoming r
 and unhandled exceptions.
 """
 
+import os
 import subprocess
 from contextlib import asynccontextmanager
 
@@ -45,12 +46,22 @@ from airweave.platform.entities._base import ensure_file_entity_models
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup and shutdown events."""
-    # Startup
+    """Lifespan context manager for startup and shutdown events.
+
+    Runs alembic migrations and syncs platform components.
+    """
     async with AsyncSessionLocal() as db:
         if settings.RUN_ALEMBIC_MIGRATIONS:
             logger.info("Running alembic migrations...")
-            subprocess.run(["alembic", "upgrade", "head"], check=True)
+            env = os.environ.copy()
+            backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            env["PYTHONPATH"] = backend_dir
+            subprocess.run(
+                ["alembic", "upgrade", "head"],
+                check=True,
+                cwd=backend_dir,
+                env=env,
+            )
         if settings.RUN_DB_SYNC:
             # Ensure all FileEntity subclasses have their parent and chunk models created
             ensure_file_entity_models()

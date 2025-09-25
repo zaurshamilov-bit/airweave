@@ -36,6 +36,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     auth_config_class=None,
     config_class="MondayConfig",
     labels=["Project Management"],
+    supports_continuous=False,
 )
 class MondaySource(BaseSource):
     """Monday source connector integrates with the Monday.com GraphQL API to extract work data.
