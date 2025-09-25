@@ -11,11 +11,14 @@ from temporalio.client import (
     ScheduleActionStartWorkflow,
     ScheduleSpec,
     ScheduleState,
+    ScheduleUpdate,
+    ScheduleUpdateInput,
 )
 
 from airweave import crud, schemas
 from airweave.core.config import settings
 from airweave.core.logging import logger
+from airweave.db.unit_of_work import UnitOfWork
 from airweave.platform.temporal.client import temporal_client
 from airweave.platform.temporal.workflows import RunSourceConnectionWorkflow
 
@@ -185,11 +188,8 @@ class TemporalScheduleService:
                 "status": "INACTIVE",  # Mark as inactive since schedule is paused
             }
 
-            # Store cron schedule for minute-level syncs
-            if schedule_type == "minute":
-                update_fields["minute_level_cron_schedule"] = cron_expression
-            elif schedule_type == "regular":
-                update_fields["cron_schedule"] = cron_expression
+            # Store cron schedule - unified field for all types
+            update_fields["cron_schedule"] = cron_expression
 
             await crud.sync.update(
                 db=db,
@@ -357,6 +357,7 @@ class TemporalScheduleService:
         sync_id: UUID,
         user_dict: dict,
         db: AsyncSession,
+        uow: UnitOfWork,
         ctx,
     ) -> None:
         """Update an existing schedule with a new cron expression.
@@ -367,33 +368,72 @@ class TemporalScheduleService:
             sync_id: The sync ID
             user_dict: The current user as dict
             db: Database session
+            uow: Unit of work
             ctx: Authentication context
         """
+        # Validate CRON expression before sending to Temporal
+        from croniter import croniter
+
+        if not croniter.is_valid(cron_expression):
+            from fastapi import HTTPException
+
+            raise HTTPException(
+                status_code=422, detail=f"Invalid CRON expression: {cron_expression}"
+            )
+
         client = await self._get_client()
 
         # Get the schedule handle
         handle = client.get_schedule_handle(schedule_id)
 
-        # Update the schedule spec
-        await handle.update(
-            ScheduleSpec(
+        # Define the update callback function
+        def update_schedule_spec(input: ScheduleUpdateInput) -> ScheduleUpdate:
+            """Callback to update the schedule spec with new cron expression."""
+            # Get the current schedule from the input
+            schedule = input.description.schedule
+
+            # Update the spec with the new cron expression
+            schedule.spec = ScheduleSpec(
                 cron_expressions=[cron_expression],
                 start_at=datetime.now(timezone.utc),
                 end_at=None,
                 jitter=timedelta(seconds=10),
             )
-        )
+
+            # Return the updated schedule wrapped in ScheduleUpdate
+            return ScheduleUpdate(schedule=schedule)
+
+        # Update the schedule using the callback
+        await handle.update(update_schedule_spec)
+
+        # Determine sync type based on the cron pattern
+        # Minute-level pattern: "*/N * * * *" or "N * * * *" where N < 60
+        import re
+
+        minute_level_pattern = r"^(\*/([1-5]?[0-9])|([0-5]?[0-9])) \* \* \* \*$"
+        match = re.match(minute_level_pattern, cron_expression)
+
+        sync_type = "full"  # Default
+        if match:
+            # Extract interval for minute-level schedules
+            if match.group(2):  # */N pattern
+                interval = int(match.group(2))
+                if interval < 60:
+                    sync_type = "incremental"
+            elif match.group(3):  # Specific minute
+                sync_type = "incremental"
+
+        # Update the unified cron_schedule field and sync type
+        update_data = {"cron_schedule": cron_expression, "sync_type": sync_type}
 
         # Update the sync record in the database
         sync_obj = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
-        await crud.sync.update(
-            db=db,
-            db_obj=sync_obj,
-            obj_in={"minute_level_cron_schedule": cron_expression},
-            ctx=ctx,
-        )
+        await crud.sync.update(db=db, db_obj=sync_obj, obj_in=update_data, ctx=ctx, uow=uow)
 
-        logger.info(f"Updated schedule {schedule_id} with cron expression {cron_expression}")
+        field_type = "minute-level" if sync_type == "incremental" else "regular"
+        logger.info(
+            f"Updated {field_type} schedule {schedule_id} with cron expression {cron_expression}"
+        )
 
     async def pause_schedule(
         self, schedule_id: str, sync_id: UUID, user_dict: dict, db: AsyncSession, ctx
@@ -475,7 +515,7 @@ class TemporalScheduleService:
             db_obj=sync_obj,
             obj_in={
                 "temporal_schedule_id": None,
-                "minute_level_cron_schedule": None,
+                "cron_schedule": None,
                 "sync_type": "full",
             },
             ctx=ctx,
@@ -484,17 +524,24 @@ class TemporalScheduleService:
         logger.info(f"Deleted schedule {schedule_id}")
 
     async def delete_all_schedules_for_sync(self, sync_id: UUID, db: AsyncSession, ctx) -> None:
-        """Delete all schedules associated with a sync (minute + daily).
+        """Delete all schedules associated with a sync (regular + minute + daily).
 
-        This attempts to delete both the minute-level and daily-cleanup schedules
-        based on naming conventions. It ignores missing schedules and continues.
+        This attempts to delete all three types of schedules based on naming conventions.
+        It ignores missing schedules and continues.
         """
         user_dict: dict = {}
 
-        # Minute-level schedule (also stored in Sync.temporal_schedule_id)
+        # Regular schedule
+        regular_schedule_id = f"sync-{sync_id}"
+        try:
+            await self.delete_schedule_by_id(regular_schedule_id, sync_id, user_dict, db, ctx)
+        except Exception as e:
+            logger.info(f"Regular schedule {regular_schedule_id} not deleted (may not exist): {e}")
+
+        # Minute-level schedule
         minute_schedule_id = f"minute-sync-{sync_id}"
         try:
-            await self.delete_schedule(minute_schedule_id, sync_id, user_dict, db, ctx)
+            await self.delete_schedule_by_id(minute_schedule_id, sync_id, user_dict, db, ctx)
         except Exception as e:
             logger.info(
                 f"Minute-level schedule {minute_schedule_id} not deleted (may not exist): {e}"
@@ -503,7 +550,7 @@ class TemporalScheduleService:
         # Daily cleanup schedule
         daily_schedule_id = f"daily-cleanup-{sync_id}"
         try:
-            await self.delete_schedule(daily_schedule_id, sync_id, user_dict, db, ctx)
+            await self.delete_schedule_by_id(daily_schedule_id, sync_id, user_dict, db, ctx)
         except Exception as e:
             logger.info(
                 f"Daily cleanup schedule {daily_schedule_id} not deleted (may not exist): {e}"
@@ -565,19 +612,20 @@ class TemporalScheduleService:
             return {
                 **schedule_info,
                 "sync_id": str(sync_id),
-                "minute_level_cron_schedule": sync.minute_level_cron_schedule,
+                "cron_schedule": sync.cron_schedule,
                 "sync_type": sync.sync_type,
             }
         except Exception as e:
             logger.error(f"Error getting schedule info for sync {sync_id}: {e}")
             return None
 
-    async def create_or_update_schedule(
+    async def create_or_update_schedule(  # noqa: C901
         self,
         sync_id: UUID,
         cron_schedule: str,
         db: AsyncSession,
         ctx,
+        uow: UnitOfWork,
     ) -> str:
         """Create or update a schedule for a sync.
 
@@ -589,10 +637,18 @@ class TemporalScheduleService:
             cron_schedule: Cron expression for the schedule
             db: Database session
             ctx: Authentication context
-
+            uow: Unit of work
         Returns:
             The schedule ID
         """
+        # Validate CRON expression before proceeding
+        from croniter import croniter
+
+        if not croniter.is_valid(cron_schedule):
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=422, detail=f"Invalid CRON expression: {cron_schedule}")
+
         # Get the sync - first just check if it exists and has a schedule
         sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         if not sync:
@@ -614,6 +670,7 @@ class TemporalScheduleService:
                     user_dict=user_dict,
                     db=db,
                     ctx=ctx,
+                    uow=uow,
                 )
                 logger.info(f"Updated existing schedule {schedule_id} for sync {sync_id}")
                 return schedule_id
@@ -658,19 +715,49 @@ class TemporalScheduleService:
         collection_dict = collection_schema.model_dump(mode="json")
         source_connection_dict = source_connection_schema.model_dump(mode="json")
 
-        # Create new schedule (use regular schedule for daily crons)
-        schedule_id = await self.create_regular_schedule(
-            sync_id=sync_id,
-            cron_expression=cron_schedule,
-            sync_dict=sync_dict,
-            sync_dag_dict=sync_dag_dict,
-            collection_dict=collection_dict,
-            source_connection_dict=source_connection_dict,
-            user_dict=user_dict,
-            db=db,
-            ctx=ctx,
-            access_token=None,  # Access token will be handled by the workflow
-        )
+        # Determine schedule type based on cron pattern
+        import re
+
+        minute_level_pattern = r"^(\*/([1-5]?[0-9])|([0-5]?[0-9])) \* \* \* \*$"
+        match = re.match(minute_level_pattern, cron_schedule)
+
+        schedule_type = "regular"  # Default
+        if match:
+            # Check if it's a minute-level schedule (< 60 minutes)
+            if match.group(2):  # */N pattern
+                interval = int(match.group(2))
+                if interval < 60:
+                    schedule_type = "minute"
+            elif match.group(3):  # Specific minute
+                schedule_type = "minute"
+
+        # Create appropriate schedule type
+        if schedule_type == "minute":
+            schedule_id = await self.create_minute_level_schedule(
+                sync_id=sync_id,
+                cron_expression=cron_schedule,
+                sync_dict=sync_dict,
+                sync_dag_dict=sync_dag_dict,
+                collection_dict=collection_dict,
+                source_connection_dict=source_connection_dict,
+                user_dict=user_dict,
+                db=db,
+                ctx=ctx,
+                access_token=None,  # Access token will be handled by the workflow
+            )
+        else:
+            schedule_id = await self.create_regular_schedule(
+                sync_id=sync_id,
+                cron_expression=cron_schedule,
+                sync_dict=sync_dict,
+                sync_dag_dict=sync_dag_dict,
+                collection_dict=collection_dict,
+                source_connection_dict=source_connection_dict,
+                user_dict=user_dict,
+                db=db,
+                ctx=ctx,
+                access_token=None,  # Access token will be handled by the workflow
+            )
 
         logger.info(f"Created new schedule {schedule_id} for sync {sync_id}")
         return schedule_id

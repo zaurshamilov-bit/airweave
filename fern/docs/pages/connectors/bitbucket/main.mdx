@@ -42,8 +42,10 @@ This connector uses a custom authentication configuration.
 Bitbucket authentication credentials schema.
 
 Supports either:
+
 - access_token (Bearer) + workspace/repo_slug, or
 - username + app_password (legacy Basic) + workspace/repo_slug
+
 <ParamField
   path="access_token"
   type="Optional[str]"

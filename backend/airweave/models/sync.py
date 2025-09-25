@@ -33,7 +33,6 @@ class Sync(OrganizationBase, UserMixin):
     )
     temporal_schedule_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     sync_type: Mapped[str] = mapped_column(String(50), default="full")
-    minute_level_cron_schedule: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     sync_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     jobs: Mapped[list["SyncJob"]] = relationship(
@@ -95,8 +94,9 @@ def delete_temporal_schedules_after_sync_delete(mapper, connection, target):
         import asyncio
 
         schedule_ids = [
-            f"minute-sync-{target.id}",
-            f"daily-cleanup-{target.id}",
+            f"sync-{target.id}",  # Regular schedule
+            f"minute-sync-{target.id}",  # Minute-level schedule
+            f"daily-cleanup-{target.id}",  # Daily cleanup schedule
         ]
 
         async def _cleanup():

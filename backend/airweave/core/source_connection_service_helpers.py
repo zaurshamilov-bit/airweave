@@ -800,9 +800,9 @@ class SourceConnectionHelpers:
         self,
         db: AsyncSession,
         sync_id: UUID,
-        cron_schedule: str,
+        cron_schedule: Optional[str],
         ctx: ApiContext,
-        uow: Any,
+        uow: UnitOfWork,
     ) -> None:
         """Update sync schedule in database and Temporal."""
         sync = await crud.sync.get(db, id=sync_id, ctx=ctx)
@@ -811,15 +811,23 @@ class SourceConnectionHelpers:
             sync_update = schemas.SyncUpdate(cron_schedule=cron_schedule)
             await crud.sync.update(db, db_obj=sync, obj_in=sync_update, ctx=ctx, uow=uow)
 
-            # Update in Temporal if a schedule exists
+            # Update in Temporal
             from airweave.platform.temporal.schedule_service import temporal_schedule_service
 
-            await temporal_schedule_service.create_or_update_schedule(
-                sync_id=sync_id,
-                cron_schedule=cron_schedule,
-                db=db,
-                ctx=ctx,
-            )
+            if cron_schedule is None:
+                # If cron_schedule is None, delete the Temporal schedule
+                await temporal_schedule_service.delete_all_schedules_for_sync(
+                    sync_id=sync_id, db=db, ctx=ctx
+                )
+            else:
+                # Otherwise create or update the schedule
+                await temporal_schedule_service.create_or_update_schedule(
+                    sync_id=sync_id,
+                    cron_schedule=cron_schedule,
+                    db=db,
+                    ctx=ctx,
+                    uow=uow,
+                )
 
     async def update_auth_fields(
         self,
@@ -1184,6 +1192,7 @@ class SourceConnectionHelpers:
                     cron_schedule=cron_schedule,
                     db=uow.session,
                     ctx=ctx,
+                    uow=uow,
                 )
 
             # Mark init session complete

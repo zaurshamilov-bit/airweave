@@ -84,6 +84,7 @@ class SyncService:
                 cron_schedule=sync_in.cron_schedule,
                 db=db,
                 ctx=ctx,
+                uow=uow,
             )
 
         # Run immediately if requested
