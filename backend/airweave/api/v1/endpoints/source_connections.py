@@ -214,7 +214,6 @@ async def get_source_connection_jobs(
 @router.post(
     "/{source_connection_id}/jobs/{job_id}/cancel",
     response_model=schemas.SourceConnectionJob,
-    status_code=202,  # TODO: ask Rauf about this
 )
 async def cancel_job(
     *,
