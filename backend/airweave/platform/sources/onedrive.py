@@ -39,6 +39,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     auth_config_class=None,
     config_class="OneDriveConfig",
     labels=["File Storage"],
+    supports_continuous=False,
 )
 class OneDriveSource(BaseSource):
     """OneDrive source connector integrates with the Microsoft Graph API to extract files.

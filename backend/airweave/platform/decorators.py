@@ -18,6 +18,7 @@ def source(
     auth_config_class: Optional[Type[BaseModel]] = None,
     config_class: Optional[Type[BaseModel]] = None,
     labels: Optional[List[str]] = None,
+    supports_continuous: bool = False,
 ) -> Callable[[type], type]:
     """Enhanced source decorator with OAuth type tracking.
 
@@ -30,6 +31,7 @@ def source(
         auth_config_class: Pydantic model for auth configuration (for DIRECT auth only)
         config_class: Pydantic model for source configuration
         labels: Tags for categorization (e.g., "CRM", "Database")
+        supports_continuous: Whether source supports cursor-based continuous syncing (default False)
 
     Example:
         # OAuth source (no auth config)
@@ -66,6 +68,7 @@ def source(
         cls._auth_config_class = auth_config_class
         cls._config_class = config_class
         cls._labels = labels or []
+        cls._supports_continuous = supports_continuous
 
         # Add validation method if not present
         if not hasattr(cls, "validate"):

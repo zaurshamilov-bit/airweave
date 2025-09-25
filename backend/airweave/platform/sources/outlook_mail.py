@@ -41,6 +41,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     auth_config_class=None,
     config_class="OutlookMailConfig",
     labels=["Communication", "Email"],
+    supports_continuous=True,
 )
 class OutlookMailSource(BaseSource):
     """Outlook Mail source connector integrates with the Microsoft Graph API to extract email data.

@@ -28,6 +28,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     auth_config_class=None,
     config_class="TodoistConfig",
     labels=["Productivity", "Task Management"],
+    supports_continuous=False,
 )
 class TodoistSource(BaseSource):
     """Todoist source connector integrates with the Todoist REST API to extract task data.

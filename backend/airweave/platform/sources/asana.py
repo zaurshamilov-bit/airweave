@@ -32,6 +32,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     auth_config_class=None,
     config_class="AsanaConfig",
     labels=["Project Management"],
+    supports_continuous=False,
 )
 class AsanaSource(BaseSource):
     """Asana source connector integrates with the Asana API to extract and synchronize data.

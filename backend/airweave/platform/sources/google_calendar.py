@@ -63,6 +63,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     auth_config_class=None,
     config_class="GoogleCalendarConfig",
     labels=["Productivity", "Calendar"],
+    supports_continuous=False,
 )
 class GoogleCalendarSource(BaseSource):
     """Google Calendar source connector integrates with the Google Calendar API to extract data.

@@ -24,7 +24,6 @@ class SyncBase(BaseModel):
     next_scheduled_run: Optional[datetime] = None
     temporal_schedule_id: Optional[str] = None
     sync_type: str = "full"
-    minute_level_cron_schedule: Optional[str] = None
     sync_metadata: Optional[dict] = None
     status: Optional[SyncStatus] = SyncStatus.ACTIVE
 
@@ -52,21 +51,6 @@ class SyncBase(BaseModel):
         cron_pattern = r"^(\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-6]|SUN|MON|TUE|WED|THU|FRI|SAT|[0-6]-[0-6]|[0-6]/[0-6]|[0-6],[0-6]|\*\/[0-6])$"  # noqa: E501
         if not re.match(cron_pattern, v):
             raise ValueError("Invalid cron schedule format")
-        return v
-
-    @field_validator("minute_level_cron_schedule")
-    def validate_minute_level_cron_schedule(cls, v: Optional[str]) -> Optional[str]:
-        """Validate minute-level cron schedule format for incremental syncs."""
-        if v is None:
-            return None
-        # Allow minute-level patterns like */1, */5, */15, */30
-        # Restrict minute values to 0-59 range
-        minute_level_pattern = r"^(\*\/[1-5]?[0-9]|[0-5]?[0-9]) \* \* \* \*$"
-        if not re.match(minute_level_pattern, v):
-            raise ValueError(
-                "Minute-level cron must be minute-level only "
-                "(e.g., */1 * * * * for every minute) with valid minute values (0-59)"
-            )
         return v
 
     @field_validator("sync_type")
@@ -102,22 +86,6 @@ class SyncUpdate(BaseModel):
     status: Optional[SyncStatus] = None
     temporal_schedule_id: Optional[str] = None
     sync_type: Optional[str] = None
-    minute_level_cron_schedule: Optional[str] = None
-
-    @field_validator("minute_level_cron_schedule")
-    def validate_minute_level_cron_schedule(cls, v: Optional[str]) -> Optional[str]:
-        """Validate minute-level cron schedule format for incremental syncs."""
-        if v is None:
-            return None
-        # Allow minute-level patterns like */1, */5, */15, */30
-        # Restrict minute values to 0-59 range
-        minute_level_pattern = r"^(\*\/[1-5]?[0-9]|[0-5]?[0-9]) \* \* \* \*$"
-        if not re.match(minute_level_pattern, v):
-            raise ValueError(
-                "Minute-level cron must be minute-level only "
-                "(e.g., */1 * * * * for every minute) with valid minute values (0-59)"
-            )
-        return v
 
     @field_validator("sync_type")
     def validate_sync_type(cls, v: Optional[str]) -> Optional[str]:
@@ -191,28 +159,12 @@ class SyncWithoutConnections(BaseModel):
     sync_metadata: Optional[dict] = None
     temporal_schedule_id: Optional[str] = None
     sync_type: str = "full"
-    minute_level_cron_schedule: Optional[str] = None
     id: UUID
     organization_id: UUID
     created_at: datetime
     modified_at: datetime
     created_by_email: Optional[EmailStr] = None
     modified_by_email: Optional[EmailStr] = None
-
-    @field_validator("minute_level_cron_schedule")
-    def validate_minute_level_cron_schedule(cls, v: Optional[str]) -> Optional[str]:
-        """Validate minute-level cron schedule format for incremental syncs."""
-        if v is None:
-            return None
-        # Allow minute-level patterns like */1, */5, */15, */30
-        # Restrict minute values to 0-59 range
-        minute_level_pattern = r"^(\*\/[1-5]?[0-9]|[0-5]?[0-9]) \* \* \* \*$"
-        if not re.match(minute_level_pattern, v):
-            raise ValueError(
-                "Minute-level cron must be minute-level only "
-                "(e.g., */1 * * * * for every minute) with valid minute values (0-59)"
-            )
-        return v
 
     @field_validator("sync_type")
     def validate_sync_type(cls, v: Optional[str]) -> Optional[str]:

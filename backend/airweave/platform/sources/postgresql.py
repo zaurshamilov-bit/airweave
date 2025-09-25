@@ -49,6 +49,7 @@ PG_TYPE_MAP = {
     auth_config_class="PostgreSQLAuthConfig",
     config_class="PostgreSQLConfig",
     labels=["Database"],
+    supports_continuous=True,
 )
 class PostgreSQLSource(BaseSource):
     """PostgreSQL source connector integrates with PostgreSQL databases to extract structured data.
