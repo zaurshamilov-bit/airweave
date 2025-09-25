@@ -3,7 +3,7 @@
   "info": {
     "title": "Airweave",
     "version": "0.1.0",
-    "description": "\n\n## API Groups\nThis API spec only includes the following API groups:\n- **Sources**: API endpoints for discovering available data source connectors and their configuration requirements\n- **Collections**: API endpoints for managing collections - logical groups of data sources that provide unified search capabilities\n- **Source Connections**: API endpoints for managing live connections to data sources. Source connections are the actual configured instances that Airweave uses to sync data from your apps and databases, transforming it into searchable, structured information within collections\n- **Auth Providers**: API endpoints for managing authentication provider connections and credentials\n"
+    "description": "\n\n## API Groups\nThis API spec only includes the following API groups:\n- **Sources**: API endpoints for discovering available data source connectors and their configuration requirements\n- **Collections**: API endpoints for managing collections - logical groups of data sources that provide unified search capabilities\n- **Source Connections**: API endpoints for managing live connections to data sources. Source connections are the actual configured instances that Airweave uses to sync data from your apps and databases, transforming it into searchable, structured information within collections\n"
   },
   "paths": {
     "/sources/detail/{short_name}": {
@@ -160,102 +160,6 @@
                       }
                     ]
                   }
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ]
-      }
-    },
-    "/auth-providers/connect": {
-      "put": {
-        "tags": [
-          "auth-providers"
-        ],
-        "summary": "Connect Or Update Auth Provider",
-        "description": "Create or update an auth provider connection.\n\nIf a connection for this auth provider already exists for the organization,\nit will be updated with the new credentials and fields.\nIf no connection exists, a new one will be created.\n\nArgs:\n-----\n    db: The database session\n    ctx: The current authentication context\n    auth_provider_connection_in: The auth provider connection data\n\nReturns:\n--------\n    schemas.AuthProviderConnection: The created or updated connection",
-        "operationId": "connect_or_update_auth_provider_auth_providers_connect_put",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthProviderConnectionCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthProviderConnection"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ]
-      }
-    },
-    "/auth-providers/detail/{short_name}": {
-      "get": {
-        "tags": [
-          "auth-providers"
-        ],
-        "summary": "Get Auth Provider",
-        "description": "Get details of a specific auth provider.\n\nArgs:\n-----\n    db: The database session\n    short_name: The short name of the auth provider\n    ctx: The current authentication context\n\nReturns:\n--------\n    schemas.AuthProvider: The auth provider details",
-        "operationId": "get_auth_provider_auth_providers_detail__short_name__get",
-        "parameters": [
-          {
-            "name": "short_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Short Name"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthProvider"
                 }
               }
             }
@@ -1116,6 +1020,63 @@
           }
         ]
       },
+      "patch": {
+        "tags": [
+          "source-connections"
+        ],
+        "summary": "Update",
+        "description": "Update a source connection.\n\nUpdateable fields:\n- name, description\n- config_fields\n- cron_schedule\n- auth_fields (direct auth only)",
+        "operationId": "update_source_connections__source_connection_id__patch",
+        "parameters": [
+          {
+            "name": "source_connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Source Connection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceConnectionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceConnection"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      },
       "delete": {
         "tags": [
           "source-connections"
@@ -1448,14 +1409,12 @@
             },
             "type": "object",
             "title": "Actions",
-            "description": "Dictionary of action types to check with their amounts",
+            "description": "Map of action short name to amount to check",
             "examples": [
               {
-                "collections": 1,
                 "entities": 1,
                 "queries": 1,
-                "source_connections": 1,
-                "syncs": 1
+                "source_connections": 1
               }
             ]
           }
@@ -1465,7 +1424,7 @@
           "actions"
         ],
         "title": "ActionCheckRequest",
-        "description": "Request schema for checking multiple actions."
+        "description": "Request body for checking multiple actions at once."
       },
       "ActionCheckResponse": {
         "properties": {
@@ -1474,8 +1433,7 @@
               "$ref": "#/components/schemas/SingleActionCheckResponse"
             },
             "type": "object",
-            "title": "Results",
-            "description": "Dictionary of action check results keyed by action type"
+            "title": "Results"
           }
         },
         "type": "object",
@@ -1483,7 +1441,7 @@
           "results"
         ],
         "title": "ActionCheckResponse",
-        "description": "Response schema for multiple action checks."
+        "description": "Response containing per-action check results."
       },
       "AuthProvider": {
         "properties": {
@@ -2035,12 +1993,6 @@
           "token"
         ],
         "title": "Body_connect_slack_with_token_connections_direct_token_slack_post"
-      },
-      "CancelSubscriptionRequest": {
-        "properties": {},
-        "type": "object",
-        "title": "CancelSubscriptionRequest",
-        "description": "Request to cancel subscription.\n\nSubscription will be canceled at the end of the current billing period.\nFor immediate cancellation, delete the organization instead."
       },
       "CheckoutSessionRequest": {
         "properties": {
@@ -3487,18 +3439,6 @@
             },
             "type": "object",
             "title": "By Type"
-          },
-          "last_updated": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Updated"
           }
         },
         "type": "object",
@@ -5485,19 +5425,6 @@
             "title": "Output Entity Definition Ids",
             "description": "List of entity definition IDs that this source can produce. Defines the data schema and structure that this connector outputs."
           },
-          "organization_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Organization Id",
-            "description": "Organization identifier for custom source connectors. System sources have this set to null."
-          },
           "labels": {
             "anyOf": [
               {
@@ -5512,6 +5439,12 @@
             ],
             "title": "Labels",
             "description": "Categorization tags to help users discover and filter sources by domain or use case."
+          },
+          "supports_continuous": {
+            "type": "boolean",
+            "title": "Supports Continuous",
+            "description": "Whether this source supports cursor-based continuous syncing for incremental data extraction. Sources with this capability can track their sync position and resume from where they left off.",
+            "default": false
           },
           "id": {
             "type": "string",
@@ -5988,62 +5921,14 @@
             "type": "boolean",
             "title": "Is Authenticated"
           },
-          "readable_auth_provider_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Readable Auth Provider Id"
-          },
-          "connection_init_session_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Connection Init Session Id"
-          },
-          "is_active": {
-            "type": "boolean",
-            "title": "Is Active",
-            "default": true
-          },
-          "last_sync": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SyncSummary"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "entity_count": {
             "type": "integer",
             "title": "Entity Count",
             "default": 0
           },
-          "last_job_status": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SyncJobStatus"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "auth_method": {
             "$ref": "#/components/schemas/AuthenticationMethod",
-            "description": "Compute authentication method from database fields.",
+            "description": "Get authentication method from database value.",
             "readOnly": true
           },
           "status": {
@@ -6065,7 +5950,7 @@
           "status"
         ],
         "title": "SourceConnectionListItem",
-        "description": "Minimal source connection for list views with computed fields."
+        "description": "Clean source connection for list views."
       },
       "SourceConnectionStatus": {
         "type": "string",
@@ -6284,6 +6169,74 @@
             ],
             "title": "Pending Plan Change At",
             "description": "When the pending plan change takes effect"
+          },
+          "has_yearly_prepay": {
+            "type": "boolean",
+            "title": "Has Yearly Prepay",
+            "description": "Whether organization has an active yearly prepay credit",
+            "default": false
+          },
+          "yearly_prepay_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Prepay Started At",
+            "description": "When yearly prepay was started"
+          },
+          "yearly_prepay_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Prepay Expires At",
+            "description": "When yearly prepay expires"
+          },
+          "yearly_prepay_amount_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Prepay Amount Cents",
+            "description": "Total amount (in cents) credited for yearly prepay"
+          },
+          "yearly_prepay_coupon_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Prepay Coupon Id",
+            "description": "Coupon ID used for yearly prepay"
+          },
+          "yearly_prepay_payment_intent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Prepay Payment Intent Id",
+            "description": "Payment intent ID used for yearly prepay"
           }
         },
         "type": "object",
@@ -6369,17 +6322,6 @@
             "type": "string",
             "title": "Sync Type",
             "default": "full"
-          },
-          "minute_level_cron_schedule": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minute Level Cron Schedule"
           },
           "sync_metadata": {
             "anyOf": [
@@ -6529,17 +6471,6 @@
             "type": "string",
             "title": "Sync Type",
             "default": "full"
-          },
-          "minute_level_cron_schedule": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minute Level Cron Schedule"
           },
           "sync_metadata": {
             "anyOf": [
@@ -7189,48 +7120,6 @@
         "title": "SyncStatus",
         "description": "Sync status enum."
       },
-      "SyncSummary": {
-        "properties": {
-          "last_run": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Run"
-          },
-          "next_run": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Run"
-          },
-          "success_rate": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Success Rate"
-          }
-        },
-        "type": "object",
-        "title": "SyncSummary",
-        "description": "Sync summary for list views."
-      },
       "SyncUpdate": {
         "properties": {
           "name": {
@@ -7310,17 +7199,6 @@
               }
             ],
             "title": "Sync Type"
-          },
-          "minute_level_cron_schedule": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minute Level Cron Schedule"
           }
         },
         "type": "object",
@@ -7401,17 +7279,6 @@
             "type": "string",
             "title": "Sync Type",
             "default": "full"
-          },
-          "minute_level_cron_schedule": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minute Level Cron Schedule"
           },
           "sync_metadata": {
             "anyOf": [
@@ -7693,6 +7560,19 @@
             "type": "string",
             "title": "Plan",
             "description": "New plan (developer, startup)"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period",
+            "description": "Billing period for the plan: 'monthly' or 'yearly'",
+            "default": "monthly"
           }
         },
         "type": "object",
@@ -7771,16 +7651,14 @@
               "status": "active",
               "usage": {
                 "billing_period_id": "550e8400-e29b-41d4-a716-446655440000",
-                "collections": 5,
                 "entities": 45000,
-                "max_collections": 5,
                 "max_entities": 100000,
                 "max_queries": 1000,
                 "max_source_connections": 10,
-                "max_syncs": 10,
+                "max_team_members": 2,
                 "queries": 89,
                 "source_connections": 3,
-                "syncs": 5,
+                "team_members": 2,
                 "timestamp": "2024-01-15T12:00:00Z"
               }
             },
@@ -7799,11 +7677,6 @@
       },
       "UsageSnapshot": {
         "properties": {
-          "syncs": {
-            "type": "integer",
-            "title": "Syncs",
-            "description": "Number of syncs executed"
-          },
           "entities": {
             "type": "integer",
             "title": "Entities",
@@ -7814,27 +7687,15 @@
             "title": "Queries",
             "description": "Search queries executed"
           },
-          "collections": {
-            "type": "integer",
-            "title": "Collections",
-            "description": "Collections created"
-          },
           "source_connections": {
             "type": "integer",
             "title": "Source Connections",
             "description": "Source connections configured"
           },
-          "max_syncs": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Syncs",
-            "description": "Maximum syncs allowed"
+          "team_members": {
+            "type": "integer",
+            "title": "Team Members",
+            "description": "Team members in the organization"
           },
           "max_entities": {
             "anyOf": [
@@ -7860,18 +7721,6 @@
             "title": "Max Queries",
             "description": "Maximum queries allowed"
           },
-          "max_collections": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Collections",
-            "description": "Maximum collections allowed"
-          },
           "max_source_connections": {
             "anyOf": [
               {
@@ -7883,6 +7732,18 @@
             ],
             "title": "Max Source Connections",
             "description": "Maximum source connections allowed"
+          },
+          "max_team_members": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Team Members",
+            "description": "Maximum team members allowed"
           },
           "timestamp": {
             "type": "string",
@@ -7899,11 +7760,10 @@
         },
         "type": "object",
         "required": [
-          "syncs",
           "entities",
           "queries",
-          "collections",
           "source_connections",
+          "team_members",
           "timestamp",
           "billing_period_id"
         ],
