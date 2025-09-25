@@ -3,6 +3,9 @@ Test module for CRON Schedule Updates with Temporal Validation.
 
 This module tests the integration between source connection schedule updates
 and Temporal workflow scheduler.
+
+NOTE: These tests are only run when testing locally (localhost) as they require
+direct access to the Temporal API which is not available in dev/prod environments.
 """
 
 import time

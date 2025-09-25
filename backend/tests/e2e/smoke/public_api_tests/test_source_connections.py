@@ -511,9 +511,15 @@ def test_source_connections(
     # =============================
     # Test 2: CRON Schedule Updates with Temporal Validation
     # =============================
-    from .test_temporal_schedules import run_temporal_schedule_tests, test_minute_level_schedules
+    # Only run Temporal-related tests when running locally (not against dev/prod)
+    is_local = "localhost" in api_url or "127.0.0.1" in api_url or "0.0.0.0" in api_url
 
-    try:
+    if is_local:
+        from .test_temporal_schedules import (
+            run_temporal_schedule_tests,
+            test_minute_level_schedules,
+        )
+
         # Use the first created connection for schedule testing
         if len(created_connections) > 0:
             test_conn_id = created_connections[0]
@@ -523,18 +529,6 @@ def test_source_connections(
 
             # Test minute-level schedules if we have continuous sources
             test_minute_level_schedules(api_url, headers, created_connections)
-        else:
-            print("  ⚠️ Skipping CRON tests - no connections created")
-
-    except AssertionError as e:
-        print(f"  ❌ CRON schedule test failed: {e}")
-        raise
-    except ImportError as e:
-        print(f"  ⚠️ Temporal client not available, skipping direct validation: {e}")
-        print("  ℹ️ Install temporalio package to enable direct Temporal validation")
-    except Exception as e:
-        print(f"  ❌ Unexpected error in CRON schedule test: {e}")
-        raise
 
     # =============================
     # Test 3: Direct Auth with Immediate Sync
@@ -1052,9 +1046,22 @@ def test_source_connections(
     # =============================
     print("\n✅ Source Connections test completed successfully")
     print(f"   Created {len(created_connections)} connections")
-    print(
-        f"   Tests run: Direct Auth, OAuth Browser, OAuth Token, Auth Providers (Composio, Pipedream), Error Handling, CRON Schedule Updates, List Operations"
-    )
+
+    # Build test list based on what was actually run
+    tests_run = [
+        "Direct Auth",
+        "OAuth Browser",
+        "OAuth Token",
+        "Auth Providers (Composio, Pipedream)",
+        "Error Handling",
+        "List Operations",
+    ]
+
+    # Add CRON tests only if they were run (locally)
+    if is_local:
+        tests_run.insert(5, "CRON Schedule Updates")  # Insert before "List Operations"
+
+    print(f"   Tests run: {', '.join(tests_run)}")
 
     # Return first two connection IDs (maintains compatibility with runner.py)
     conn1 = created_connections[0] if len(created_connections) > 0 else ""
