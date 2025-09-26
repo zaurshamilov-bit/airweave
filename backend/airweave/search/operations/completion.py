@@ -189,7 +189,6 @@ class CompletionGeneration(SearchOperation):
                     model=model,
                     messages=messages,
                     max_completion_tokens=self.max_tokens,
-                    temperature=0.6,
                     top_p=1,
                     frequency_penalty=0,
                     presence_penalty=0,
@@ -230,7 +229,6 @@ class CompletionGeneration(SearchOperation):
                         model=model,
                         messages=messages,
                         max_completion_tokens=self.max_tokens,
-                        temperature=0.6,
                     )
 
                     api_time = (time.time() - api_start) * 1000
