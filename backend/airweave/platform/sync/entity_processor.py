@@ -62,9 +62,8 @@ class EntityProcessor:
                 self._entity_ids_encountered_by_type
             )
 
-            if getattr(entity, "should_skip", False) or getattr(
-                getattr(entity, "airweave_system_metadata", None), "should_skip", False
-            ):
+            # Entities always have airweave_system_metadata with should_skip defaulting to False
+            if entity.airweave_system_metadata.should_skip:
                 await sync_context.progress.increment("skipped", 1)
                 return []
 
@@ -184,11 +183,8 @@ class EntityProcessor:
                 continue
             self._entity_ids_encountered_by_type[et].add(e.entity_id)
 
-            sys_meta = getattr(e, "airweave_system_metadata", None)
-            should_skip_flag = getattr(e, "should_skip", False) or (
-                sys_meta and getattr(sys_meta, "should_skip", False)
-            )
-            if should_skip_flag:
+            # Entities always have airweave_system_metadata with should_skip defaulting to False
+            if e.airweave_system_metadata.should_skip:
                 skipped_due_to_flag += 1
                 continue
 
