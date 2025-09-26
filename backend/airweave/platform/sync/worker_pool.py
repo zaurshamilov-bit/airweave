@@ -26,12 +26,18 @@ class AsyncWorkerPool:
         self.max_workers = max_workers
         self.logger = logger
 
+        # Simple flag to prevent submissions after cancellation
+        self._cancelled = False
+
     async def submit(self, coro: Callable, *args, **kwargs) -> asyncio.Task:
         """Submit a coroutine to be executed by the worker pool.
 
         Creates a task, adds it to our tracking set, and returns it.
         Tasks run with controlled concurrency through the semaphore.
         """
+        if self._cancelled:
+            raise RuntimeError("Cannot submit tasks after worker pool has been cancelled")
+
         task_id = f"task_{len(self.pending_tasks) + 1}"
 
         self.logger.debug(
@@ -75,6 +81,13 @@ class AsyncWorkerPool:
                 )
                 return result
 
+            except asyncio.CancelledError:
+                elapsed = asyncio.get_event_loop().time() - start_time
+                self.logger.warning(
+                    f"🚫 WORKER_CANCELLED [{task_id}] "
+                    f"Cancelled after {elapsed:.2f}s (thread: {thread_id})"
+                )
+                raise
             except Exception as e:
                 elapsed = asyncio.get_event_loop().time() - start_time
                 self.logger.warning(
@@ -96,3 +109,18 @@ class AsyncWorkerPool:
             )
         else:
             self.logger.debug(f"🏁 WORKER_CLEANUP [{task_id}] Task cleaned up successfully")
+
+    async def cancel_all(self) -> None:
+        """Cancel all pending tasks immediately."""
+        # Set flag to prevent new submissions
+        self._cancelled = True
+
+        if self.pending_tasks:
+            self.logger.info(f"Cancelling {len(self.pending_tasks)} pending tasks...")
+            for task in list(self.pending_tasks):
+                if not task.done():
+                    task.cancel()
+
+            # Wait for cancellations to complete
+            await asyncio.gather(*self.pending_tasks, return_exceptions=True)
+            self.logger.info("All tasks cancelled")

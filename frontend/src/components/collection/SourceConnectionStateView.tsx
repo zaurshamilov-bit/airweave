@@ -115,11 +115,13 @@ const SourceConnectionStateView: React.FC<Props> = ({
 }) => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [sourceConnection, setSourceConnection] = useState<SourceConnection | null>(sourceConnectionData || null);
-  const [isRunningSync, setIsRunningSync] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
   const [nextRunTime, setNextRunTime] = useState<string | null>(null);
   const [lastRanDisplay, setLastRanDisplay] = useState<string>('Never');
   const [isRefreshingAuth, setIsRefreshingAuth] = useState(false);
+
+  // Track if we initiated a cancellation (for timeout handling)
+  const [isLocalCancelling, setIsLocalCancelling] = useState(false);
+  const cancelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Use usage store for limits
   const actionChecks = useUsageStore(state => state.actionChecks);
   const isCheckingUsage = useUsageStore(state => state.isLoading);
@@ -363,7 +365,8 @@ const SourceConnectionStateView: React.FC<Props> = ({
           ((currentState.last_sync_job.status as any) === 'running' ||
             currentState.last_sync_job.status === 'in_progress' ||
             currentState.last_sync_job.status === 'pending' ||
-            currentState.last_sync_job.status === 'created')) {
+            currentState.last_sync_job.status === 'created' ||
+            currentState.last_sync_job.status === 'cancelling')) {
           console.log('Subscribing to active sync job:', currentState.last_sync_job.id);
           await mediator.current.subscribeToJobUpdates(currentState.last_sync_job.id);
         }
@@ -383,6 +386,11 @@ const SourceConnectionStateView: React.FC<Props> = ({
 
     return () => {
       mediator.current?.cleanup();
+      // Clean up any pending timeout
+      if (cancelTimeoutRef.current) {
+        clearTimeout(cancelTimeoutRef.current);
+        cancelTimeoutRef.current = null;
+      }
     };
   }, [sourceConnectionId, sourceConnectionData?.status, sourceConnectionData?.auth?.authenticated]); // Add auth status to deps
 
@@ -412,11 +420,8 @@ const SourceConnectionStateView: React.FC<Props> = ({
   useEffect(() => {
     const updateLastRan = () => {
       // Don't show "Running now" - let the status badge handle that
-      if (sourceConnection?.last_sync_job?.started_at) {
-        setLastRanDisplay(formatTimeAgo(sourceConnection.last_sync_job.started_at));
-      } else {
-        setLastRanDisplay('Never');
-      }
+      const startedAt = storeConnection?.last_sync_job?.started_at || sourceConnection?.last_sync_job?.started_at;
+      setLastRanDisplay(startedAt ? formatTimeAgo(startedAt) : 'Never');
     };
 
     updateLastRan();
@@ -424,19 +429,32 @@ const SourceConnectionStateView: React.FC<Props> = ({
     const interval = setInterval(updateLastRan, 60000);
 
     return () => clearInterval(interval);
-  }, [sourceConnection?.last_sync_job?.started_at, formatTimeAgo]);
+  }, [storeConnection?.last_sync_job?.started_at, sourceConnection?.last_sync_job?.started_at, formatTimeAgo]);
 
-  // Clear cancelling state when sync status changes to cancelled
+
+  // Clear local cancelling state when appropriate
   useEffect(() => {
     const syncStatus = storeConnection?.last_sync_job?.status;
-    if (syncStatus === 'cancelled' && isCancelling) {
-      setIsCancelling(false);
-      toast({
-        title: "Sync Cancelled",
-        description: "The sync job has been successfully cancelled.",
-      });
+
+    if (isLocalCancelling) {
+      // Clear when:
+      // 1. Backend confirms cancelling status (we can rely on backend now)
+      // 2. Job reaches a final state
+      // 3. Status is not a running state (means job ended or never started)
+      if (syncStatus === 'cancelling' ||
+          syncStatus === 'cancelled' ||
+          syncStatus === 'completed' ||
+          syncStatus === 'failed' ||
+          (!syncStatus || (syncStatus !== 'running' && syncStatus !== 'in_progress' && syncStatus !== 'pending' && syncStatus !== 'created'))) {
+        console.log('Clearing isLocalCancelling due to status:', syncStatus);
+        setIsLocalCancelling(false);
+        if (cancelTimeoutRef.current) {
+          clearTimeout(cancelTimeoutRef.current);
+          cancelTimeoutRef.current = null;
+        }
+      }
     }
-  }, [storeConnection?.last_sync_job?.status, isCancelling]);
+  }, [storeConnection?.last_sync_job?.status, isLocalCancelling]);
 
   // Refetch source connection when sync fails to get latest error details
   useEffect(() => {
@@ -447,6 +465,14 @@ const SourceConnectionStateView: React.FC<Props> = ({
       fetchSourceConnection();
     }
   }, [storeConnection?.last_sync_job?.status, storeConnection?.last_sync_job?.error, fetchSourceConnection]);
+
+  // Refetch on completion or cancellation to refresh counts and latest job
+  useEffect(() => {
+    const syncStatus = storeConnection?.last_sync_job?.status;
+    if (syncStatus === 'completed' || syncStatus === 'cancelled' || syncStatus === 'failed') {
+      fetchSourceConnection();
+    }
+  }, [storeConnection?.last_sync_job?.status, fetchSourceConnection]);
 
   // Usage limits are checked at app level by UsageChecker component
 
@@ -461,8 +487,15 @@ const SourceConnectionStateView: React.FC<Props> = ({
       });
       return;
     }
+
+    // Clear any lingering cancellation state
+    setIsLocalCancelling(false);
+    if (cancelTimeoutRef.current) {
+      clearTimeout(cancelTimeoutRef.current);
+      cancelTimeoutRef.current = null;
+    }
+
     try {
-      setIsRunningSync(true);
       const response = await apiClient.post(`/source-connections/${sourceConnectionId}/run`);
       if (response.ok) {
         const syncJob = await response.json();
@@ -475,8 +508,6 @@ const SourceConnectionStateView: React.FC<Props> = ({
         if (mediator.current && syncJob.id) {
           await mediator.current.subscribeToJobUpdates(syncJob.id);
         }
-        // Clear isRunningSync once the sync has actually started
-        setIsRunningSync(false);
       } else {
         throw new Error("Failed to start sync");
       }
@@ -486,26 +517,38 @@ const SourceConnectionStateView: React.FC<Props> = ({
         description: error instanceof Error ? error.message : "Failed to start sync",
         variant: "destructive"
       });
-      setIsRunningSync(false);
     }
   };
 
   const handleCancelSync = async () => {
-    // Use job id from last_sync_job
     const jobId = storeConnection?.last_sync_job?.id || sourceConnection?.last_sync_job?.id;
 
     if (!jobId) {
-      toast({
-        title: "Error",
-        description: "No active sync job to cancel",
-        variant: "destructive"
-      });
       return;
     }
 
+    console.log('CANCEL CLICKED - Setting isLocalCancelling to true');
+    // Set cancelling state immediately for instant UI feedback
+    setIsLocalCancelling(true);
+
+    // Clear any existing timeout
+    if (cancelTimeoutRef.current) {
+      clearTimeout(cancelTimeoutRef.current);
+      cancelTimeoutRef.current = null;
+    }
+
     try {
-      setIsCancelling(true);
-      console.log(`Cancelling sync job ${jobId} for connection ${sourceConnectionId}`);
+      // Set a 30-second timeout for cancellation
+      cancelTimeoutRef.current = setTimeout(() => {
+        setIsLocalCancelling(false);
+        toast({
+          title: "Cancellation Timeout",
+          description: "The cancellation request timed out. The sync may still be cancelled in the background.",
+          variant: "destructive"
+        });
+        cancelTimeoutRef.current = null;
+      }, 30000);
+
       const response = await apiClient.post(`/source-connections/${sourceConnectionId}/jobs/${jobId}/cancel`);
 
       if (response.ok) {
@@ -513,19 +556,23 @@ const SourceConnectionStateView: React.FC<Props> = ({
           title: "Cancellation Requested",
           description: "The sync is being cancelled. This may take a moment to complete.",
         });
-        // Don't clear isCancelling here - it will be cleared when we detect the status change
+        // Don't clear isLocalCancelling here - let the status change clear it
       } else {
         const errorText = await response.text();
         throw new Error(errorText || "Failed to cancel sync job");
       }
     } catch (error) {
-      console.error("Error cancelling sync:", error);
+      // Clear on error
+      setIsLocalCancelling(false);
+      if (cancelTimeoutRef.current) {
+        clearTimeout(cancelTimeoutRef.current);
+        cancelTimeoutRef.current = null;
+      }
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to cancel sync job",
         variant: "destructive"
       });
-      setIsCancelling(false);
     }
   };
 
@@ -580,20 +627,40 @@ const SourceConnectionStateView: React.FC<Props> = ({
     );
   }
 
-  // Sync states - use real-time updates from store if available, otherwise use source connection data
+  // Derive sync state from job status - single source of truth
   const currentSyncJob = storeConnection?.last_sync_job || sourceConnection?.last_sync_job;
   const jobStatus = currentSyncJob?.status as unknown as string | undefined;
+
+  // Simple state machine: IDLE | SYNCING | CANCELLING
+  // FORCE CANCELLING STATE when isLocalCancelling is true
+  let syncState: 'IDLE' | 'SYNCING' | 'CANCELLING' = 'IDLE';
+  if (isLocalCancelling) {
+    // ALWAYS show cancelling if we clicked the button
+    syncState = 'CANCELLING';
+  } else if (jobStatus === 'cancelling') {
+    syncState = 'CANCELLING';
+  } else if (jobStatus === 'running' || jobStatus === 'in_progress' || jobStatus === 'pending' || jobStatus === 'created') {
+    syncState = 'SYNCING';
+  }
+
+  console.log('SYNC STATE:', { syncState, isLocalCancelling, jobStatus });
+
+  // Legacy flags for compatibility
   const isRunning = jobStatus === 'running' || jobStatus === 'in_progress';
   const isPending = currentSyncJob?.status === 'pending' || currentSyncJob?.status === 'created';
-  const isSyncing = isRunning || isPending;
+  const isCancellingStatus = jobStatus === 'cancelling';
+  const isCancelledStatus = currentSyncJob?.status === 'cancelled';
+  const isSyncing = syncState !== 'IDLE';
 
   // Get sync status display
   const getSyncStatusDisplay = () => {
     if (sourceConnection?.status === 'pending_auth' || !sourceConnection?.auth?.authenticated) {
       return { text: 'Not Authenticated', color: 'bg-cyan-500', icon: null };
     }
+    if (syncState === 'CANCELLING') return { text: 'Cancelling', color: 'bg-orange-500 animate-pulse', icon: 'loader' };
     if (currentSyncJob?.status === 'failed') return { text: 'Failed', color: 'bg-red-500', icon: null };
     if (currentSyncJob?.status === 'completed') return { text: 'Completed', color: 'bg-green-500', icon: null };
+    if (currentSyncJob?.status === 'cancelled') return { text: 'Cancelled', color: 'bg-gray-500', icon: null };
     if (isRunning) return { text: 'Syncing', color: 'bg-blue-500 animate-pulse', icon: 'loader' };
     if (isPending) return { text: 'Pending', color: 'bg-yellow-500 animate-pulse', icon: 'loader' };
     return { text: 'Ready', color: 'bg-gray-400', icon: null };
@@ -638,7 +705,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
             <div className={cn(
               "h-8 px-3 py-1.5 rounded-md shadow-sm flex items-center gap-2 min-w-[90px]",
               // Highlight when sync is running
-              (isRunning || isPending)
+              (isRunning || isPending || isCancellingStatus)
                 ? isDark
                   ? "bg-blue-900/30 border border-blue-700/50"
                   : "bg-blue-50 border border-blue-200"
@@ -674,7 +741,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
             </div>
 
             {/* Last Sync Card - Only show when not actively syncing */}
-            {!(isRunning || isPending) && (
+            {!(isRunning || isPending || isCancellingStatus) && (
               <TooltipProvider delayDuration={100}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -709,48 +776,51 @@ const SourceConnectionStateView: React.FC<Props> = ({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    onClick={isSyncing ? handleCancelSync : (!entitiesAllowed || isCheckingUsage) ? undefined : handleRunSync}
-                    disabled={isRunningSync || isCancelling || (!entitiesAllowed && !isSyncing)}
+                    onClick={() => {
+                      console.log('BUTTON CLICKED, syncState:', syncState);
+                      if (syncState === 'IDLE') {
+                        if (!entitiesAllowed || isCheckingUsage) return;
+                        handleRunSync();
+                      } else if (syncState === 'SYNCING') {
+                        console.log('Calling handleCancelSync');
+                        handleCancelSync();
+                      }
+                      // Do nothing if CANCELLING
+                    }}
+                    disabled={syncState === 'CANCELLING' || (!entitiesAllowed && syncState === 'IDLE')}
                     className={cn(
                       "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
-                      isSyncing
-                        ? isCancelling
+                      syncState !== 'IDLE'
+                        ? syncState === 'CANCELLING'
                           ? isDark
                             ? "bg-orange-900/30 border-orange-700 hover:bg-orange-900/50 cursor-not-allowed"
                             : "bg-orange-50 border-orange-200 hover:bg-orange-100 cursor-not-allowed"
                           : isDark
                             ? "bg-red-900/30 border-red-700 hover:bg-red-900/50 cursor-pointer"
                             : "bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer"
-                        : isRunningSync || (!entitiesAllowed && !isSyncing) || isCheckingUsage
+                        : (!entitiesAllowed && syncState === 'IDLE') || isCheckingUsage
                           ? "bg-muted border-border cursor-not-allowed opacity-50"
                           : isDark
                             ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
                             : "bg-white border-border hover:bg-muted cursor-pointer"
                     )}
-                    title={isSyncing ? (isCancelling ? "Cancelling sync..." : "Cancel sync") : (isRunningSync ? "Starting sync..." : (!entitiesAllowed ? "Entity limit reached" : "Refresh data"))}
+                    title={syncState === 'CANCELLING' ? "Cancelling sync..." : syncState === 'SYNCING' ? "Cancel sync" : (!entitiesAllowed ? "Entity limit reached" : "Refresh data")}
                   >
-                    {isSyncing ? (
-                      isCancelling ? (
-                        <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
-                      ) : (
-                        <Square className="h-3 w-3 text-red-500" />
-                      )
+                    {syncState === 'CANCELLING' ? (
+                      <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
+                    ) : syncState === 'SYNCING' ? (
+                      <Square className="h-3 w-3 text-red-500" />
                     ) : (
-                      <RefreshCw className={cn(
-                        "h-3 w-3 text-muted-foreground",
-                        isRunningSync && "animate-spin"
-                      )} />
+                      <RefreshCw className="h-3 w-3 text-muted-foreground" />
                     )}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="text-xs">
-                    {isSyncing
-                      ? isCancelling
-                        ? "Cancelling sync..."
-                        : "Cancel sync"
-                      : isRunningSync
-                        ? "Starting sync..."
+                    {syncState === 'CANCELLING'
+                      ? "Cancelling sync..."
+                      : syncState === 'SYNCING'
+                        ? "Cancel sync"
                         : !entitiesAllowed && entitiesCheckDetails?.reason === 'usage_limit_exceeded'
                           ? "Entity processing limit reached. Upgrade your plan to sync more data."
                           : !entitiesAllowed && entitiesCheckDetails?.reason === 'payment_required'

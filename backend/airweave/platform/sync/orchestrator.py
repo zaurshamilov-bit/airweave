@@ -4,6 +4,7 @@ import asyncio
 from typing import Optional
 
 from airweave import schemas
+from airweave.analytics import business_events
 from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.exceptions import PaymentRequiredException, UsageLimitExceededException
 from airweave.core.guard_rail_service import ActionType
@@ -33,32 +34,54 @@ class SyncOrchestrator:
         self,
         entity_processor: EntityProcessor,
         worker_pool: AsyncWorkerPool,
+        stream: AsyncSourceStream,
         sync_context: SyncContext,
     ):
-        """Initialize the sync orchestrator."""
+        """Initialize the sync orchestrator with ALL required components."""
         self.entity_processor = entity_processor
         self.worker_pool = worker_pool
+        self.stream = stream  # Stream is now passed in, not created here!
         self.sync_context = sync_context
 
-        # Buffer for bursty sources
-        self.stream_buffer_size = 10000
-
-        # Knobs read from context
-        self.should_batch: bool = getattr(sync_context, "should_batch", True)
-        self.batch_size: int = getattr(sync_context, "batch_size", 64)
-        self.max_batch_latency_ms: int = getattr(sync_context, "max_batch_latency_ms", 200)
+        # Knobs read from context - use explicit defaults instead of getattr
+        self.should_batch: bool = (
+            sync_context.should_batch if hasattr(sync_context, "should_batch") else True
+        )
+        self.batch_size: int = (
+            sync_context.batch_size if hasattr(sync_context, "batch_size") else 64
+        )
+        self.max_batch_latency_ms: int = (
+            sync_context.max_batch_latency_ms
+            if hasattr(sync_context, "max_batch_latency_ms")
+            else 200
+        )
 
     async def run(self) -> schemas.Sync:
         """Execute the synchronization process."""
+        final_status = SyncJobStatus.FAILED  # Default to failed, will be updated based on outcome
+        error_message: Optional[str] = None  # Track error message for finalization
         try:
             await self._start_sync()
             await self._process_entities()
+            await self._cleanup_orphaned_entities_if_needed()
             await self._complete_sync()
+            final_status = SyncJobStatus.COMPLETED
             return self.sync_context.sync
+        except asyncio.CancelledError:
+            # Cooperative cancellation: ensure producer and ALL pending tasks are stopped
+            self.sync_context.logger.info("Cancellation requested, handling gracefully...")
+            await self._handle_cancellation()
+            final_status = SyncJobStatus.CANCELLED
+            raise
         except Exception as e:
+            error_message = get_error_message(e)
             await self._handle_sync_failure(e)
+            final_status = SyncJobStatus.FAILED
             raise
         finally:
+            # Always finalize progress and trackers with error message if available
+            await self._finalize_progress_and_trackers(final_status, error_message)
+
             # Always flush guard rail usage to prevent data loss
             try:
                 self.sync_context.logger.info("Flushing guard rail usage data...")
@@ -69,17 +92,21 @@ class SyncOrchestrator:
                 )
 
     async def _start_sync(self) -> None:
-        """Initialize sync job and update status to running."""
+        """Initialize sync job and start all components."""
         self.sync_context.logger.info("Starting sync job")
+
+        # Start the stream (worker pool doesn't need starting)
+        await self.stream.start()
+
+        started_at = utc_now_naive()
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.RUNNING,
             ctx=self.sync_context.ctx,
-            started_at=utc_now_naive(),
+            started_at=started_at,
         )
 
-        # Track sync started
-        from airweave.analytics import business_events
+        self.sync_context.sync_job.started_at = started_at
 
         business_events.track_sync_started(
             ctx=self.sync_context.ctx,
@@ -104,11 +131,10 @@ class SyncOrchestrator:
 
         self.sync_context.logger.info(
             f"Starting pull-based processing from source {self.sync_context.source._name} "
-            f"(buffer: {self.stream_buffer_size}, max workers: {self.worker_pool.max_workers}, "
+            f"(max workers: {self.worker_pool.max_workers}, "
             f"batch_size: {self.batch_size}, max_batch_latency_ms: {self.max_batch_latency_ms})"
         )
 
-        stream = None
         stream_error: Optional[Exception] = None
         pending_tasks: set[asyncio.Task] = set()
 
@@ -117,14 +143,8 @@ class SyncOrchestrator:
         flush_deadline: Optional[float] = None  # event-loop time when we must flush
 
         try:
-            stream = AsyncSourceStream(
-                self.sync_context.source.generate_entities(),
-                queue_size=self.stream_buffer_size,
-                logger=self.sync_context.logger,
-            )
-            await stream.start()
-
-            async for entity in stream.get_entities():
+            # Use the pre-created stream (already started in _start_sync)
+            async for entity in self.stream.get_entities():
                 try:
                     await self.sync_context.guard_rail.is_allowed(ActionType.ENTITIES)
                 except (UsageLimitExceededException, PaymentRequiredException) as guard_error:
@@ -142,9 +162,7 @@ class SyncOrchestrator:
                     break
 
                 # Handle skipped entities without using a worker
-                if getattr(
-                    getattr(entity, "airweave_system_metadata", None), "should_skip", False
-                ) or getattr(entity, "should_skip", False):
+                if entity.airweave_system_metadata.should_skip:
                     self.sync_context.logger.debug(f"Skipping entity: {entity.entity_id}")
                     await self.sync_context.progress.increment("skipped", 1)
                     continue
@@ -183,11 +201,20 @@ class SyncOrchestrator:
                 batch_buffer = []
                 flush_deadline = None
 
+        except asyncio.CancelledError as e:
+            # Propagate cancellation: set stream_error so finalize cancels tasks and stop stream
+            stream_error = e
+            self.sync_context.logger.info("Cancelled during batched processing; finalizing...")
         except Exception as e:
             stream_error = e
             self.sync_context.logger.error(f"Error during entity streaming: {get_error_message(e)}")
         finally:
-            await self._finalize_stream(stream, stream_error, pending_tasks)
+            # Clean up stream and tasks
+            await self._finalize_stream_and_tasks(self.stream, stream_error, pending_tasks)
+
+            # Re-raise error if there was one
+            if stream_error:
+                raise stream_error
 
     async def _submit_batch_and_trim(
         self,
@@ -221,22 +248,15 @@ class SyncOrchestrator:
 
         self.sync_context.logger.info(
             f"Starting pull-based processing from source {self.sync_context.source._name} "
-            f"(buffer: {self.stream_buffer_size}, max workers: {self.worker_pool.max_workers})"
+            f"(max workers: {self.worker_pool.max_workers})"
         )
 
-        stream = None
         stream_error: Optional[Exception] = None
         pending_tasks: set[asyncio.Task] = set()
 
         try:
-            stream = AsyncSourceStream(
-                self.sync_context.source.generate_entities(),
-                queue_size=self.stream_buffer_size,
-                logger=self.sync_context.logger,
-            )
-            await stream.start()
-
-            async for entity in stream.get_entities():
+            # Use the pre-created stream (already started in _start_sync)
+            async for entity in self.stream.get_entities():
                 try:
                     await self.sync_context.guard_rail.is_allowed(ActionType.ENTITIES)
                 except (UsageLimitExceededException, PaymentRequiredException) as guard_error:
@@ -247,9 +267,8 @@ class SyncOrchestrator:
                     break
 
                 # Handle skipped entities safely
-                if getattr(
-                    getattr(entity, "airweave_system_metadata", None), "should_skip", False
-                ) or getattr(entity, "should_skip", False):
+                # Entities always have airweave_system_metadata with should_skip defaulting to False
+                if entity.airweave_system_metadata.should_skip:
                     self.sync_context.logger.debug(f"Skipping entity: {entity.entity_id}")
                     await self.sync_context.progress.increment("skipped", 1)
                     continue
@@ -267,11 +286,19 @@ class SyncOrchestrator:
                 if len(pending_tasks) >= self.worker_pool.max_workers:
                     pending_tasks = await self._handle_completed_tasks(pending_tasks)
 
+        except asyncio.CancelledError as e:
+            stream_error = e
+            self.sync_context.logger.info("Cancelled during unbatched processing; finalizing...")
         except Exception as e:
             stream_error = e
             self.sync_context.logger.error(f"Error during entity streaming: {get_error_message(e)}")
         finally:
-            await self._finalize_stream(stream, stream_error, pending_tasks)
+            # Clean up stream and tasks
+            await self._finalize_stream_and_tasks(self.stream, stream_error, pending_tasks)
+
+            # Re-raise error if there was one
+            if stream_error:
+                raise stream_error
 
     # ----------------------------- Shared helpers -----------------------------
     async def _handle_completed_tasks(self, pending_tasks: set[asyncio.Task]) -> set[asyncio.Task]:
@@ -297,27 +324,32 @@ class SyncOrchestrator:
                         f"Task failed with exception: {task.exception()}"
                     )
 
-    async def _finalize_stream(
+    async def _finalize_stream_and_tasks(
         self,
-        stream: Optional[AsyncSourceStream],
+        stream: AsyncSourceStream,
         stream_error: Optional[Exception],
         pending_tasks: set[asyncio.Task],
     ) -> None:
-        """Finalize after streaming completes (both paths)."""
-        if stream:
+        """Finalize ONLY the stream and pending tasks."""
+        # 1. Stop or cancel the stream based on error type
+        if isinstance(stream_error, asyncio.CancelledError):
+            await stream.cancel()
+        else:
             await stream.stop()
 
+        # 2. Cancel pending tasks if there was an error
         if stream_error:
-            self.sync_context.logger.info(f"Cancelling {len(pending_tasks)} pending tasks...")
+            self.sync_context.logger.info(
+                f"Cancelling {len(pending_tasks)} pending tasks due to error..."
+            )
             for task in pending_tasks:
                 task.cancel()
 
+        # 3. Wait for all tasks to complete
         await self._wait_for_remaining_tasks(pending_tasks)
 
-        # ------------------------------------------------------------
-        # Perform orphan cleanup BEFORE finalizing live state,
-        # so realtime totals match DB at end of run.
-        # ------------------------------------------------------------
+    async def _cleanup_orphaned_entities_if_needed(self) -> None:
+        """Cleanup orphaned entities based on sync type."""
         has_cursor_data = bool(
             hasattr(self.sync_context, "cursor")
             and self.sync_context.cursor
@@ -325,44 +357,38 @@ class SyncOrchestrator:
         )
         should_cleanup = self.sync_context.force_full_sync or not has_cursor_data
 
-        if not stream_error and should_cleanup:
-            try:
-                if self.sync_context.force_full_sync:
-                    self.sync_context.logger.info(
-                        "🧹 Starting orphaned entity cleanup phase (FORCED FULL SYNC - "
-                        "daily cleanup schedule)."
-                    )
-                else:
-                    self.sync_context.logger.info(
-                        "🧹 Starting orphaned entity cleanup phase (first sync - no cursor data)"
-                    )
-                await self.entity_processor.cleanup_orphaned_entities(self.sync_context)
-            except Exception as cleanup_error:
-                self.sync_context.logger.error(
-                    f"💥 Orphaned entity cleanup failed: {get_error_message(cleanup_error)}",
-                    exc_info=True,
+        if should_cleanup:
+            if self.sync_context.force_full_sync:
+                self.sync_context.logger.info(
+                    "🧹 Starting orphaned entity cleanup phase (FORCED FULL SYNC - "
+                    "daily cleanup schedule)."
                 )
-                raise cleanup_error
+            else:
+                self.sync_context.logger.info(
+                    "🧹 Starting orphaned entity cleanup phase (first sync - no cursor data)"
+                )
+            await self.entity_processor.cleanup_orphaned_entities(self.sync_context)
         elif has_cursor_data and not self.sync_context.force_full_sync:
             self.sync_context.logger.info(
                 "⏩ Skipping orphaned entity cleanup for INCREMENTAL sync "
                 "(cursor data exists, only changed entities are processed)"
             )
 
+    async def _finalize_progress_and_trackers(
+        self, status: SyncJobStatus, error: Optional[str] = None
+    ) -> None:
+        """Finalize progress tracking and entity state tracker.
+
+        Args:
+            status: The final status of the sync job
+            error: Optional error message if the sync failed
+        """
         # Publish progress finalization
-        await self.sync_context.progress.finalize(is_complete=(stream_error is None))
+        await self.sync_context.progress.finalize(status)
 
-        # Publish entity state tracker finalization AFTER cleanup
+        # Publish entity state tracker finalization with error message if available
         if getattr(self.sync_context, "entity_state_tracker", None):
-            from airweave.platform.utils.error_utils import get_error_message as _gem
-
-            error_message = _gem(stream_error) if stream_error else None
-            await self.sync_context.entity_state_tracker.finalize(
-                is_complete=(stream_error is None), error=error_message
-            )
-
-        if stream_error:
-            raise stream_error
+            await self.sync_context.entity_state_tracker.finalize(status, error)
 
     async def _complete_sync(self) -> None:
         """Mark sync job as completed with final statistics."""
@@ -463,17 +489,15 @@ class SyncOrchestrator:
             stats=stats,
         )
 
-        # Track sync failed
-        from airweave.analytics import business_events
-
-        duration_ms = 0
-
-        if (
-            self.sync_context.sync_job
-            and hasattr(self.sync_context.sync_job, "started_at")
-            and self.sync_context.sync_job.started_at is not None
-        ):
-            # Calculate duration from start to failure
+        # Calculate duration from start to failure
+        if not self.sync_context.sync_job.started_at:
+            # This can happen if failure occurs during _start_sync before
+            # the job status is updated with started_at
+            self.sync_context.logger.warning(
+                "sync_job.started_at is None - failure occurred very early"
+            )
+            duration_ms = 0
+        else:
             duration_ms = int(
                 (utc_now_naive() - self.sync_context.sync_job.started_at).total_seconds() * 1000
             )
@@ -482,5 +506,44 @@ class SyncOrchestrator:
             ctx=self.sync_context.ctx,
             sync_id=self.sync_context.sync.id,
             error=error_message,
+            duration_ms=duration_ms,
+        )
+
+    async def _handle_cancellation(self) -> None:
+        """Centralized cancellation handler - explicit and immediate."""
+        self.sync_context.logger.info("Handling cancellation...")
+
+        # 1. Cancel all pending tasks IMMEDIATELY
+        if self.worker_pool:
+            await self.worker_pool.cancel_all()
+
+        # 2. Cancel stream to stop producer
+        await self.stream.cancel()
+
+        # 3. Update job status to final CANCELLED state
+        await sync_job_service.update_status(
+            sync_job_id=self.sync_context.sync_job.id,
+            status=SyncJobStatus.CANCELLED,
+            ctx=self.sync_context.ctx,
+            completed_at=utc_now_naive(),
+        )
+
+        # 4. Track sync cancelled
+        if not self.sync_context.sync_job.started_at:
+            # This can happen if cancellation occurs during _start_sync before
+            # the job status is updated with started_at
+            self.sync_context.logger.warning(
+                "sync_job.started_at is None - cancellation occurred very early"
+            )
+            duration_ms = 0
+        else:
+            duration_ms = int(
+                (utc_now_naive() - self.sync_context.sync_job.started_at).total_seconds() * 1000
+            )
+
+        business_events.track_sync_cancelled(
+            ctx=self.sync_context.ctx,
+            source_short_name=self.sync_context.source_connection.short_name,
+            source_connection_id=self.sync_context.source_connection.id,
             duration_ms=duration_ms,
         )

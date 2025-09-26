@@ -35,6 +35,7 @@ from .test_environment import validate_environment
 from .test_sources import test_sources
 from .test_collections import test_collections
 from .test_source_connections import test_source_connections
+from .test_cancelling_syncs import test_cancelling_syncs
 from .test_search import test_search_functionality
 from .test_cleanup import test_cleanup
 
@@ -201,6 +202,9 @@ def main():
 
         # 4. Test search functionality (searches in synced data)
         test_search_functionality(api_url, headers, readable_id)
+
+        # 4.5. Test cancelling syncs end-to-end
+        test_cancelling_syncs(api_url, headers, readable_id, args.stripe_api_key)
 
         # 5. Test cleanup (deletes all created resources)
         test_cleanup(api_url, headers, readable_id, source_conn_id1, source_conn_id2)

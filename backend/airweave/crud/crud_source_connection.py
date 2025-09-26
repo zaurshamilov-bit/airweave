@@ -191,7 +191,10 @@ class CRUDSourceConnection(
                     sc.status = SourceConnectionStatus.PENDING_AUTH
                 elif sc._last_sync_job["status"] == SyncJobStatus.FAILED:
                     sc.status = SourceConnectionStatus.ERROR
-                elif sc._last_sync_job["status"] == SyncJobStatus.RUNNING:
+                elif sc._last_sync_job["status"] in (
+                    SyncJobStatus.RUNNING,
+                    SyncJobStatus.CANCELLING,
+                ):
                     sc.status = SourceConnectionStatus.SYNCING
                 else:
                     sc.status = SourceConnectionStatus.ACTIVE

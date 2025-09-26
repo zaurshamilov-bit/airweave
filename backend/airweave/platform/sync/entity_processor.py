@@ -41,7 +41,7 @@ class EntityProcessor:
     # ------------------------------------------------------------------------------------
     # Public API — single entity (legacy path)
     # ------------------------------------------------------------------------------------
-    async def process(
+    async def process(  # noqa: C901
         self,
         entity: BaseEntity,
         source_node: schemas.DagNode,
@@ -62,9 +62,8 @@ class EntityProcessor:
                 self._entity_ids_encountered_by_type
             )
 
-            if getattr(entity, "should_skip", False) or getattr(
-                getattr(entity, "airweave_system_metadata", None), "should_skip", False
-            ):
+            # Entities always have airweave_system_metadata with should_skip defaulting to False
+            if entity.airweave_system_metadata.should_skip:
                 await sync_context.progress.increment("skipped", 1)
                 return []
 
@@ -99,6 +98,9 @@ class EntityProcessor:
 
             return processed_entities
 
+        except asyncio.CancelledError:
+            # Ensure cooperative cancellation propagates immediately
+            raise
         except Exception:
             await sync_context.progress.increment("skipped", 1)
             return []
@@ -181,11 +183,8 @@ class EntityProcessor:
                 continue
             self._entity_ids_encountered_by_type[et].add(e.entity_id)
 
-            sys_meta = getattr(e, "airweave_system_metadata", None)
-            should_skip_flag = getattr(e, "should_skip", False) or (
-                sys_meta and getattr(sys_meta, "should_skip", False)
-            )
-            if should_skip_flag:
+            # Entities always have airweave_system_metadata with should_skip defaulting to False
+            if e.airweave_system_metadata.should_skip:
                 skipped_due_to_flag += 1
                 continue
 
@@ -216,6 +215,9 @@ class EntityProcessor:
                         sync_id=sync_context.sync.id,
                         entity_ids=[e.entity_id for e in non_deletes],
                     )
+            except asyncio.CancelledError:
+                # Propagate cancellation during DB prefetch
+                raise
             except Exception as e:
                 sync_context.logger.warning(f"💥 BATCH_DB_LOOKUP_ERROR: {e}")
 
@@ -255,6 +257,9 @@ class EntityProcessor:
         async def _do_transform(p: BaseEntity):
             try:
                 return p.entity_id, await self._transform(p, source_node, sync_context)
+            except asyncio.CancelledError:
+                # Propagate cancellation to caller
+                raise
             except Exception as e:
                 sync_context.logger.warning(
                     f"💥 BATCH_TRANSFORM_ERROR [{p.entity_id}] {type(e).__name__}: {e}"
@@ -470,14 +475,10 @@ class EntityProcessor:
             # points were inserted without a parent_entity_id payload
             try:
                 await destination.bulk_delete([parent_entity.entity_id], sync_context.sync.id)
-            except Exception:
+            except Exception as ex:
                 # Don't fail deletion if this secondary path is unsupported by a destination
-                sync_context.logger.debug(
-                    (
-                        f"DELETE_FALLBACK_SKIP [{entity_context}] bulk_delete by entity_id not "
-                        "supported or failed: {e}"
-                    )
-                )
+                msg = f"DELETE_FALLBACK_SKIP bulk_delete by entity_id not supported or failed: {ex}"
+                sync_context.logger.debug(msg)
 
         db_entity = None
         async with get_db_context() as db:
@@ -515,6 +516,9 @@ class EntityProcessor:
 
             await self._remove_orphaned_entities(orphaned_entities, sync_context)
 
+        except asyncio.CancelledError:
+            # Respect cancellation during cleanup
+            raise
         except Exception as e:
             sync_context.logger.error(f"💥 Cleanup failed: {str(e)}", exc_info=True)
             raise e
@@ -581,6 +585,9 @@ class EntityProcessor:
             async with sem:
                 try:
                     return await self._enrich(e, sync_context)
+                except asyncio.CancelledError:
+                    # Allow cancellation to bubble up
+                    raise
                 except Exception as ex:
                     sync_context.logger.warning(
                         f"💥 ENRICH_ERROR [{e.entity_id}] {type(ex).__name__}: {ex}"
@@ -603,6 +610,9 @@ class EntityProcessor:
                 try:
                     h = await compute_entity_hash_async(e)
                     hashes[e.entity_id] = h
+                except asyncio.CancelledError:
+                    # Allow cooperative cancellation
+                    raise
                 except Exception as ex:
                     sync_context.logger.warning(
                         f"💥 HASH_ERROR [{e.entity_id}] {type(ex).__name__}: {ex}"
@@ -941,6 +951,9 @@ class EntityProcessor:
             )
             return processed_entities
 
+        except asyncio.CancelledError:
+            # Propagate cancellation so orchestrator can stop and cancel workers
+            raise
         except Exception as e:
             sync_context.logger.warning(
                 f"💥 VECTOR_ERROR [{entity_context}] Vectorization failed: {str(e)}"
@@ -950,7 +963,6 @@ class EntityProcessor:
     async def _get_embeddings(
         self, texts: List[str], sync_context: SyncContext, entity_context: str
     ) -> Tuple[List[List[float]], List[SparseTextEmbedding] | None]:
-        import asyncio
         import inspect
 
         embedding_model = sync_context.embedding_model
@@ -964,11 +976,9 @@ class EntityProcessor:
         else:
             embeddings = await embedding_model.embed_many(texts)
 
-        calculate_sparse_embeddings = any(
-            await asyncio.gather(
-                *[destination.has_keyword_index() for destination in sync_context.destinations]
-            )
-        )
+        # Use precomputed destination capability from SyncContext instead of
+        # hitting destinations per batch (avoids Qdrant 408s under load).
+        calculate_sparse_embeddings = bool(getattr(sync_context, "has_keyword_index", False))
 
         if calculate_sparse_embeddings:
             sparse_embedder = sync_context.keyword_indexing_model
