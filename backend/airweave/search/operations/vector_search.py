@@ -81,7 +81,7 @@ class VectorSearch(SearchOperation):
         # Check if reranking is enabled
         if config.reranking is not None:
             # Fetch more results for reranking to work with
-            limit = min(int(config.limit * 2.5), 100)
+            limit = min(int(config.limit * 2), 50)
 
         # Emit start event with current plan
         if callable(emitter):
