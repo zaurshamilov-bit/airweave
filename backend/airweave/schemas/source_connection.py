@@ -147,16 +147,23 @@ class SourceConnectionUpdate(BaseModel):
     config: Optional[Dict[str, Any]] = Field(None, description="Source-specific configuration")
     schedule: Optional[ScheduleConfig] = None
 
-    # Re-authentication only for direct auth
-    credentials: Optional[Dict[str, Any]] = Field(
-        None, description="Update credentials (direct auth only)"
+    authentication: Optional[AuthenticationConfig] = Field(
+        None,
+        description="Authentication config (defaults to OAuth browser flow for OAuth sources)",
     )
 
     @model_validator(mode="after")
     def validate_minimal_change(self):
         """Ensure at least one field is being updated."""
-        if not any([self.name, self.description, self.config, self.schedule, self.credentials]):
+        if not any([self.name, self.description, self.config, self.schedule, self.authentication]):
             raise ValueError("At least one field must be provided for update")
+        return self
+
+    @model_validator(mode="after")
+    def validate_direct_auth(self):
+        """Ensure only direct auth can be updated with authentication."""
+        if self.authentication and not isinstance(self.authentication, DirectAuthentication):
+            raise ValueError("Direct auth can only be updated with authentication")
         return self
 
 
