@@ -919,7 +919,8 @@ class SourceConnectionHelpers:
         # Handle both new and legacy schemas
         source_type = getattr(obj_in, "source_type", None) or getattr(obj_in, "short_name", None)
 
-        # Build payload - exclude OAuth-specific fields
+        # Build payload - exclude OAuth-specific fields (and the whole authentication object
+        # to avoid leaking secrets)
         exclude_fields = {
             "client_id",
             "client_secret",
@@ -928,26 +929,56 @@ class SourceConnectionHelpers:
             "auth_mode",
             "custom_client",
             "auth_method",
+            "authentication",  # <-- prevent client_secret leakage into payload
         }
         payload = obj_in.model_dump(
             exclude=exclude_fields,
             exclude_none=True,
         )
 
-        # Get client credentials from either custom_client or direct fields
+        # Pull BYOC client credentials from the nested authentication object (preferred),
+        # then fall back to legacy/custom_client or top-level fields for backward compatibility.
         client_id = None
         client_secret = None
-        if hasattr(obj_in, "custom_client") and obj_in.custom_client:
-            client_id = obj_in.custom_client.client_id
-            client_secret = obj_in.custom_client.client_secret
-        elif hasattr(obj_in, "client_id"):
-            client_id = obj_in.client_id
-            client_secret = obj_in.client_secret
+
+        auth_obj = getattr(obj_in, "authentication", None)
+        if auth_obj is not None:
+            # Try attribute access first
+            if hasattr(auth_obj, "client_id") or hasattr(auth_obj, "client_secret"):
+                client_id = getattr(auth_obj, "client_id", None)
+                client_secret = getattr(auth_obj, "client_secret", None)
+            else:
+                # Fall back to mapping-style access
+                try:
+                    auth_data = auth_obj.model_dump()
+                except Exception:
+                    try:
+                        auth_data = dict(auth_obj)
+                    except Exception:
+                        auth_data = {}
+                client_id = auth_data.get("client_id")
+                client_secret = auth_data.get("client_secret")
+
+        # Back-compat paths
+        if (
+            (client_id is None or client_secret is None)
+            and hasattr(obj_in, "custom_client")
+            and obj_in.custom_client
+        ):
+            cc = obj_in.custom_client
+            client_id = getattr(cc, "client_id", client_id)
+            client_secret = getattr(cc, "client_secret", client_secret)
+
+        if (client_id is None or client_secret is None) and hasattr(obj_in, "client_id"):
+            client_id = getattr(obj_in, "client_id", client_id)
+            client_secret = getattr(obj_in, "client_secret", client_secret)
 
         overrides = {
             "client_id": client_id,
             "client_secret": client_secret,
+            # Final UI redirect (not the provider callback). Defaults to app URL.
             "redirect_url": getattr(obj_in, "redirect_url", core_settings.app_url),
+            # OAuth provider callback that this backend handles:
             "oauth_redirect_uri": f"{core_settings.api_url}/source-connections/callback",
         }
 
@@ -1098,24 +1129,27 @@ class SourceConnectionHelpers:
         if overrides.get("client_secret"):
             auth_fields["client_secret"] = overrides["client_secret"]
 
-        # For OAuth, we don't validate against auth_config_class since that's for direct auth
-        # The token response is already validated by the OAuth exchange
-        validated_auth = auth_fields
+        # Decide which auth method to record based on presence of BYOC client credentials
+        auth_method_to_save = (
+            AuthenticationMethod.OAUTH_BYOC
+            if overrides.get("client_id") or overrides.get("client_secret")
+            else AuthenticationMethod.OAUTH_BROWSER
+        )
 
-        # Validate config fields if provided
+        # Validate config fields if provided (payload uses 'config')
         validated_config = await self.validate_config_fields(
-            db, init_session.short_name, payload.get("config_fields"), ctx
+            db, init_session.short_name, payload.get("config"), ctx
         )
 
         async with UnitOfWork(db) as uow:
             # Create credential
-            encrypted = credentials.encrypt(validated_auth)
+            encrypted = credentials.encrypt(auth_fields)
             cred_in = schemas.IntegrationCredentialCreateEncrypted(
                 name=f"{source.name} OAuth2 Credential",
                 description=f"OAuth2 credentials for {source.name}",
                 integration_short_name=init_session.short_name,
                 integration_type=IntegrationType.SOURCE,
-                authentication_method=AuthenticationMethod.OAUTH_BROWSER,
+                authentication_method=auth_method_to_save,
                 oauth_type=getattr(source, "oauth_type", None),
                 encrypted_credentials=encrypted,
                 auth_config_class=source.auth_config_class,
@@ -1137,10 +1171,10 @@ class SourceConnectionHelpers:
             )
             connection = await crud.connection.create(uow.session, obj_in=conn_in, ctx=ctx, uow=uow)
 
-            # Get collection
+            # Get collection (prefer what was originally requested; fall back to shell)
             collection = await self.get_collection(
                 uow.session,
-                payload.get("collection") or source_conn_shell.readable_collection_id,
+                payload.get("readable_collection_id") or source_conn_shell.readable_collection_id,
                 ctx,
             )
 
@@ -1151,7 +1185,11 @@ class SourceConnectionHelpers:
             # Use the create_sync helper to ensure default schedule is applied
             # Note: We temporarily skip Temporal schedule creation here because
             # the source_connection hasn't been updated with sync_id yet
-            cron_schedule = payload.get("cron_schedule")
+            cron_schedule = (
+                payload.get("schedule", {}).get("cron")
+                if isinstance(payload.get("schedule"), dict)
+                else payload.get("cron_schedule")
+            )
             if cron_schedule is None:
                 cron_schedule = self._get_default_cron_schedule(ctx)
 
