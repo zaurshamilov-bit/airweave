@@ -1245,7 +1245,7 @@
           "source-connections"
         ],
         "summary": "Cancel Job",
-        "description": "Cancel a running sync job for a source connection.\n\nThis will update the job status in the database to CANCELLED and\nsend a cancellation request to the Temporal workflow if it's running.",
+        "description": "Cancel a running sync job for a source connection.\n\nThis endpoint requests cancellation and marks the job as CANCELLING.\nThe workflow updates the final status to CANCELLED when it processes\nthe cancellation request.",
         "operationId": "cancel_job_source_connections__source_connection_id__jobs__job_id__cancel_post",
         "parameters": [
           {
@@ -7105,6 +7105,7 @@
           "running",
           "completed",
           "failed",
+          "cancelling",
           "cancelled"
         ],
         "title": "SyncJobStatus",
