@@ -510,7 +510,6 @@ class SourceConnectionHelpers:
             source_conn: Source connection object
             ctx: API context
         """
-        from airweave.core.sync_service import sync_service
         from airweave.schemas.source_connection import compute_status, determine_auth_method
 
         # Build authentication details
@@ -633,7 +632,11 @@ class SourceConnectionHelpers:
         sync_details = None
         if hasattr(source_conn, "sync_id") and source_conn.sync_id:
             try:
-                job = await sync_service.get_last_sync_job(db, ctx=ctx, sync_id=source_conn.sync_id)
+                from airweave.core.sync_service import sync_service as _sync_service
+
+                job = await _sync_service.get_last_sync_job(
+                    db, ctx=ctx, sync_id=source_conn.sync_id
+                )
                 if job:
                     # Build SyncJobDetails
                     duration_seconds = None
@@ -906,7 +909,7 @@ class SourceConnectionHelpers:
             error=job.error if hasattr(job, "error") else None,
         )
 
-    async def create_init_session(
+    async def create_init_session(  # noqa: C901
         self,
         db: AsyncSession,
         obj_in: Any,  # Can be OAuthBrowserCreate or legacy SourceConnectionCreate
@@ -915,7 +918,16 @@ class SourceConnectionHelpers:
         uow: Any,
         redirect_session_id: Optional[UUID] = None,
     ) -> Any:
-        """Create connection init session for OAuth flow."""
+        """Create connection init session for OAuth flow.
+
+        Flow resolution for OAuth client credentials (explicit order):
+          1) BYOC nested in authentication (OAuthBrowserAuthentication)
+          2) Legacy custom_client (object with client_id/client_secret)
+          3) Top-level client_id/client_secret on the request
+          4) Platform default (no client overrides)
+
+        For BYOC, both client_id and client_secret are REQUIRED; otherwise 422.
+        """
         # Handle both new and legacy schemas
         source_type = getattr(obj_in, "source_type", None) or getattr(obj_in, "short_name", None)
 
@@ -929,53 +941,60 @@ class SourceConnectionHelpers:
             "auth_mode",
             "custom_client",
             "auth_method",
-            "authentication",  # <-- prevent client_secret leakage into payload
+            "authentication",  # prevent client_secret leakage into payload
         }
         payload = obj_in.model_dump(
             exclude=exclude_fields,
             exclude_none=True,
         )
 
-        # Pull BYOC client credentials from the nested authentication object (preferred),
-        # then fall back to legacy/custom_client or top-level fields for backward compatibility.
-        client_id = None
-        client_secret = None
+        # ---- Resolve client credentials with explicit, named flows ----
+        client_id: Optional[str] = None
+        client_secret: Optional[str] = None
+        oauth_client_mode = "platform_default"
 
+        def _require_both_or_neither(cid: Optional[str], csec: Optional[str]) -> None:
+            if (cid and not csec) or (csec and not cid):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Custom OAuth requires both client_id and client_secret or neither",
+                )
+
+        # 1) BYOC nested under authentication
         auth_obj = getattr(obj_in, "authentication", None)
-        if auth_obj is not None:
-            # Try attribute access first
-            if hasattr(auth_obj, "client_id") or hasattr(auth_obj, "client_secret"):
-                client_id = getattr(auth_obj, "client_id", None)
-                client_secret = getattr(auth_obj, "client_secret", None)
-            else:
-                # Fall back to mapping-style access
-                try:
-                    auth_data = auth_obj.model_dump()
-                except Exception:
-                    try:
-                        auth_data = dict(auth_obj)
-                    except Exception:
-                        auth_data = {}
-                client_id = auth_data.get("client_id")
-                client_secret = auth_data.get("client_secret")
+        nested_id = getattr(auth_obj, "client_id", None) if auth_obj is not None else None
+        nested_secret = getattr(auth_obj, "client_secret", None) if auth_obj is not None else None
+        if nested_id or nested_secret:
+            _require_both_or_neither(nested_id, nested_secret)
+            if nested_id and nested_secret:
+                client_id, client_secret = nested_id, nested_secret
+                oauth_client_mode = "byoc_nested"
+        else:
+            # 2) Legacy custom_client
+            custom_client = getattr(obj_in, "custom_client", None)
+            if custom_client:
+                cc_id = getattr(custom_client, "client_id", None)
+                cc_secret = getattr(custom_client, "client_secret", None)
+                if cc_id or cc_secret:
+                    _require_both_or_neither(cc_id, cc_secret)
+                    if cc_id and cc_secret:
+                        client_id, client_secret = cc_id, cc_secret
+                        oauth_client_mode = "byoc_custom_client"
+            # 3) Top-level request fields
+            elif hasattr(obj_in, "client_id") or hasattr(obj_in, "client_secret"):
+                top_id = getattr(obj_in, "client_id", None)
+                top_secret = getattr(obj_in, "client_secret", None)
+                if top_id or top_secret:
+                    _require_both_or_neither(top_id, top_secret)
+                    if top_id and top_secret:
+                        client_id, client_secret = top_id, top_secret
+                        oauth_client_mode = "byoc_top_level"
 
-        # Back-compat paths
-        if (
-            (client_id is None or client_secret is None)
-            and hasattr(obj_in, "custom_client")
-            and obj_in.custom_client
-        ):
-            cc = obj_in.custom_client
-            client_id = getattr(cc, "client_id", client_id)
-            client_secret = getattr(cc, "client_secret", client_secret)
-
-        if (client_id is None or client_secret is None) and hasattr(obj_in, "client_id"):
-            client_id = getattr(obj_in, "client_id", client_id)
-            client_secret = getattr(obj_in, "client_secret", client_secret)
-
+        # 4) Platform default: keep client_id/client_secret as None
         overrides = {
             "client_id": client_id,
             "client_secret": client_secret,
+            "oauth_client_mode": oauth_client_mode,
             # Final UI redirect (not the provider callback). Defaults to app URL.
             "redirect_url": getattr(obj_in, "redirect_url", core_settings.app_url),
             # OAuth provider callback that this backend handles:
@@ -1033,11 +1052,15 @@ class SourceConnectionHelpers:
         ctx: ApiContext,
     ) -> Any:
         """Exchange OAuth code for token."""
+        redirect_uri = (
+            overrides.get("oauth_redirect_uri")
+            or f"{core_settings.api_url}/source-connections/callback"
+        )
         return await oauth2_service.exchange_authorization_code_for_token_with_redirect(
             ctx=ctx,
             source_short_name=short_name,
             code=code,
-            redirect_uri=overrides.get("oauth_redirect_uri"),
+            redirect_uri=redirect_uri,
             client_id=overrides.get("client_id"),
             client_secret=overrides.get("client_secret"),
         )
@@ -1132,7 +1155,7 @@ class SourceConnectionHelpers:
         # Decide which auth method to record based on presence of BYOC client credentials
         auth_method_to_save = (
             AuthenticationMethod.OAUTH_BYOC
-            if overrides.get("client_id") or overrides.get("client_secret")
+            if (overrides.get("client_id") and overrides.get("client_secret"))
             else AuthenticationMethod.OAUTH_BROWSER
         )
 
