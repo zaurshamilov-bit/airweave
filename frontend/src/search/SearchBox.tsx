@@ -276,7 +276,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                 enable_reranking: toggles.reRanking,
                 response_type: currentResponseType,
                 score_threshold: null,
-                limit: 20,
+                limit: 30, // TODO: change this
                 offset: 0
             };
 

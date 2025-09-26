@@ -538,30 +538,6 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                     continue;
                 }
 
-                if (event.type === 'interpretation_reason_delta') {
-                    const text = (event as any).text;
-                    if (typeof text === 'string' && text.trim()) {
-                        interpretationData.reasons.push(text.trim());
-                    }
-                    continue;
-                }
-
-                if (event.type === 'interpretation_delta') {
-                    const snap = (event as any).parsed_snapshot;
-                    if (snap) {
-                        if (typeof snap.confidence === 'number') {
-                            interpretationData.confidence = snap.confidence;
-                        }
-                        if (Array.isArray(snap.filters)) {
-                            interpretationData.filters = snap.filters;
-                        }
-                        if (typeof snap.refined_query === 'string') {
-                            interpretationData.refinedQuery = snap.refined_query;
-                        }
-                    }
-                    continue;
-                }
-
                 if (event.type === 'filter_applied') {
                     interpretationData.filterApplied = (event as any).filter;
                     continue;
@@ -569,25 +545,6 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
 
                 if (event.type === 'operator_end' && event.op === 'query_interpretation') {
                     const key = `interp-${i}`;
-
-                    interpretationData.reasons.forEach((reason, idx) => {
-                        rows.push(
-                            <div key={`${key}-reason-${idx}`} className="py-0.5 px-2 text-[11px] opacity-80">
-                                {reason}
-                            </div>
-                        );
-                    });
-
-                    if (typeof interpretationData.confidence === 'number') {
-                        const applied = !!interpretationData.filterApplied;
-                        rows.push(
-                            <div key={`${key}-conf`} className="py-0.5 px-2 text-[11px] opacity-90">
-                                {applied
-                                    ? `Confidence = ${interpretationData.confidence.toFixed(2)} → Applying ${interpretationData.filters.length} filter${interpretationData.filters.length !== 1 ? 's' : ''}`
-                                    : `Confidence = ${interpretationData.confidence.toFixed(2)} → Not applying filters (below threshold)`}
-                            </div>
-                        );
-                    }
 
                     if (interpretationData.filterApplied && typeof interpretationData.filterApplied === 'object') {
                         const appliedDisplay = toDisplayFilter(interpretationData.filterApplied);
@@ -597,17 +554,6 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                                 <span className="opacity-90">Applied filter</span>
                                 <div className="ml-3 mt-1">
                                     <JsonBlock value={appliedJson} isDark={isDark} />
-                                </div>
-                            </div>
-                        );
-                    } else if (interpretationData.filters.length > 0) {
-                        const proposedDisplay = toDisplayFilter({ must: interpretationData.filters });
-                        const filterJson = JSON.stringify(proposedDisplay, null, 2);
-                        rows.push(
-                            <div key={`${key}-filter-proposed`} className="py-0.5 px-2 text-[11px]">
-                                <span className="opacity-90">Proposed filter (not applied)</span>
-                                <div className="ml-3 mt-1">
-                                    <JsonBlock value={filterJson} isDark={isDark} />
                                 </div>
                             </div>
                         );
@@ -665,20 +611,6 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                     const strategy = (event as any).strategy;
                     if (strategy) {
                         expansionData.strategy = String(strategy).toUpperCase();
-                    }
-                    continue;
-                }
-                if (event.type === 'expansion_reason_delta') {
-                    const text = (event as any).text;
-                    if (typeof text === 'string' && text.trim()) {
-                        expansionData.reasons.push(text.trim());
-                    }
-                    continue;
-                }
-                if (event.type === 'expansion_delta') {
-                    const alts = (event as any).alternatives_snapshot;
-                    if (Array.isArray(alts)) {
-                        expansionData.alternatives = alts;
                     }
                     continue;
                 }
@@ -999,20 +931,9 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                     }
                     continue;
                 }
-                if (event.type === 'reranking_reason_delta') {
-                    const text = (event as any).text;
-                    if (typeof text === 'string' && text.trim()) {
-                        rerankingData.reasons.push(text.trim());
-                        rows.push(
-                            <div key={`rerank-${i}-reason-${rerankingData.reasons.length}`} className="py-0.5 px-2 text-[11px] opacity-80">
-                                {text.trim()}
-                            </div>
-                        );
-                    }
-                    continue;
-                }
-                if (event.type === 'reranking_delta') {
-                    const rankings = (event as any).rankings_snapshot;
+                // New simplified single-shot rankings snapshot
+                if (event.type === 'rankings') {
+                    const rankings = (event as any).rankings;
                     if (Array.isArray(rankings)) {
                         rerankingData.rankings = rankings;
                     }
@@ -1029,7 +950,7 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                     if (rerankingData.rankings.length > 0) {
                         rows.push(
                             <div key={`${key}-rankings-header`} className="py-0.5 px-2 text-[11px] opacity-90">
-                                Reranked {rerankingData.rankings.length} result{rerankingData.rankings.length !== 1 ? 's' : ''}:
+                                Top {rerankingData.rankings.length} result{rerankingData.rankings.length !== 1 ? 's' : ''}:
                             </div>
                         );
                         const topRankings = rerankingData.rankings.slice(0, 5);

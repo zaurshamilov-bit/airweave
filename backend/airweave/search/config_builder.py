@@ -80,6 +80,10 @@ class SearchConfigBuilder:
             f"collection: {collection_id}"
         )
 
+        # Fail-fast: require non-empty query string
+        if not isinstance(search_request.query, str) or not search_request.query.strip():
+            raise ValueError("SearchRequest.query must be a non-empty string")
+
         # Apply defaults first
         search_method = search_request.search_method or DEFAULT_SEARCH_METHOD
 
@@ -232,7 +236,8 @@ class SearchConfigBuilder:
         if response_type == ResponseType.COMPLETION:
             ctx.logger.debug("Enabling completion generation")
             ops["completion"] = CompletionGeneration(
-                default_model="gpt-5-nano", max_results_context=100
+                default_model="gpt-5-nano",
+                max_results_context=100,  #  TODO: change this
             )
         else:
             ops["completion"] = None

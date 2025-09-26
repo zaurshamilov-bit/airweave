@@ -8,10 +8,22 @@ from airweave.search.operations.base import SearchOperation
 from airweave.search.operations.completion import CompletionGeneration
 from airweave.search.operations.embedding import Embedding
 from airweave.search.operations.qdrant_filter import QdrantFilterOperation
-from airweave.search.operations.query_expansion import QueryExpansion
-from airweave.search.operations.query_interpretation import QueryInterpretation
+
+# from airweave.search.operations.query_expansion import QueryExpansion
+from airweave.search.operations.query_expansion_groq import QueryExpansion
+
+# ---
+# from airweave.search.operations.query_interpretation import QueryInterpretation
+from airweave.search.operations.query_interpretation_groq import QueryInterpretation
+
+# ---
 from airweave.search.operations.recency_bias import RecencyBias
-from airweave.search.operations.reranking import LLMReranking
+
+# ---
+# from airweave.search.operations.reranking import LLMReranking
+from airweave.search.operations.reranking_groq import LLMReranking
+
+# ---
 from airweave.search.operations.vector_search import VectorSearch
 
 __all__ = [
