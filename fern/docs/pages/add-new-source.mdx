@@ -1,11 +1,30 @@
 ---
 title: "Add New Connector"
 edit-this-page-url: https://github.com/airweave-ai/airweave/blob/main/fern/docs/pages/add-new-source.mdx
-subtitle: "Create custom connectors for any unsupported data source."
 slug: add-new-source
 ---
 
-### 1. Fork the repository
+Connectors are how Airweave pulls data from external systems, turns it into entities, and makes it searchable for agents. If your favorite tool or API is not yet supported, you can build a connector and either use it locally or contribute it back to the community.
+
+This guide will walk you through the full process step by step:
+
+- Setting up your environment and forking the repo
+- Defining authentication and configuration schemas
+- Creating entity definitions for your data
+- Implementing the source connector itself
+- Testing your connector inside the Airweave dashboard
+
+Once complete, your connector will behave like any built-in integration. You can create collections, sync data, and query it through Airweave’s search APIs or MCP server.
+
+If you plan to contribute your connector back to the project, please also review our [Contributing Guidelines](https://github.com/airweave-ai/airweave/blob/main/CONTRIBUTING.md)
+ for details on branch naming, development workflow, and pull request process. For help at any point, you can join the [Airweave Discord](https://discord.com/invite/484HY9Ehxt)
+ to connect with other contributors and maintainers.
+
+ ## How to add a Connector
+
+<Steps>
+
+  <Step title="Fork the repository" toc={true}>
     Get the [code](https://github.com/airweave-ai/airweave/fork) and set up your development environment.
 
     ```bash
@@ -14,9 +33,10 @@ slug: add-new-source
     ./start.sh
     ```
 
-### 2. Create authentication schema
+  </Step>
 
-    Define what credentials your source needs in [`backend/airweave/platform/configs/auth.py`](https://github.com/airweave-ai/airweave/blob/main/backend/airweave/platform/configs/auth.py).
+  <Step title="Create authentication schema" toc={true}>
+       Define what credentials your source needs in [`backend/airweave/platform/configs/auth.py`](https://github.com/airweave-ai/airweave/blob/main/backend/airweave/platform/configs/auth.py).
 
         ```python
         class GhibliAuthConfig(AuthConfig):
@@ -25,8 +45,9 @@ slug: add-new-source
             # No authentication needed for this public API
             pass
         ```
+  </Step>
 
-### 3. Create source configuration
+  <Step title="Create source configuration" toc={true}>
     Define optional configuration options in [`backend/airweave/platform/configs/config.py`](https://github.com/airweave-ai/airweave/blob/main/backend/airweave/platform/configs/config.py).
 
         ```python
@@ -39,10 +60,10 @@ slug: add-new-source
                 description="Whether to include Rotten Tomatoes scores in the metadata"
             )
         ```
+  </Step>
 
-### 4. Define entity schemas
-
-    Create entity schemas in [`backend/airweave/platform/entities/your_source.py`](https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/entities) that define the structure of the data in the source.
+  <Step title="Define entity schemas" toc={true}>
+     Create entity schemas in [`backend/airweave/platform/entities/your_source.py`](https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/entities) that define the structure of the data in the source.
 
         ```python maxLines=100
         from datetime import datetime
@@ -75,8 +96,9 @@ slug: add-new-source
         - Use `Field(...)` for required fields, `Field(default=...)` for optional ones
         - Add source-specific fields that are relevant for search and metadata
 
-### 5. Implement source
+  </Step>
 
+  <Step title="Implement source" toc={true}>
     Create your source connector in [`backend/airweave/platform/sources/your_source.py`](https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources).
 
         ```python maxLines=100
@@ -143,15 +165,18 @@ slug: add-new-source
         - Implement `generate_entities()` that yields your custom entity objects
         - Handle authentication based on your auth type
         - Use config options to customize behavior
+  </Step>
 
-### 6. Test your source
-
+  <Step title="Test your source" toc={true}>
     Verify everything works by running Airweave and creating a test connection.
 
     1. **Start Airweave**: Your connector appears automatically in the dashboard
     2. **Create a collection** and add your new source
     3. **Test the connection** and verify data syncs correctly
     4. **Search your data** to confirm everything works end-to-end
+  </Step>
+
+</Steps>
 
 ### File Structure
 

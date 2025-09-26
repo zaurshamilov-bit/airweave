@@ -20,39 +20,43 @@ Composio enables Airweave to access credentials from integrated applications. Wh
 ## Prerequisites
 
 - A Composio account with API access
-- Connected user accounts in Composio for the sources you want to sync
 - Your Composio API key
+- Connected user accounts in Composio for the sources you want to sync
 
 ## Setup Guide
 
-### Step 1: Get Your Composio API Key
+<Steps>
 
-1. Log in to your [Composio dashboard](https://platform.composio.dev)
-2. Navigate to the API Keys page
-3. Copy your API key
+  <Step title="Get your Composio API Key" toc={true}>
+    1. Log in to your [Composio dashboard](https://platform.composio.dev)
+    2. Navigate to the API Keys page
+    3. Copy your API key
+  </Step>
 
-### Step 2: Connect Composio to Airweave
 
-1. Go to [Airweave Auth Providers](https://app.airweave.ai/auth-providers)
+  <Step title="Connect Composio to Airweave" toc={true}>
+   1. Go to [Airweave Auth Providers](https://app.airweave.ai/auth-providers)
 2. Click "Connect" next to Composio
 3. Enter your API key
 4. Provide a readable name for this connection
 5. Click "Save"
+  </Step>
 
-### Step 3: Find Your Connection Details
 
-To create source connections, you'll need two identifiers from Composio:
+<Step title="Find your connection details" toc={true}>
+    To create source connections, you'll need two identifiers from Composio:
 
-1. **auth_config_id**: Navigate to your Auth Configs page
-2. **account_id**: Click on an auth config to see its connected accounts
+1. `auth_config_id`: Navigate to your Auth Configs page
+2. `account_id`: Click on an auth config to see its connected accounts
 
 <Callout type="info">
 **Tip**: In Composio, one auth config can have multiple connected accounts, allowing you to manage different user connections under the same integration.
 </Callout>
 
-### Step 4: Create Source Connections
+</Step>
 
-Now you can create source connections that automatically retrieve credentials from Composio:
+<Step title="Create Source Connections" toc={true}>
+    Now you can create source connections that automatically retrieve credentials from Composio:
 
 <CodeBlocks>
 ```python title="Python"
@@ -110,8 +114,8 @@ curl -X POST 'https://app.airweave.ai/source-connections' \
 }'
 ```
 </CodeBlocks>
-
-
+</Step>
+</Steps>
 
 ## How It Works
 
@@ -156,78 +160,21 @@ These mappings are handled automatically by Airweave.
 
 ## Troubleshooting
 
-### "No matching connection found"
-- Verify the auth_config_id and account_id are correct
+#### `No matching connection found`
+- Verify the `auth_config_id` and `account_id` are correct
 - Ensure the account is connected in Composio
-- Check that the integration type matches (e.g., google_drive vs googledrive)
+- Check that the integration type matches (e.g., `google_drive` vs `googledrive`)
 
-### "Missing required auth fields"
+#### `Missing required auth fields`
 - The source may require additional fields not available in Composio
 - Check the field mappings section above
 - Contact support if a mapping is missing
 
-### "Authentication failed"
+#### `Authentication failed`
 - Verify your Composio API key is valid
 - Check if the user's connection in Composio is still active
 - Ensure the connected account has the necessary permissions
 
 ## API Reference
 
-### Create Source Connection
-
-<CodeBlocks>
-```python title="Python"
-from airweave import AirweaveSDK
-
-client = AirweaveSDK(api_key="YOUR_API_KEY")
-
-source_connection = client.source_connections.create(
-    name="Team Google Drive",
-    short_name="google_drive",
-    provider_readable_id="composio-connection-id",
-    provider_config={
-        "auth_config_id": "config_id",
-        "account_id": "account_id"
-    }
-)
-```
-
-```typescript title="TypeScript"
-import { AirweaveSDKClient } from "@airweave/sdk";
-
-const client = new AirweaveSDKClient({
-  apiKey: "YOUR_API_KEY"
-});
-
-const sourceConnection = await client.sourceConnections.create({
-  name: "Team Google Drive",
-  shortName: "google_drive",
-  providerReadableId: "composio-connection-id",
-  providerConfig: {
-    authConfigId: "config_id",
-    accountId: "account_id"
-  }
-});
-```
-
-```bash title="cURL"
-curl -X POST 'https://app.airweave.ai/source-connections' \
-  -H 'Authorization: Bearer YOUR_API_KEY' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "name": "Team Google Drive",
-  "short_name": "google_drive",
-  "provider_readable_id": "composio-connection-id",
-  "provider_config": {
-    "auth_config_id": "config_id",
-    "account_id": "account_id"
-  }
-}'
-```
-</CodeBlocks>
-
-## Next Steps
-
-- [Browse available sources](/sources)
-- [Set up your first sync](/quickstart)
-- [Learn about transformations](/concepts#transformations)
+For full API details, see the [Source Connections API reference](/api-reference/source-connections/create-source-connections-post).

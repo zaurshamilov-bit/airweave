@@ -35,9 +35,10 @@ This integration involves two separate OAuth clients:
 
 ## Setup Guide
 
-### Step 1: Set up Pipedream OAuth client
 
-First, configure the OAuth client that allows Airweave to access Pipedream's API:
+<Steps>
+  <Step title="Set up Pipedream OAuth client" toc={true}>
+    First, configure the OAuth client that allows Airweave to access Pipedream's API:
 
 1. Log in to [Pipedream](https://pipedream.com)
 2. Navigate to your project settings
@@ -49,55 +50,64 @@ First, configure the OAuth client that allows Airweave to access Pipedream's API
 **Purpose**: This OAuth client enables Airweave to authenticate with Pipedream's API to retrieve your connected account credentials.
 </Callout>
 
-### Step 2: Connect Pipedream to Airweave
-
-1. Go to [Airweave Auth Providers](https://app.airweave.ai/auth-providers)
+  </Step>
+  <Step title="Connect Pipedream to Airweave" toc={true}>
+    1. Go to [Airweave Auth Providers](https://app.airweave.ai/auth-providers)
 2. Click "Connect" next to Pipedream
 3. Enter your Pipedream OAuth client credentials:
-   - Client ID (from Step 1)
-   - Client Secret (from Step 1)
+   - `client_id` (from step 1)
+   - `client_secret` (from step 1)
 4. Provide a readable name for this connection
 5. Click "Save"
+  </Step>
 
-### Step 3: Create custom OAuth clients for source apps
+  <Step title="Create custom OAuth clients for source apps" toc={true}>
+    For each source app you want to sync (Notion, Slack, etc.), you must create custom OAuth clients:
 
-For each source app you want to sync (Notion, Slack, etc.), you must create custom OAuth clients:
 
-#### For Notion:
+
+<AccordionGroup>
+
+  <Accordion title="For Notion">
 1. Go to [Notion Developers](https://developers.notion.com)
 2. Create a new integration
 3. Configure OAuth settings with your redirect URIs
 4. Save the `client_id` and `client_secret`
+  </Accordion>
 
-#### For Slack:
+  <Accordion title="For Slack">
 1. Go to [Slack API](https://api.slack.com/apps)
 2. Create a new app
 3. Configure OAuth & Permissions
 4. Save the `client_id` and `client_secret`
+  </Accordion>
 
-#### For other apps:
+  <Accordion title="For Other Apps:">
 Follow similar steps for Google Drive, GitHub, or other source integrations.
+  </Accordion>
+
+</AccordionGroup>
 
 <Callout type="warning">
 **Important**: You must use these custom OAuth clients when connecting accounts in Pipedream. Do not use Pipedream's built-in OAuth options.
 </Callout>
+  </Step>
 
-### Step 4: Connect source apps in Pipedream using custom OAuth
 
-1. In Pipedream, go to your project's connections
+    <Step title="Connect source apps in Pipedream using custom OAuth" toc={true}>
+    1. In Pipedream, go to your project's connections
 2. For each source app (Notion, Slack, etc.):
    - Choose "Custom OAuth" option
    - Enter your custom OAuth client credentials from Step 3
    - Complete the OAuth flow to connect your account
 3. Note the `account_id` for each connection (format: `apn_xxxxx`)
+  </Step>
+  <Step title="Find your connection details" toc={true}>
+    To create source connections, you'll need these identifiers:
 
-### Step 5: Find your connection details
-
-To create source connections, you'll need these identifiers:
-
-1. **project_id**: Found in the URL when viewing your project (e.g., `proj_JPsD74a`)
-2. **account_id**: Retrieved via Pipedream UI or API
-3. **external_user_id**: Retrieved via Pipedream UI or API
+1. `project_id`: Found in the URL when viewing your project (e.g., `proj_JPsD74a`)
+2. `account_id`: Retrieved via Pipedream UI or API
+3. `external_user_id`: Retrieved via Pipedream UI or API
 
 ```bash
 curl -X GET "https://api.pipedream.com/v1/connect/{project_id}/accounts?include_credentials=true" \
@@ -105,10 +115,10 @@ curl -X GET "https://api.pipedream.com/v1/connect/{project_id}/accounts?include_
 ```
 
 The response will include account IDs like `apn_gyha5Ky`.
+  </Step>
 
-### Step 6: Create source connections
-
-Create source connections that automatically retrieve credentials from Pipedream:
+  <Step title="Create Source Connections" toc={true}>
+    Create source connections that automatically retrieve credentials from Pipedream:
 
 <CodeBlocks>
 ```python title="Python"
@@ -124,7 +134,7 @@ source_connection = client.source_connections.create(
     provider_config={
         "project_id": "proj_JPsD74a",      # From Pipedream
         "account_id": "apn_gyha5Ky",       # From Pipedream API
-        "external_user_id": "user123"      # Required: unique user identifier
+        "external_user_id": "user123",     # Required: unique user identifier
         "environment": "production",        # Optional, defaults to "production"
     }
 )
@@ -147,7 +157,7 @@ const sourceConnection = await client.sourceConnections.create({
   providerConfig: {
     project_id: "proj_JPsD74a",      // From Pipedream
     account_id: "apn_gyha5Ky",       // From Pipedream API
-    external_user_id: "user123"      // Required: unique user identifier
+    external_user_id: "user123",     // Required: unique user identifier
     environment: "production",      // Optional, defaults to "production"
   }
 });
@@ -172,7 +182,8 @@ curl -X POST 'https://app.airweave.ai/source-connections' \
 }'
 ```
 </CodeBlocks>
-
+</Step>
+</Steps>
 
 
 ## How It Works
@@ -247,7 +258,7 @@ When you connect accounts using Pipedream's default OAuth clients, credentials a
 
 ## Troubleshooting
 
-### "Credentials not available"
+### `Credentials not available`
 ```
 Detail: Credentials not available. Pipedream only exposes credentials for
 accounts created with custom OAuth clients, not default Pipedream OAuth.
@@ -259,25 +270,25 @@ accounts created with custom OAuth clients, not default Pipedream OAuth.
 2. Reconnect using "Custom OAuth" option with your own OAuth client credentials
 3. Ensure you're using the OAuth client you created in the source app (e.g., Notion Developer Portal)
 
-### "Account app mismatch"
+### `Account app mismatch`
 ```
 Detail: Account apn_xxx is not for app 'notion'
 ```
 **Solution**: Verify the `account_id` corresponds to the correct integration type and was created with the right custom OAuth client.
 
-### "Failed to refresh token" (Airweave to Pipedream)
+### `Failed to refresh token` (Airweave to Pipedream)
 This affects the connection between Airweave and Pipedream's API:
 - Check if your Pipedream OAuth client credentials are valid
 - Ensure your Pipedream OAuth client is active
 - Verify network connectivity to Pipedream API
 
-### "Failed to refresh token" (source app authentication)
+### `Failed to refresh token` (Source App Authentication)
 This affects the source app tokens retrieved from Pipedream:
 - Verify your source app OAuth client (e.g., Notion, Slack) is still active
 - Check if the source app tokens have been revoked
 - Ensure the source app OAuth client has required permissions
 
-### "Missing required auth fields"
+### `Missing required auth fields`
 - The integration may require fields not provided by your custom OAuth implementation
 - Check the field mappings table above
 - Verify the source app OAuth client has all required scopes
