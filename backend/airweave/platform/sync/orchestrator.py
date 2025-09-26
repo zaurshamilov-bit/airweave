@@ -48,6 +48,9 @@ class SyncOrchestrator:
         self.batch_size: int = getattr(sync_context, "batch_size", 64)
         self.max_batch_latency_ms: int = getattr(sync_context, "max_batch_latency_ms", 200)
 
+        # Track current stream so top-level cancellation can finalize properly
+        self._current_stream: Optional[AsyncSourceStream] = None
+
     async def run(self) -> schemas.Sync:
         """Execute the synchronization process."""
         try:
@@ -56,15 +59,14 @@ class SyncOrchestrator:
             await self._complete_sync()
             return self.sync_context.sync
         except asyncio.CancelledError:
-            # Cooperative cancellation: ensure pending tasks and stream are stopped
+            # Cooperative cancellation: ensure producer and ALL pending tasks are stopped
             self.sync_context.logger.info("Cancellation requested, stopping orchestrator...")
             try:
-                # Best-effort publish final progress and state as cancelled via finalize path
-                # We simulate a stream error to trigger task cancellation in _finalize_stream
+                # Use tracked stream and worker pool's pending tasks to cancel everything
                 await self._finalize_stream(
-                    stream=None,
+                    stream=self._current_stream,
                     stream_error=Exception("cancelled"),
-                    pending_tasks=set(),
+                    pending_tasks=set(self.worker_pool.pending_tasks),
                 )
             except Exception:
                 # Ignore cleanup errors during cancellation
@@ -137,6 +139,7 @@ class SyncOrchestrator:
                 queue_size=self.stream_buffer_size,
                 logger=self.sync_context.logger,
             )
+            self._current_stream = stream
             await stream.start()
 
             async for entity in stream.get_entities():
@@ -206,7 +209,10 @@ class SyncOrchestrator:
             stream_error = e
             self.sync_context.logger.error(f"Error during entity streaming: {get_error_message(e)}")
         finally:
-            await self._finalize_stream(stream, stream_error, pending_tasks)
+            try:
+                await self._finalize_stream(stream, stream_error, pending_tasks)
+            finally:
+                self._current_stream = None
 
     async def _submit_batch_and_trim(
         self,
@@ -253,6 +259,7 @@ class SyncOrchestrator:
                 queue_size=self.stream_buffer_size,
                 logger=self.sync_context.logger,
             )
+            self._current_stream = stream
             await stream.start()
 
             async for entity in stream.get_entities():
@@ -293,7 +300,10 @@ class SyncOrchestrator:
             stream_error = e
             self.sync_context.logger.error(f"Error during entity streaming: {get_error_message(e)}")
         finally:
-            await self._finalize_stream(stream, stream_error, pending_tasks)
+            try:
+                await self._finalize_stream(stream, stream_error, pending_tasks)
+            finally:
+                self._current_stream = None
 
     # ----------------------------- Shared helpers -----------------------------
     async def _handle_completed_tasks(self, pending_tasks: set[asyncio.Task]) -> set[asyncio.Task]:
