@@ -41,7 +41,7 @@ class EntityProcessor:
     # ------------------------------------------------------------------------------------
     # Public API — single entity (legacy path)
     # ------------------------------------------------------------------------------------
-    async def process(
+    async def process(  # noqa: C901
         self,
         entity: BaseEntity,
         source_node: schemas.DagNode,
@@ -99,6 +99,9 @@ class EntityProcessor:
 
             return processed_entities
 
+        except asyncio.CancelledError:
+            # Ensure cooperative cancellation propagates immediately
+            raise
         except Exception:
             await sync_context.progress.increment("skipped", 1)
             return []
@@ -216,6 +219,9 @@ class EntityProcessor:
                         sync_id=sync_context.sync.id,
                         entity_ids=[e.entity_id for e in non_deletes],
                     )
+            except asyncio.CancelledError:
+                # Propagate cancellation during DB prefetch
+                raise
             except Exception as e:
                 sync_context.logger.warning(f"💥 BATCH_DB_LOOKUP_ERROR: {e}")
 
@@ -255,6 +261,9 @@ class EntityProcessor:
         async def _do_transform(p: BaseEntity):
             try:
                 return p.entity_id, await self._transform(p, source_node, sync_context)
+            except asyncio.CancelledError:
+                # Propagate cancellation to caller
+                raise
             except Exception as e:
                 sync_context.logger.warning(
                     f"💥 BATCH_TRANSFORM_ERROR [{p.entity_id}] {type(e).__name__}: {e}"
@@ -511,6 +520,9 @@ class EntityProcessor:
 
             await self._remove_orphaned_entities(orphaned_entities, sync_context)
 
+        except asyncio.CancelledError:
+            # Respect cancellation during cleanup
+            raise
         except Exception as e:
             sync_context.logger.error(f"💥 Cleanup failed: {str(e)}", exc_info=True)
             raise e
@@ -577,6 +589,9 @@ class EntityProcessor:
             async with sem:
                 try:
                     return await self._enrich(e, sync_context)
+                except asyncio.CancelledError:
+                    # Allow cancellation to bubble up
+                    raise
                 except Exception as ex:
                     sync_context.logger.warning(
                         f"💥 ENRICH_ERROR [{e.entity_id}] {type(ex).__name__}: {ex}"
@@ -599,6 +614,9 @@ class EntityProcessor:
                 try:
                     h = await compute_entity_hash_async(e)
                     hashes[e.entity_id] = h
+                except asyncio.CancelledError:
+                    # Allow cooperative cancellation
+                    raise
                 except Exception as ex:
                     sync_context.logger.warning(
                         f"💥 HASH_ERROR [{e.entity_id}] {type(ex).__name__}: {ex}"
@@ -937,6 +955,9 @@ class EntityProcessor:
             )
             return processed_entities
 
+        except asyncio.CancelledError:
+            # Propagate cancellation so orchestrator can stop and cancel workers
+            raise
         except Exception as e:
             sync_context.logger.warning(
                 f"💥 VECTOR_ERROR [{entity_context}] Vectorization failed: {str(e)}"

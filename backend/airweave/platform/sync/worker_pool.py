@@ -75,6 +75,13 @@ class AsyncWorkerPool:
                 )
                 return result
 
+            except asyncio.CancelledError:
+                elapsed = asyncio.get_event_loop().time() - start_time
+                self.logger.warning(
+                    f"🚫 WORKER_CANCELLED [{task_id}] "
+                    f"Cancelled after {elapsed:.2f}s (thread: {thread_id})"
+                )
+                raise
             except Exception as e:
                 elapsed = asyncio.get_event_loop().time() - start_time
                 self.logger.warning(
