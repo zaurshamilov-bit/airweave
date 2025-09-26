@@ -564,6 +564,12 @@ class OAuth2Service:
             "redirect_uri": redirect_uri,
         }
 
+        # ADD THIS DEBUG LOGGING HERE - BEFORE the credential handling
+        logger.info(f"DEBUG - Using redirect_uri: {redirect_uri}")
+        logger.info(f"DEBUG - Using client_id: {client_id}")
+        logger.info(f"DEBUG - Code length: {len(code)}")
+        logger.info(f"DEBUG - Backend URL: {integration_config.backend_url}")
+
         if integration_config.client_credential_location == "header":
             encoded_credentials = OAuth2Service._encode_client_credentials(client_id, client_secret)
             headers["Authorization"] = f"Basic {encoded_credentials}"
