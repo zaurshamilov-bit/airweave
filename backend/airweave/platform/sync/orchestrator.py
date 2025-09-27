@@ -173,7 +173,7 @@ class SyncOrchestrator:
                 # Set a latency-based flush deadline on first element
                 if flush_deadline is None and self.max_batch_latency_ms > 0:
                     flush_deadline = (
-                        asyncio.get_event_loop().time() + self.max_batch_latency_ms / 1000.0
+                        asyncio.get_running_loop().time() + self.max_batch_latency_ms / 1000.0
                     )
 
                 # Size-based flush
@@ -186,7 +186,10 @@ class SyncOrchestrator:
                     continue
 
                 # Time-based flush (checked when new items arrive)
-                if flush_deadline is not None and asyncio.get_event_loop().time() >= flush_deadline:
+                if (
+                    flush_deadline is not None
+                    and asyncio.get_running_loop().time() >= flush_deadline
+                ):
                     pending_tasks = await self._submit_batch_and_trim(
                         batch_buffer, pending_tasks, source_node
                     )

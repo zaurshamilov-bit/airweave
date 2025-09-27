@@ -146,13 +146,13 @@ class SyncProgress:
         # Calculate rate if possible
         rate_info = ""
         if hasattr(self, "_start_time"):
-            elapsed = asyncio.get_event_loop().time() - self._start_time
+            elapsed = asyncio.get_running_loop().time() - self._start_time
             if elapsed > 0:
                 rate = total_ops / elapsed
                 rate_info = f" | Rate: {rate:.1f} ops/sec"
         else:
             # Set start time on first status update
-            self._start_time = asyncio.get_event_loop().time()
+            self._start_time = asyncio.get_running_loop().time()
 
         # Log entity type breakdown if available
         entity_info = ""
