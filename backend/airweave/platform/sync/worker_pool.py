@@ -70,10 +70,10 @@ class AsyncWorkerPool:
                 f"(thread: {thread_id})"
             )
 
-            start_time = asyncio.get_event_loop().time()
+            start_time = asyncio.get_running_loop().time()
             try:
                 result = await coro(*args, **kwargs)
-                elapsed = asyncio.get_event_loop().time() - start_time
+                elapsed = asyncio.get_running_loop().time() - start_time
 
                 self.logger.debug(
                     f"✅ WORKER_COMPLETE [{task_id}] Task completed successfully "
@@ -82,14 +82,14 @@ class AsyncWorkerPool:
                 return result
 
             except asyncio.CancelledError:
-                elapsed = asyncio.get_event_loop().time() - start_time
+                elapsed = asyncio.get_running_loop().time() - start_time
                 self.logger.warning(
                     f"🚫 WORKER_CANCELLED [{task_id}] "
                     f"Cancelled after {elapsed:.2f}s (thread: {thread_id})"
                 )
                 raise
             except Exception as e:
-                elapsed = asyncio.get_event_loop().time() - start_time
+                elapsed = asyncio.get_running_loop().time() - start_time
                 self.logger.warning(
                     f"❌ WORKER_ERROR [{task_id}] Task failed after {elapsed:.2f}s "
                     f"(thread: {thread_id}): {type(e).__name__}: {str(e)}"
