@@ -5,7 +5,10 @@ to build search execution plans.
 """
 
 from airweave.search.operations.base import SearchOperation
-from airweave.search.operations.completion import CompletionGeneration
+
+# ---
+# from airweave.search.operations.completion import CompletionGeneration
+from airweave.search.operations.completion_groq import CompletionGeneration
 from airweave.search.operations.embedding import Embedding
 from airweave.search.operations.qdrant_filter import QdrantFilterOperation
 

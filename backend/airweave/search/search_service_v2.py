@@ -37,13 +37,12 @@ class SearchServiceV2:
         # We import the operation classes here (runtime, not at type-check time) and then
         # rebuild the model so that string forward refs like "QueryInterpretation" resolve.
         try:
-            # IMPORTANT: import QueryExpansion from the operations package so provider selection applies
             from airweave.search.operations import (
+                CompletionGeneration,  # noqa: F401
                 LLMReranking,  # noqa: F401
                 QueryExpansion,  # noqa: F401
                 QueryInterpretation,  # noqa: F401
             )
-            from airweave.search.operations.completion import CompletionGeneration  # noqa: F401
             from airweave.search.operations.embedding import Embedding  # noqa: F401
             from airweave.search.operations.qdrant_filter import (
                 QdrantFilterOperation,  # noqa: F401
