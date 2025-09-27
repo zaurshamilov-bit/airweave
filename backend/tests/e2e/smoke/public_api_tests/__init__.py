@@ -21,6 +21,7 @@ from .test_source_connections import test_source_connections
 from .test_search import test_search_functionality
 from .test_cleanup import test_cleanup
 from .test_pubsub import test_sync_job_pubsub
+from .test_cancelling_syncs import test_cancelling_syncs
 
 __all__ = [
     # Utilities
@@ -36,4 +37,5 @@ __all__ = [
     "test_search_functionality",
     "test_cleanup",
     "test_sync_job_pubsub",
+    "test_cancelling_syncs",
 ]

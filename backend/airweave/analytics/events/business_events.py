@@ -177,6 +177,33 @@ class BusinessEventTracker:
             groups={"organization": str(ctx.organization.id)},
         )
 
+    @staticmethod
+    def track_sync_cancelled(
+        ctx, source_short_name: str, source_connection_id: UUID, duration_ms: int
+    ):
+        """Track when a sync operation is cancelled.
+
+        Args:
+        ----
+            ctx: API context containing user and organization info
+            source_short_name: Short name of the source (e.g., 'slack', 'notion')
+            source_connection_id: ID of the source connection
+            duration_ms: Duration before cancellation in milliseconds
+        """
+        properties = {
+            "source_short_name": source_short_name,
+            "source_connection_id": str(source_connection_id),
+            "organization_name": getattr(ctx.organization, "name", "unknown"),
+            "duration_ms": duration_ms,
+        }
+
+        analytics.track_event(
+            event_name="sync_cancelled",
+            distinct_id=str(ctx.user.id) if ctx.user else f"api_key_{ctx.organization.id}",
+            properties=properties,
+            groups={"organization": str(ctx.organization.id)},
+        )
+
 
 # Global instance
 business_events = BusinessEventTracker()

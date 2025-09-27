@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from enum import Enum
 from typing import AsyncGenerator, Generic, Optional, TypeVar
 
 from airweave.platform.entities._base import BaseEntity
@@ -10,11 +11,24 @@ from airweave.platform.utils.error_utils import get_error_message
 T = TypeVar("T", bound=BaseEntity)
 
 
+class StreamState(Enum):
+    """State of the async source stream."""
+
+    CREATED = "created"
+    STARTING = "starting"
+    RUNNING = "running"
+    STOPPING = "stopping"
+    FINISHED = "finished"  # Normal completion
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+
+
 class AsyncSourceStream(Generic[T]):
     """Manages asynchronous processing of entity streams with separate producer/consumer loops.
 
     - Producer: generates entities from a source
     - Consumer: processes entities independently
+    - State management: explicit lifecycle states for better control
 
     Uses async queue to buffer entities and implement backpressure.
     """
@@ -36,10 +50,22 @@ class AsyncSourceStream(Generic[T]):
         # Queue is used to buffer entities and implement backpressure
         self.queue: asyncio.Queue[Optional[T]] = asyncio.Queue(maxsize=queue_size)
         self.producer_task = None
-        self.is_running = True
         self.producer_done = asyncio.Event()
         self.producer_exception = None
         self.logger = logger
+
+        # State management
+        self._state = StreamState.CREATED
+        self._state_lock = asyncio.Lock()
+
+    @property
+    def state(self) -> StreamState:
+        """Get the current state of the stream."""
+        return self._state
+
+    def is_active(self) -> bool:
+        """Check if stream is in an active state."""
+        return self._state in (StreamState.RUNNING, StreamState.STARTING)
 
     async def __aenter__(self):
         """Context manager entry point."""
@@ -57,8 +83,9 @@ class AsyncSourceStream(Generic[T]):
         try:
             items_produced = 0
             async for item in self.source_generator:
-                if not self.is_running:
-                    self.logger.debug("Producer stopping early")
+                # Check if we should stop (cancelled or stopping)
+                if self._state in (StreamState.CANCELLED, StreamState.STOPPING):
+                    self.logger.debug(f"Producer stopping early due to state: {self._state}")
                     break
 
                 # Put item in queue, waiting if queue is full.
@@ -75,10 +102,17 @@ class AsyncSourceStream(Generic[T]):
                     )
 
             self.logger.info(f"Source generator exhausted after producing {items_produced} items")
+        except asyncio.CancelledError:
+            self.logger.info("Producer cancelled")
+            async with self._state_lock:
+                if self._state != StreamState.CANCELLED:
+                    self._state = StreamState.CANCELLED
+            raise
         except Exception as e:
             self.logger.error(f"Error in producer: {get_error_message(e)}")
             self.producer_exception = e
-            # Re-raise to ensure proper error handling -> THIS DOES NOT WORK
+            async with self._state_lock:
+                self._state = StreamState.FAILED
             raise
         finally:
             # Signal we're done by putting None in the queue and setting the done event
@@ -90,12 +124,48 @@ class AsyncSourceStream(Generic[T]):
 
         Runs the producer in a separate task so that it can run independently of the consumer.
         """
+        async with self._state_lock:
+            if self._state != StreamState.CREATED:
+                self.logger.warning(f"Cannot start stream in {self._state} state")
+                return
+            self._state = StreamState.STARTING
+
         self.producer_task = asyncio.create_task(self._producer())
 
+        async with self._state_lock:
+            if self._state == StreamState.STARTING:
+                self._state = StreamState.RUNNING
+
+    async def cancel(self):
+        """Cancel the stream immediately."""
+        async with self._state_lock:
+            if self._state in (StreamState.FINISHED, StreamState.CANCELLED):
+                return
+            self._state = StreamState.CANCELLED
+
+        self.logger.info("Cancelling producer task")
+        if self.producer_task and not self.producer_task.done():
+            self.producer_task.cancel()
+            try:
+                await self.producer_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                self.logger.warning(
+                    f"Producer task error during cancellation: {get_error_message(e)}"
+                )
+
+        # Drain queue to prevent deadlock
+        await self._drain_queue()
+
     async def stop(self):
-        """Stop the producer and clean up resources."""
-        self.is_running = False
-        self.logger.info("Stopping producer task")
+        """Stop the producer gracefully and clean up resources."""
+        async with self._state_lock:
+            if self._state in (StreamState.FINISHED, StreamState.CANCELLED):
+                return
+            self._state = StreamState.STOPPING
+
+        self.logger.info("Stopping producer task gracefully")
         if self.producer_task:
             # Give producer a chance to finish gracefully
             try:
@@ -112,6 +182,10 @@ class AsyncSourceStream(Generic[T]):
                 self.logger.warning(
                     f"Producer task already failed with error: {get_error_message(e)}"
                 )
+
+        async with self._state_lock:
+            if self._state == StreamState.STOPPING:
+                self._state = StreamState.FINISHED
 
     async def get_entities(self) -> AsyncGenerator[T, None]:
         """Get entities with timeout to prevent cleanup deadlock."""

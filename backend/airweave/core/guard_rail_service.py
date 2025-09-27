@@ -256,11 +256,6 @@ class GuardRailService:
                 self.pending_increments.get(action_type, 0) + amount
             )
 
-            self.logger.debug(
-                f"Incremented {action_type.value} by {amount}, "
-                f"pending total: {self.pending_increments[action_type]}"
-            )
-
             # Check if this specific action type should flush
             threshold = self.FLUSH_THRESHOLDS.get(action_type, 1)
             if self.pending_increments[action_type] >= threshold:

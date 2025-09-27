@@ -2,6 +2,7 @@
 
 import asyncio
 import signal
+from datetime import timedelta
 from typing import Any
 
 from temporalio.worker import Worker
@@ -11,8 +12,8 @@ from airweave.core.logging import logger
 from airweave.platform.entities._base import ensure_file_entity_models
 from airweave.platform.temporal.activities import (
     create_sync_job_activity,
+    mark_sync_job_cancelled_activity,
     run_sync_activity,
-    update_sync_job_status_activity,
 )
 from airweave.platform.temporal.client import temporal_client
 from airweave.platform.temporal.workflows import RunSourceConnectionWorkflow
@@ -45,10 +46,17 @@ class TemporalWorker:
                 workflows=[RunSourceConnectionWorkflow],
                 activities=[
                     run_sync_activity,
-                    update_sync_job_status_activity,
+                    mark_sync_job_cancelled_activity,
                     create_sync_job_activity,
                 ],
                 workflow_runner=sandbox_config,
+                max_concurrent_workflow_task_polls=8,
+                max_concurrent_activity_task_polls=16,
+                sticky_queue_schedule_to_start_timeout=timedelta(seconds=2),
+                nonsticky_to_sticky_poll_ratio=0.5,
+                # Speed up cancel delivery by flushing heartbeats frequently
+                default_heartbeat_throttle_interval=timedelta(seconds=2),
+                max_heartbeat_throttle_interval=timedelta(seconds=2),
             )
 
             self.running = True

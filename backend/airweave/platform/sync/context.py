@@ -62,6 +62,8 @@ class SyncContext:
     logger: ContextualLogger
 
     force_full_sync: bool = False
+    # Whether any destination supports keyword (sparse) indexing. Set once before run.
+    has_keyword_index: bool = False
 
     # batching knobs (read by SyncOrchestrator at init)
     should_batch: bool = True
@@ -93,6 +95,7 @@ class SyncContext:
         should_batch: bool = True,
         batch_size: int = 64,
         max_batch_latency_ms: int = 200,
+        has_keyword_index: bool = False,
     ):
         """Initialize the sync context."""
         self.source = source
@@ -119,3 +122,5 @@ class SyncContext:
         self.should_batch = should_batch
         self.batch_size = batch_size
         self.max_batch_latency_ms = max_batch_latency_ms
+        # Destination capabilities (precomputed)
+        self.has_keyword_index = has_keyword_index

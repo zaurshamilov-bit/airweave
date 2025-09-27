@@ -301,8 +301,6 @@ async def entity_chunker(entity: BaseEntity, logger: ContextualLogger) -> List[B
     # Check embeddable text size
     embeddable_size = calculate_embeddable_text_size(entity)
 
-    logger.debug(f"Entity {entity.entity_id} embeddable text size: {embeddable_size} tokens")
-
     # If within limits, return as-is
     if embeddable_size <= SAFE_EMBEDDABLE_TOKEN_SIZE:
         return [entity]

@@ -155,7 +155,7 @@ class SyncDAGRouter:
         """Route an entity to its next consumer based on DAG structure."""
         entity_context = f"Entity({entity.entity_id})"
         entity_type = type(entity)
-        router_start = asyncio.get_event_loop().time()
+        router_start = asyncio.get_running_loop().time()
 
         # Handle special entity types with dedicated processing
         if self._is_code_file_entity(entity_type, entity):
