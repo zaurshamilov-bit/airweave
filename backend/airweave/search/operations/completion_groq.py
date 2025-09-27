@@ -438,31 +438,21 @@ class CompletionGeneration(SearchOperation):
 
     def _add_content_field(self, parts: List[str], payload: Dict):
         """Add content field to parts."""
-        # Include BOTH embeddable_text and md_content if they exist
-        content_added = False
-
-        # Add embeddable_text if it exists and is non-empty
+        # Prefer embeddable_text; otherwise fall back to md_content; otherwise to other fields.
+        # Avoid duplication when both exist.
         embeddable_text = payload.get("embeddable_text", "").strip()
         if embeddable_text:
-            # Never truncate - give LLM as much context as possible
             parts.append(f"**Embeddable Text:**\n{embeddable_text}")
-            content_added = True
+            return
 
-        # Add md_content if it exists and is non-empty
         md_content = payload.get("md_content", "").strip()
         if md_content:
-            # Never truncate - give LLM as much context as possible
             parts.append(f"**Content:**\n{md_content}")
-            content_added = True
+            return
 
-        # If neither embeddable_text nor md_content exist, fall back to other fields
-        if not content_added:
-            content = (
-                payload.get("content") or payload.get("text") or payload.get("description", "")
-            )
-            if content:
-                # Never truncate - give LLM as much context as possible
-                parts.append(f"**Content:**\n{content}")
+        content = payload.get("content") or payload.get("text") or payload.get("description", "")
+        if content:
+            parts.append(f"**Content:**\n{content}")
 
     def _add_metadata_field(self, parts: List[str], payload: Dict):
         """Add metadata field to parts."""

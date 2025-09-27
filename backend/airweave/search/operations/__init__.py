@@ -24,7 +24,8 @@ from airweave.search.operations.recency_bias import RecencyBias
 
 # ---
 # from airweave.search.operations.reranking import LLMReranking
-from airweave.search.operations.reranking_groq import LLMReranking
+# from airweave.search.operations.reranking_groq import LLMReranking
+from airweave.search.operations.reranker_cohere import LLMReranking
 
 # ---
 from airweave.search.operations.vector_search import VectorSearch

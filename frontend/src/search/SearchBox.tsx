@@ -276,7 +276,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                 enable_reranking: toggles.reRanking,
                 response_type: currentResponseType,
                 score_threshold: null,
-                limit: 30, // TODO: change this
+                limit: 100,
                 offset: 0
             };
 
@@ -1107,7 +1107,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                     >
                                         <div className="space-y-2">
                                             <div className={DESIGN_SYSTEM.tooltip.title}>AI reranking</div>
-                                            <p className={DESIGN_SYSTEM.tooltip.description}>LLM reorders results for better relevance. Adds latency.</p>
+                                            <p className={DESIGN_SYSTEM.tooltip.description}>LLM reorders results for better relevance.</p>
                                             <div className={DESIGN_SYSTEM.tooltip.divider}>
                                                 <a
                                                     href="https://docs.airweave.ai/search#ai-reranking"

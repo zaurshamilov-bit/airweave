@@ -81,7 +81,7 @@ class VectorSearch(SearchOperation):
         # Check if reranking is enabled
         if config.reranking is not None:
             # Fetch more results for reranking to work with
-            limit = min(int(config.limit * 2), 50)
+            limit = min(int(config.limit * 2.5), 250)
 
         # Emit start event with current plan
         if callable(emitter):
@@ -360,7 +360,7 @@ class VectorSearch(SearchOperation):
                 entity_id = payload.get("entity_id", "unknown")
                 logger.debug(f"  [{i + 1}] Score={score:.3f}, Entity={entity_id[:30]}...")
 
-    async def _execute_single(
+    async def _execute_single(  # noqa: C901 - controlled complexity
         self,
         destination,
         embeddings,

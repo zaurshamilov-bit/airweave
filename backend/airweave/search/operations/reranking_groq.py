@@ -75,7 +75,9 @@ class LLMReranking(SearchOperation):
 
         try:
             # Prepare candidate set for the LLM
+            logger.info(f"\n\nResults: {results}\n\n")
             results_for_llm = self._prepare_candidates(results)
+            logger.info(f"\n\nResults for LLM: {results_for_llm}\n\n")
 
             # Define structured output for reranking (no streaming deltas)
             class RankedResult(BaseModel):
@@ -131,9 +133,7 @@ class LLMReranking(SearchOperation):
                 reranked=reranked,
                 limit=config.limit,
             )
-            logger.info(
-                f"[{self.name}] Successfully reranked to {len(context['final_results'])} results"
-            )
+            logger.info(f"[{self.name}] Successfully reranked to {context['final_results']}")
 
             # Emit finish events
             await self._emit_finish_events(emitter, rankings_list)
@@ -167,18 +167,25 @@ class LLMReranking(SearchOperation):
         prepared: List[Dict[str, Any]] = []
         for i, result in enumerate(results[:k]):
             payload = result.get("payload", {})
+            # Prefer embeddable_text as the primary text for LLM consumption,
+            # falling back to chunk/content/text as needed.
             content = (
-                payload.get("md_content")
+                payload.get("embeddable_text")
+                or payload.get("md_content")
                 or payload.get("content")
                 or payload.get("text", "")
-                or payload.get("embeddable_text", "")
             )
             prepared.append(
                 {
                     "index": i,
                     "source": payload.get("source_name", "Unknown"),
-                    "title": payload.get("title", "Untitled"),
+                    # Prefer richer, domain-aware titles first
+                    "title": payload.get("md_title")
+                    or payload.get("title")
+                    or payload.get("name")
+                    or "Untitled",
                     "content": content,
+                    "embeddable_text": payload.get("embeddable_text", ""),
                     "score": result.get("score", 0),
                 }
             )
