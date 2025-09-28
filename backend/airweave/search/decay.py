@@ -55,4 +55,12 @@ class DecayConfig(BaseModel):
             "minute": 60,
             "second": 1,
         }
-        return self.scale_value * mapping[self.scale_unit]
+        try:
+            unit_seconds = mapping[self.scale_unit]
+        except KeyError as e:
+            raise ValueError(f"Invalid scale_unit: {self.scale_unit}") from e
+
+        if self.scale_value <= 0:
+            raise ValueError("scale_value must be > 0")
+
+        return self.scale_value * unit_seconds

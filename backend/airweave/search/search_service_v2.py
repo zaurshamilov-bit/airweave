@@ -37,17 +37,17 @@ class SearchServiceV2:
         # We import the operation classes here (runtime, not at type-check time) and then
         # rebuild the model so that string forward refs like "QueryInterpretation" resolve.
         try:
-            from airweave.search.operations.completion import CompletionGeneration  # noqa: F401
+            from airweave.search.operations import (
+                CompletionGeneration,  # noqa: F401
+                LLMReranking,  # noqa: F401
+                QueryExpansion,  # noqa: F401
+                QueryInterpretation,  # noqa: F401
+            )
             from airweave.search.operations.embedding import Embedding  # noqa: F401
             from airweave.search.operations.qdrant_filter import (
                 QdrantFilterOperation,  # noqa: F401
             )
-            from airweave.search.operations.query_expansion import QueryExpansion  # noqa: F401
-            from airweave.search.operations.query_interpretation import (
-                QueryInterpretation,  # noqa: F401
-            )
             from airweave.search.operations.recency_bias import RecencyBias  # noqa: F401
-            from airweave.search.operations.reranking import LLMReranking  # noqa: F401
             from airweave.search.operations.vector_search import VectorSearch  # noqa: F401
 
             # Rebuild the model to resolve forward references now that classes are imported
