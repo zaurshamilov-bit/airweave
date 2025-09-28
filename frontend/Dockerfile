@@ -6,7 +6,8 @@ WORKDIR /app
 COPY package.json ./
 
 # First install dependencies without using the lockfile
-RUN npm install --no-package-lock
+# Skip postinstall scripts to avoid @swc/core segfault
+RUN npm install --no-package-lock --ignore-scripts
 
 # Copy application code
 COPY . .
