@@ -105,13 +105,14 @@ navigation:
     - GET /source-connections/{source_connection_id}
     - GET /source-connections/{source_connection_id}/jobs
     - POST /source-connections
+    - PATCH /source-connections/{source_connection_id}
     - POST /source-connections/{source_connection_id}/run
     - POST /source-connections/{source_connection_id}/jobs/{job_id}/cancel
     - DELETE /source-connections/{source_connection_id}
   - section: Sources
     contents:
-    - GET /sources/list
-    - GET /sources/detail/{short_name}
+    - GET /sources
+    - GET /sources/{short_name}
   snippets:
     python: airweave-sdk
     typescript: '@airweave/sdk'

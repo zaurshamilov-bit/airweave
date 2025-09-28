@@ -1464,7 +1464,7 @@ const SourceConnectionDetailView = ({
 
         try {
             // Fetch source details
-            const sourceResponse = await apiClient.get(`/sources/detail/${sourceConnection.short_name}`);
+            const sourceResponse = await apiClient.get(`/sources/${sourceConnection.short_name}`);
             if (sourceResponse.ok) {
                 const sourceData = await sourceResponse.json();
                 setSourceDetails(sourceData);

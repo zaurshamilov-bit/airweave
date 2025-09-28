@@ -1391,13 +1391,20 @@ class SourceConnectionService:
                                     sync_dag, from_attributes=True
                                 )
 
+                                # Get the Connection object (not SourceConnection)
+                                connection_schema = (
+                                    await self._get_connection_for_source_connection(
+                                        db=db, source_connection=source_conn, ctx=ctx
+                                    )
+                                )
+
                                 # Trigger the workflow
                                 await temporal_service.run_source_connection_workflow(
                                     sync=sync_schema,
                                     sync_job=sync_job_schema,
                                     sync_dag=sync_dag_schema,
                                     collection=collection_schema,
-                                    source_connection=source_conn_response,
+                                    connection=connection_schema,
                                     ctx=ctx,
                                 )
 
@@ -1415,6 +1422,9 @@ class SourceConnectionService:
     _create_integration_credential = source_connection_helpers.create_integration_credential
     _create_connection = source_connection_helpers.create_connection
     _get_collection = source_connection_helpers.get_collection
+    _get_connection_for_source_connection = (
+        source_connection_helpers.get_connection_for_source_connection
+    )
     _create_sync = source_connection_helpers.create_sync
     _create_sync_without_schedule = source_connection_helpers.create_sync_without_schedule
     _create_source_connection = source_connection_helpers.create_source_connection

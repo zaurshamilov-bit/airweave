@@ -182,7 +182,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       if (!selectedSource) return;
 
       try {
-        const response = await apiClient.get(`/sources/detail/${selectedSource}`);
+        const response = await apiClient.get(`/sources/${selectedSource}`);
         if (response.ok) {
           const source = await response.json();
           setSourceDetails(source);
