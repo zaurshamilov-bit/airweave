@@ -124,7 +124,7 @@ class Settings(BaseSettings):
     FIRECRAWL_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
     COHERE_API_KEY: Optional[str] = None
-    CEREBRI_API_KEY: Optional[str] = None
+    CEREBRAS_API_KEY: Optional[str] = None
     AZURE_KEYVAULT_NAME: Optional[str] = None
 
     # Temporal configuration
