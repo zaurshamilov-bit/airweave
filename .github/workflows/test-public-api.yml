@@ -79,14 +79,30 @@ jobs:
           DEV_MODE: "true"
         run: |
           echo "Starting services using start.sh..."
-          # start.sh will create .env from .env.example and generate keys
-          # Ensure AI keys are in .env so containers pick them up
-          echo "OPENAI_API_KEY=${OPENAI_API_KEY}" >> .env
-          echo "MISTRAL_API_KEY=${MISTRAL_API_KEY}" >> .env
-          echo "COHERE_API_KEY=${COHERE_API_KEY}" >> .env
-          echo "GROQ_API_KEY=${GROQ_API_KEY}" >> .env
-          echo "CEREBRAS_API_KEY=${CEREBRAS_API_KEY}" >> .env
-          ./start.sh --noninteractive
+          # Prepare a Compose override to inject AI keys into containers without touching .env
+          cat > docker/compose.ci.env.yml <<'YAML'
+          services:
+            backend:
+              environment:
+                OPENAI_API_KEY: ${OPENAI_API_KEY}
+                STRIPE_API_KEY: ${STRIPE_API_KEY}
+                MISTRAL_API_KEY: ${MISTRAL_API_KEY}
+                COHERE_API_KEY: ${COHERE_API_KEY}
+                GROQ_API_KEY: ${GROQ_API_KEY}
+                CEREBRAS_API_KEY: ${CEREBRAS_API_KEY}
+            temporal-worker:
+              environment:
+                OPENAI_API_KEY: ${OPENAI_API_KEY}
+                STRIPE_API_KEY: ${STRIPE_API_KEY}
+                MISTRAL_API_KEY: ${MISTRAL_API_KEY}
+                COHERE_API_KEY: ${COHERE_API_KEY}
+                GROQ_API_KEY: ${GROQ_API_KEY}
+                CEREBRAS_API_KEY: ${CEREBRAS_API_KEY}
+          YAML
+
+          # start.sh will create .env from .env.example and generate keys if missing
+          # We pass the override so containers receive secrets from the runner env
+          ./start.sh --noninteractive --compose-override docker/compose.ci.env.yml
 
           # The script already does health checks, but let's verify
           echo ""
