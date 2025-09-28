@@ -3,11 +3,10 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package.json ./
+COPY package.json package-lock.json ./
 
-# Install dependencies while completely ignoring postinstall scripts that cause segfaults
-# SWC and other native modules will be handled by the build process itself
-RUN npm install --legacy-peer-deps --ignore-scripts
+# Install dependencies using ci for reproducible builds
+RUN npm ci
 
 # Copy application code
 COPY . .
