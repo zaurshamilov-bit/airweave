@@ -39,6 +39,8 @@ jobs:
         run: |
           echo "Building backend image for testing..."
           docker build -t test-backend:latest ./backend
+          echo "Building frontend image for testing..."
+          docker build -t test-frontend:latest ./frontend
 
       - name: Setup environment and start services
         env:
