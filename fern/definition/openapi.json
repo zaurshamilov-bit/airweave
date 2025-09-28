@@ -364,64 +364,6 @@
           }
         ]
       },
-      "put": {
-        "tags": [
-          "collections"
-        ],
-        "summary": "Update",
-        "description": "Update a collection's properties.\n\nModifies the display name of an existing collection.\nNote that the readable ID cannot be changed after creation to maintain stable\nAPI endpoints and preserve any existing integrations or bookmarks.",
-        "operationId": "update_collections__readable_id__put",
-        "parameters": [
-          {
-            "name": "readable_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "description": "The unique readable identifier of the collection to update",
-              "title": "Readable Id"
-            },
-            "description": "The unique readable identifier of the collection to update"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CollectionUpdate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Collection"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ]
-      },
       "delete": {
         "tags": [
           "collections"
@@ -848,7 +790,7 @@
           "source-connections"
         ],
         "summary": "Create",
-        "description": "Create a new source connection.\n\nThe authentication configuration determines the flow:\n- DirectAuthentication: Immediate creation with provided credentials\n- OAuthBrowserAuthentication: Returns shell with authentication URL\n- OAuthTokenAuthentication: Immediate creation with provided token\n- AuthProviderAuthentication: Using external auth provider\n\nBYOC (Bring Your Own Client) is detected when client_id and client_secret\nare provided in OAuthBrowserAuthentication.",
+        "description": "Create a new source connection.\n\nThe authentication configuration determines the flow:\n- DirectAuthentication: Immediate creation with provided credentials\n- OAuthBrowserAuthentication: Returns shell with authentication URL\n- OAuthTokenAuthentication: Immediate creation with provided token\n- AuthProviderAuthentication: Using external auth provider\n\nBYOC (Bring Your Own Client) is detected when client_id and client_secret\nare provided in OAuthBrowserAuthentication.\n\nsync_immediately defaults:\n- True for: direct, oauth_token, auth_provider\n- False for: oauth_browser, oauth_byoc (these sync after authentication)",
         "operationId": "create_source_connections_post",
         "parameters": [],
         "requestBody": {
@@ -5745,10 +5687,16 @@
             ]
           },
           "sync_immediately": {
-            "type": "boolean",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Sync Immediately",
-            "description": "Run initial sync after creation",
-            "default": true
+            "description": "Run initial sync after creation. Defaults to True for direct/token/auth_provider, False for OAuth browser/BYOC flows (which sync after authentication)"
           },
           "authentication": {
             "anyOf": [
@@ -6015,18 +5963,26 @@
               }
             ]
           },
-          "credentials": {
+          "authentication": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/DirectAuthentication"
+              },
+              {
+                "$ref": "#/components/schemas/OAuthTokenAuthentication"
+              },
+              {
+                "$ref": "#/components/schemas/OAuthBrowserAuthentication"
+              },
+              {
+                "$ref": "#/components/schemas/AuthProviderAuthentication"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Credentials",
-            "description": "Update credentials (direct auth only)"
+            "title": "Authentication",
+            "description": "Authentication config (defaults to OAuth browser flow for OAuth sources)"
           }
         },
         "type": "object",
