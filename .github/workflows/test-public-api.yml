@@ -59,9 +59,9 @@ jobs:
           cat > .env << EOF
           BACKEND_IMAGE=test-backend:latest
           FRONTEND_IMAGE=test-frontend:latest
-          OPENAI_API_KEY="${OPENAI_API_KEY}"
-          STRIPE_API_KEY="${STRIPE_API_KEY}"
-          MISTRAL_API_KEY="${MISTRAL_API_KEY}"
+          OPENAI_API_KEY=${OPENAI_API_KEY}
+          STRIPE_API_KEY=${STRIPE_API_KEY}
+          MISTRAL_API_KEY=${MISTRAL_API_KEY}
           AUTH0_ENABLED=false
           DEV_MODE=true
           SKIP_AZURE_STORAGE=true
