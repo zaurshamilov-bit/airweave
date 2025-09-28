@@ -123,7 +123,7 @@ class TestSettings(BaseSettings):
         """Get API URL based on environment."""
         urls = {
             "local": "http://localhost:8001",
-            "dev": "https://dev.api.airweave.ai",
+            "dev": "https://api.dev-airweave.com",
             "prod": "https://api.airweave.ai",
         }
         return urls[self.TEST_ENV]
