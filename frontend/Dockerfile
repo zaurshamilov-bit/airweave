@@ -5,7 +5,7 @@ WORKDIR /app
 # Copy package files only
 COPY package.json ./
 
-# Install deps but skip the fucking postinstall scripts that keep segfaulting
+# Skip postinstall scripts to avoid platform-specific binary issues
 RUN npm install --ignore-scripts
 
 # Copy application code
