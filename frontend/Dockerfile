@@ -1,15 +1,18 @@
-
-FROM node:20 AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy everything at once
+# Copy package files
+COPY package.json ./
+
+# First install dependencies without using the lockfile
+RUN npm install --no-package-lock
+
+# Copy application code
 COPY . .
 
-# Install dependencies and build in a single layer
-# Using npx to run vite directly, with Node options to increase memory
-RUN npm install --ignore-scripts && \
-    NODE_OPTIONS="--max-old-space-size=4096" npx vite build
+# Build the application in production mode
+RUN npm run build
 
 # Runtime stage
 FROM node:20-alpine
