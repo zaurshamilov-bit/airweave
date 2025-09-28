@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
@@ -6,13 +6,15 @@ WORKDIR /app
 COPY package.json ./
 
 # First install dependencies without using the lockfile
-RUN npm install --no-package-lock
+# Skip postinstall scripts to avoid @swc/core segfault
+RUN npm install --no-package-lock --ignore-scripts
 
 # Copy application code
 COPY . .
 
 # Build the application in production mode
-RUN npm run build
+# Increase Node memory and use npx to run vite directly
+RUN NODE_OPTIONS="--max-old-space-size=4096" npx vite build
 
 # Runtime stage
 FROM node:20-alpine

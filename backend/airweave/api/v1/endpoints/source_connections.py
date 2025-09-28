@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airweave import schemas
+from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
@@ -71,11 +71,16 @@ async def create(
 
     BYOC (Bring Your Own Client) is detected when client_id and client_secret
     are provided in OAuthBrowserAuthentication.
+
+    sync_immediately defaults:
+    - True for: direct, oauth_token, auth_provider
+    - False for: oauth_browser, oauth_byoc (these sync after authentication)
     """
     # Check if organization is allowed to create a source connection
     await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
 
-    # If sync_immediately is True, check if we can process entities
+    # If sync_immediately is True or None (will be defaulted), check if we can process entities
+    # Note: We check even for None because it may default to True based on auth method
     if source_connection_in.sync_immediately:
         await guard_rail.is_allowed(ActionType.ENTITIES)
 
@@ -254,6 +259,30 @@ async def make_continuous(
         cursor_field=cursor_field,
         ctx=ctx,
     )
+
+
+@router.get("/{source_connection_id}/sync-id", include_in_schema=False)
+async def get_sync_id(
+    *,
+    db: AsyncSession = Depends(get_db),
+    source_connection_id: UUID,
+    ctx: ApiContext = Depends(deps.get_context),
+) -> dict:
+    """Get the sync_id for a source connection.
+
+    This is a private endpoint not documented in Fern.
+    Used internally for Temporal sync testing and debugging.
+    """
+    source_connection = await crud.source_connection.get(
+        db,
+        id=source_connection_id,
+        ctx=ctx,
+    )
+
+    if not source_connection.sync_id:
+        raise HTTPException(status_code=404, detail="No sync found for this source connection")
+
+    return {"sync_id": str(source_connection.sync_id)}
 
 
 @router.get("/authorize/{code}")

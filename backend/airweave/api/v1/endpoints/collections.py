@@ -105,7 +105,7 @@ async def get(
     return db_obj
 
 
-@router.put("/{readable_id}", response_model=schemas.Collection)
+@router.patch("/{readable_id}", response_model=schemas.Collection)
 async def update(
     collection: schemas.CollectionUpdate,
     readable_id: str = Path(

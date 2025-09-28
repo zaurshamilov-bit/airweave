@@ -3,6 +3,7 @@
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
@@ -133,7 +134,7 @@ class SyncService:
                     sync_job=sync_job,
                     dag=dag,
                     collection=collection,
-                    source_connection=source_connection,
+                    connection=source_connection,
                     ctx=ctx,
                     access_token=access_token,
                     force_full_sync=force_full_sync,
@@ -168,7 +169,27 @@ class SyncService:
 
         Returns:
             Tuple of (sync, sync_job) schemas
+
+        Raises:
+            HTTPException: If a sync job is already running or pending
         """
+        # Check for existing active jobs to prevent concurrent runs
+        active_jobs = await crud.sync_job.get_all_by_sync_id(
+            db,
+            sync_id=sync_id,
+            status=[
+                SyncJobStatus.PENDING.value,
+                SyncJobStatus.RUNNING.value,
+                SyncJobStatus.CANCELLING.value,
+            ],
+        )
+
+        if active_jobs:
+            job_status = active_jobs[0].status.lower()
+            raise HTTPException(
+                status_code=400, detail=f"Cannot start new sync: a sync job is already {job_status}"
+            )
+
         # Get sync with connections
         sync = await crud.sync.get(db, id=sync_id, ctx=ctx, with_connections=True)
         if not sync:

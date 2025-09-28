@@ -111,7 +111,7 @@ class SyncOrchestrator:
         business_events.track_sync_started(
             ctx=self.sync_context.ctx,
             sync_id=self.sync_context.sync.id,
-            source_type=self.sync_context.source_connection.short_name,
+            source_type=self.sync_context.connection.short_name,
             collection_id=self.sync_context.collection.id,
         )
 
@@ -546,7 +546,7 @@ class SyncOrchestrator:
 
         business_events.track_sync_cancelled(
             ctx=self.sync_context.ctx,
-            source_short_name=self.sync_context.source_connection.short_name,
-            source_connection_id=self.sync_context.source_connection.id,
+            source_short_name=self.sync_context.connection.short_name,
+            source_connection_id=self.sync_context.connection.id,
             duration_ms=duration_ms,
         )

@@ -250,13 +250,13 @@ const Dashboard = () => {
             <h3 className="text-lg font-semibold">Learn & Explore</h3>
             <div className="space-y-3">
               <ExampleProjectCard
-                id="how-to-use-the-api"
-                title="How to use the Airweave API"
-                description="Learn to use the API to transform data from an app into a searchable knowledge base in a few steps."
-                tags={["Jupyter Notebook", "Python"]}
-                icon={<Github className="h-5 w-5 text-primary" />}
+                id="quickstart-guide"
+                title="Quickstart Guide"
+                description="Get started with Airweave in minutes. Learn how to create collections, connect data sources, and search your data."
+                tags={["Documentation", "Getting Started"]}
+                icon={<FileText className="h-5 w-5 text-primary" />}
                 onClick={() => {
-                  window.open('https://github.com/airweave-ai/airweave/blob/main/examples/01_how-to-use-the-api.ipynb', '_blank');
+                  window.open('https://docs.airweave.ai/quickstart', '_blank');
                 }}
               />
 
@@ -272,13 +272,13 @@ const Dashboard = () => {
               />
 
               <ExampleProjectCard
-                id="advanced-search-with-filters"
-                title="Advanced Search with Filters"
-                description="Learn to use search with metadata filtering to find what you need across all your connected data sources."
-                tags={["Jupyter Notebook", "Python"]}
-                icon={<Github className="h-5 w-5 text-primary" />}
+                id="advanced-search"
+                title="Advanced Search Guide"
+                description="Master Airweave's powerful search capabilities including AI-powered query expansion, hybrid search, metadata filtering, and AI-generated answers."
+                tags={["Documentation", "Search"]}
+                icon={<FileText className="h-5 w-5 text-primary" />}
                 onClick={() => {
-                  window.open('https://github.com/airweave-ai/airweave/blob/main/examples/02_advanced_search_with_filters.ipynb', '_blank');
+                  window.open('https://docs.airweave.ai/search', '_blank');
                 }}
               />
 
@@ -293,16 +293,6 @@ const Dashboard = () => {
                 }}
               />
 
-              <ExampleProjectCard
-                id="white-label"
-                title="White Label Integration"
-                description="Create OAuth2 integrations where customers see your company name instead of Airweave."
-                tags={["Documentation"]}
-                icon={<FileText className="h-5 w-5 text-primary" />}
-                onClick={() => {
-                  window.open('https://docs.airweave.ai/white-label', '_blank');
-                }}
-              />
             </div>
           </div>
 

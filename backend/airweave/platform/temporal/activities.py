@@ -14,7 +14,7 @@ async def _run_sync_task(
     sync_job,
     sync_dag,
     collection,
-    source_connection,
+    connection,
     ctx,
     access_token,
     force_full_sync=False,
@@ -27,7 +27,7 @@ async def _run_sync_task(
         sync_job=sync_job,
         dag=sync_dag,
         collection=collection,
-        source_connection=source_connection,
+        source_connection=connection,  # sync_service expects this parameter name
         ctx=ctx,
         access_token=access_token,
         force_full_sync=force_full_sync,
@@ -41,7 +41,7 @@ async def run_sync_activity(
     sync_job_dict: Dict[str, Any],
     sync_dag_dict: Dict[str, Any],
     collection_dict: Dict[str, Any],
-    source_connection_dict: Dict[str, Any],
+    connection_dict: Dict[str, Any],
     ctx_dict: Dict[str, Any],
     access_token: Optional[str] = None,
     force_full_sync: bool = False,
@@ -55,7 +55,7 @@ async def run_sync_activity(
         sync_job_dict: The sync job as dict
         sync_dag_dict: The sync DAG as dict
         collection_dict: The collection as dict
-        source_connection_dict: The source connection as dict
+        connection_dict: The connection as dict (Connection schema, NOT SourceConnection)
         ctx_dict: The API context as dict
         access_token: Optional access token
         force_full_sync: If True, forces a full sync with orphaned entity deletion
@@ -70,7 +70,7 @@ async def run_sync_activity(
     sync_job = schemas.SyncJob(**sync_job_dict)
     sync_dag = schemas.SyncDag(**sync_dag_dict)
     collection = schemas.Collection(**collection_dict)
-    source_connection = schemas.SourceConnection(**source_connection_dict)
+    connection = schemas.Connection(**connection_dict)
 
     # Reconstruct user if present
     user = schemas.User(**ctx_dict["user"]) if ctx_dict.get("user") else None
@@ -102,7 +102,7 @@ async def run_sync_activity(
             sync_job,
             sync_dag,
             collection,
-            source_connection,
+            connection,
             ctx,
             access_token,
             force_full_sync,
