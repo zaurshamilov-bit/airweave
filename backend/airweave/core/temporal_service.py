@@ -21,7 +21,7 @@ class TemporalService:
         sync_job: schemas.SyncJob,
         sync_dag: schemas.SyncDag,
         collection: schemas.Collection,
-        source_connection: schemas.SourceConnection,
+        connection: schemas.Connection,  # Connection, NOT SourceConnection
         ctx: ApiContext,
         access_token: Optional[str] = None,
     ) -> WorkflowHandle:
@@ -32,7 +32,7 @@ class TemporalService:
             sync_job: The sync job
             sync_dag: The sync DAG
             collection: The collection
-            source_connection: The source connection
+            connection: The connection (Connection schema, NOT SourceConnection)
             ctx: The API context
             access_token: Optional access token
 
@@ -46,7 +46,7 @@ class TemporalService:
         workflow_id = f"sync-{sync_job.id}"
 
         ctx.logger.info(f"Starting Temporal workflow {workflow_id} for sync job {sync_job.id}")
-        ctx.logger.info(f"Source: {source_connection.name} | Collection: {collection.name}")
+        ctx.logger.info(f"Connection: {connection.name} | Collection: {collection.name}")
 
         # Convert Pydantic models to dicts for JSON serialization
         handle = await client.start_workflow(
@@ -56,7 +56,7 @@ class TemporalService:
                 sync_job.model_dump(mode="json"),
                 sync_dag.model_dump(mode="json"),
                 collection.model_dump(mode="json"),
-                source_connection.model_dump(mode="json"),
+                connection.model_dump(mode="json"),
                 ctx.to_serializable_dict(),  # Use serializable dict instead of model_dump
                 access_token,
             ],

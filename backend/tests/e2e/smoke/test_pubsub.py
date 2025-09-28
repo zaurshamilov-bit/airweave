@@ -154,5 +154,4 @@ class TestPubSub:
                         total_processed = current_total
 
         # Cleanup
-        await api_client.delete(f"/source-connections/{connection['id']}")
         await api_client.delete(f"/collections/{collection['readable_id']}")

@@ -1153,7 +1153,16 @@ class SourceConnectionHelpers:
             # the source_connection hasn't been updated with sync_id yet
             cron_schedule = payload.get("cron_schedule")
             if cron_schedule is None:
-                cron_schedule = self._get_default_cron_schedule(ctx)
+                # Generate default daily schedule
+                from datetime import timezone
+
+                now_utc = datetime.now(timezone.utc)
+                minute = now_utc.minute
+                hour = now_utc.hour
+                cron_schedule = f"{minute} {hour} * * *"
+                ctx.logger.info(
+                    f"No cron schedule provided, defaulting to daily at {hour:02d}:{minute:02d} UTC"
+                )
 
             sync, sync_job = await self.create_sync_without_schedule(
                 uow.session,
@@ -1207,6 +1216,34 @@ class SourceConnectionHelpers:
             await uow.session.refresh(source_conn)
 
         return source_conn
+
+    async def get_connection_for_source_connection(
+        self,
+        db: AsyncSession,
+        source_connection: SourceConnection,
+        ctx: ApiContext,
+    ) -> schemas.Connection:
+        """Get the Connection object for a SourceConnection.
+
+        Args:
+            db: Database session
+            source_connection: The source connection model
+            ctx: API context
+
+        Returns:
+            The Connection schema object
+
+        Raises:
+            ValueError: If source connection has no connection_id or connection not found
+        """
+        if not source_connection.connection_id:
+            raise ValueError(f"Source connection {source_connection.id} has no connection_id")
+
+        connection = await crud.connection.get(db=db, id=source_connection.connection_id, ctx=ctx)
+        if not connection:
+            raise ValueError(f"Connection {source_connection.connection_id} not found")
+
+        return schemas.Connection.model_validate(connection, from_attributes=True)
 
 
 # Singleton instance

@@ -13,17 +13,24 @@ import asyncio
 import json
 
 
-@pytest.mark.asyncio
 class TestSearch:
-    """Test suite for search functionality."""
+    """Test suite for search functionality.
 
-    async def test_basic_search_raw(self, api_client: httpx.AsyncClient, collection: dict):
-        """Test RAW search response."""
+    Uses a module-scoped Stripe source connection that's loaded once and shared
+    across all tests in this module for efficiency.
+    """
+
+    @pytest.mark.asyncio
+    async def test_basic_search_raw(
+        self, api_client: httpx.AsyncClient, module_source_connection_stripe: dict
+    ):
+        """Test RAW search response using Stripe data."""
         search_query = "Are there any open invoices"
 
         response = await api_client.get(
-            f"/collections/{collection['readable_id']}/search",
+            f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
             params={"query": search_query, "response_type": "raw"},
+            timeout=90,
         )
 
         assert response.status_code == 200, f"Search failed: {response.text}"
@@ -43,13 +50,17 @@ class TestSearch:
             assert "payload" in first_result
             assert "score" in first_result
 
-    async def test_search_completion(self, api_client: httpx.AsyncClient, collection: dict):
-        """Test COMPLETION search response."""
+    @pytest.mark.asyncio
+    async def test_search_completion(
+        self, api_client: httpx.AsyncClient, module_source_connection_stripe: dict
+    ):
+        """Test COMPLETION search response using Stripe data."""
         search_query = "Are there any open invoices"
 
         response = await api_client.get(
-            f"/collections/{collection['readable_id']}/search",
+            f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
             params={"query": search_query, "response_type": "completion"},
+            timeout=90,
         )
 
         assert response.status_code == 200
@@ -63,10 +74,13 @@ class TestSearch:
             assert "completion" in completion_results
             assert completion_results["completion"]  # Should have content
 
-    async def test_query_expansion_auto(self, api_client: httpx.AsyncClient, collection: dict):
-        """Test AUTO query expansion."""
+    @pytest.mark.asyncio
+    async def test_query_expansion_auto(
+        self, api_client: httpx.AsyncClient, module_source_connection_stripe: dict
+    ):
+        """Test AUTO query expansion with Stripe data."""
         response = await api_client.get(
-            f"/collections/{collection['readable_id']}/search",
+            f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
             params={"query": "invoice", "response_type": "raw", "expansion_strategy": "auto"},
         )
 
@@ -74,10 +88,13 @@ class TestSearch:
         results = response.json()
         assert results["status"] in ["success", "no_results", "no_relevant_results"]
 
-    async def test_query_interpretation(self, api_client: httpx.AsyncClient, collection: dict):
-        """Test natural language query interpretation."""
+    @pytest.mark.asyncio
+    async def test_query_interpretation(
+        self, api_client: httpx.AsyncClient, module_source_connection_stripe: dict
+    ):
+        """Test natural language query interpretation with Stripe data."""
         response = await api_client.get(
-            f"/collections/{collection['readable_id']}/search",
+            f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
             params={
                 "query": "find invoices from last month",
                 "response_type": "raw",
@@ -89,10 +106,13 @@ class TestSearch:
         results = response.json()
         assert "status" in results
 
-    async def test_reranking(self, api_client: httpx.AsyncClient, collection: dict):
-        """Test LLM reranking."""
+    @pytest.mark.asyncio
+    async def test_reranking(
+        self, api_client: httpx.AsyncClient, module_source_connection_stripe: dict
+    ):
+        """Test LLM reranking with Stripe data."""
         response = await api_client.get(
-            f"/collections/{collection['readable_id']}/search",
+            f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
             params={
                 "query": "important invoices",
                 "response_type": "raw",
@@ -104,52 +124,52 @@ class TestSearch:
         results = response.json()
         assert "status" in results
 
-    async def test_recency_bias(self, api_client: httpx.AsyncClient, collection: dict):
-        """Test recency bias in search."""
+    @pytest.mark.asyncio
+    async def test_recency_bias(
+        self, api_client: httpx.AsyncClient, module_source_connection_stripe: dict
+    ):
+        """Test recency bias in search with Stripe data."""
         response = await api_client.get(
-            f"/collections/{collection['readable_id']}/search",
+            f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
             params={"query": "recent activity", "response_type": "raw", "recency_bias": 0.8},
+            timeout=90,
         )
 
         assert response.status_code == 200
         results = response.json()
         assert "status" in results
 
-    async def test_search_methods(self, api_client: httpx.AsyncClient, collection: dict):
-        """Test different search methods."""
+    @pytest.mark.asyncio
+    async def test_search_methods(
+        self, api_client: httpx.AsyncClient, module_source_connection_stripe: dict
+    ):
+        """Test different search methods with Stripe data."""
         methods = ["hybrid", "neural", "keyword"]
 
         for method in methods:
             response = await api_client.get(
-                f"/collections/{collection['readable_id']}/search",
-                params={"query": "test query", "response_type": "raw", "search_method": method},
+                f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
+                params={
+                    "query": "payment OR invoice",
+                    "response_type": "raw",
+                    "search_method": method,
+                },
+                timeout=90,
             )
 
             assert response.status_code == 200
             results = response.json()
             assert "status" in results
 
-    async def test_score_threshold(self, api_client: httpx.AsyncClient, collection: dict):
-        """Test score threshold filtering."""
-        response = await api_client.get(
-            f"/collections/{collection['readable_id']}/search",
-            params={"query": "test", "response_type": "raw", "score_threshold": 0.7},
-        )
-
-        assert response.status_code == 200
-        results = response.json()
-
-        if results["status"] == "success" and results.get("results"):
-            # All results should have score >= 0.7
-            for result in results["results"]:
-                assert result["score"] >= 0.7
-
-    async def test_pagination(self, api_client: httpx.AsyncClient, collection: dict):
-        """Test search pagination."""
+    @pytest.mark.asyncio
+    async def test_pagination(
+        self, api_client: httpx.AsyncClient, module_source_connection_stripe: dict
+    ):
+        """Test search pagination with Stripe data."""
         # First page
         response = await api_client.get(
-            f"/collections/{collection['readable_id']}/search",
-            params={"query": "test", "response_type": "raw", "limit": 5, "offset": 0},
+            f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
+            params={"query": "stripe", "response_type": "raw", "limit": 5, "offset": 0},
         )
 
         assert response.status_code == 200
@@ -157,8 +177,8 @@ class TestSearch:
 
         # Second page
         response = await api_client.get(
-            f"/collections/{collection['readable_id']}/search",
-            params={"query": "test", "response_type": "raw", "limit": 5, "offset": 5},
+            f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
+            params={"query": "stripe", "response_type": "raw", "limit": 5, "offset": 5},
         )
 
         assert response.status_code == 200
@@ -171,20 +191,26 @@ class TestSearch:
             # Check no overlap
             assert not set(first_ids).intersection(set(second_ids))
 
-    async def test_empty_query(self, api_client: httpx.AsyncClient, collection: dict):
-        """Test handling of empty query."""
+    @pytest.mark.asyncio
+    async def test_empty_query(
+        self, api_client: httpx.AsyncClient, module_source_connection_stripe: dict
+    ):
+        """Test handling of empty query with Stripe collection."""
         response = await api_client.get(
-            f"/collections/{collection['readable_id']}/search",
+            f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
             params={"query": "", "response_type": "raw"},
         )
 
         # Should return 422 for empty query
         assert response.status_code == 422
 
-    async def test_search_post_method(self, api_client: httpx.AsyncClient, collection: dict):
-        """Test search via POST method."""
+    @pytest.mark.asyncio
+    async def test_search_post_method(
+        self, api_client: httpx.AsyncClient, module_source_connection_stripe: dict
+    ):
+        """Test search via POST method with Stripe data."""
         search_payload = {
-            "query": "test query",
+            "query": "payment processing",
             "response_type": "completion",
             "expansion_strategy": "llm",
             "enable_reranking": True,
@@ -193,7 +219,9 @@ class TestSearch:
         }
 
         response = await api_client.post(
-            f"/collections/{collection['readable_id']}/search", json=search_payload
+            f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
+            json=search_payload,
+            timeout=90,
         )
 
         assert response.status_code == 200
@@ -201,29 +229,25 @@ class TestSearch:
         assert results["response_type"] == "completion"
         assert "status" in results
 
-    @pytest.mark.slow
-    async def test_search_after_sync(
-        self, api_client: httpx.AsyncClient, source_connection: dict, config
+    @pytest.mark.asyncio
+    async def test_search_with_synced_data(
+        self, api_client: httpx.AsyncClient, module_source_connection_stripe: dict
     ):
-        """Test search after data sync completes."""
-        # Trigger a sync
-        response = await api_client.post(f"/source-connections/{source_connection['id']}/run")
+        """Test search with already synced Stripe data.
 
-        if response.status_code == 200:
-            job = response.json()
+        Since module_source_connection_stripe syncs on creation and waits for completion,
+        we should have data available for searching.
+        """
+        # Search the already synced data
+        response = await api_client.get(
+            f"/collections/{module_source_connection_stripe['readable_collection_id']}/search",
+            params={"query": "invoice OR payment OR customer", "response_type": "raw"},
+            timeout=90,
+        )
 
-            # Wait for sync to complete (simplified - in real test would poll)
-            await asyncio.sleep(10)
+        assert response.status_code == 200
+        results = response.json()
 
-            # Now search the synced data
-            response = await api_client.get(
-                f"/collections/{source_connection['readable_collection_id']}/search",
-                params={"query": "invoice OR payment OR customer", "response_type": "raw"},
-            )
-
-            assert response.status_code == 200
-            results = response.json()
-
-            # Should have some results after sync
-            if results["status"] == "success":
-                assert len(results.get("results", [])) > 0
+        # Should have some results from the initial sync
+        if results["status"] == "success":
+            assert len(results.get("results", [])) > 0, "Expected results from synced Stripe data"

@@ -40,10 +40,10 @@ class TodoistSource(BaseSource):
     """
 
     @classmethod
-    async def create(cls, credentials, config: Optional[Dict[str, Any]] = None) -> "TodoistSource":
+    async def create(cls, access_token, config: Optional[Dict[str, Any]] = None) -> "TodoistSource":
         """Create a new Todoist source instance."""
         instance = cls()
-        instance.access_token = credentials.access_token
+        instance.access_token = access_token
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Optional[dict]:

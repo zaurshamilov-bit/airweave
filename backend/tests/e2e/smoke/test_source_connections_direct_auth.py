@@ -10,10 +10,10 @@ import asyncio
 from typing import Dict
 
 
-@pytest.mark.asyncio
 class TestDirectAuthentication:
     """Test suite for direct authentication source connections."""
 
+    @pytest.mark.asyncio
     async def test_create_stripe_connection(
         self, api_client: httpx.AsyncClient, collection: Dict, config
     ):
@@ -41,6 +41,33 @@ class TestDirectAuthentication:
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
+    async def test_direct_auth_defaults_sync_immediately_true(
+        self, api_client: httpx.AsyncClient, collection: Dict, config
+    ):
+        """Test that direct auth defaults to sync_immediately=True when not specified."""
+        payload = {
+            "name": "Test Direct Auth Default Sync",
+            "short_name": "stripe",
+            "readable_collection_id": collection["readable_id"],
+            "authentication": {"credentials": {"api_key": config.TEST_STRIPE_API_KEY}},
+            # Note: sync_immediately is not specified, should default to True
+        }
+
+        response = await api_client.post("/source-connections", json=payload)
+        response.raise_for_status()
+        connection = response.json()
+
+        # Check that sync was triggered (would have sync details)
+        assert connection["sync"] is not None
+
+        # Wait for sync to start
+        await asyncio.sleep(2)
+
+        # Cleanup
+        await api_client.delete(f"/source-connections/{connection['id']}")
+
+    @pytest.mark.asyncio
     async def test_create_connection_with_immediate_sync(
         self, api_client: httpx.AsyncClient, collection: Dict, config
     ):
@@ -63,6 +90,7 @@ class TestDirectAuthentication:
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
     async def test_update_api_key(self, api_client: httpx.AsyncClient, collection: Dict, config):
         """Test updating the API key of a direct auth connection."""
         # Create connection
@@ -98,6 +126,7 @@ class TestDirectAuthentication:
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
     async def test_trigger_manual_sync(
         self, api_client: httpx.AsyncClient, collection: Dict, config
     ):
@@ -108,6 +137,7 @@ class TestDirectAuthentication:
             "short_name": "stripe",
             "readable_collection_id": collection["readable_id"],
             "authentication": {"credentials": {"api_key": config.TEST_STRIPE_API_KEY}},
+            "sync_immediately": False,
         }
 
         response = await api_client.post("/source-connections", json=payload)
@@ -128,6 +158,7 @@ class TestDirectAuthentication:
         await api_client.delete(f"/source-connections/{connection['id']}")
 
     @pytest.mark.slow
+    @pytest.mark.asyncio
     async def test_sync_completion(self, api_client: httpx.AsyncClient, collection: Dict, config):
         """Test that sync completes successfully."""
         # Create connection and trigger sync
@@ -157,6 +188,7 @@ class TestDirectAuthentication:
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
     async def test_invalid_api_key(self, api_client: httpx.AsyncClient, collection: Dict):
         """Test creating connection with invalid API key."""
         payload = {
@@ -174,6 +206,7 @@ class TestDirectAuthentication:
             # Cleanup
             await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
     async def test_connection_with_schedule(
         self, api_client: httpx.AsyncClient, collection: Dict, config
     ):
@@ -183,18 +216,20 @@ class TestDirectAuthentication:
             "short_name": "stripe",
             "readable_collection_id": collection["readable_id"],
             "authentication": {"credentials": {"api_key": config.TEST_STRIPE_API_KEY}},
-            "schedule": "0 */6 * * *",  # Every 6 hours
+            "schedule": {"cron": "0 */6 * * *"},  # Every 6 hours
         }
 
         response = await api_client.post("/source-connections", json=payload)
 
+        body = response.json()
         response.raise_for_status()
         connection = response.json()
-        assert connection["schedule"] == "0 */6 * * *"
+        assert connection["schedule"]["cron"] == "0 */6 * * *"
 
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
     async def test_delete_connection(self, api_client: httpx.AsyncClient, collection: Dict, config):
         """Test deleting a connection."""
         # Create connection
@@ -220,6 +255,7 @@ class TestDirectAuthentication:
 
         assert response.status_code == 404
 
+    @pytest.mark.asyncio
     async def test_concurrent_connection_creation(
         self, api_client: httpx.AsyncClient, collection: Dict, config
     ):

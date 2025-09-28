@@ -458,6 +458,9 @@ class CRUDSourceConnection(
         )
         result = await db.execute(query)
         source_connection = result.scalar_one_or_none()
+        if not source_connection:
+            return None
+
         await self._validate_organization_access(ctx, source_connection.organization_id)
         return source_connection
 

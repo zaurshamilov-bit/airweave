@@ -73,6 +73,14 @@ class TestSettings(BaseSettings):
         default=None, description="Composio account ID for Gmail"
     )
 
+    # Todoist Composio configuration
+    TEST_COMPOSIO_TODOIST_AUTH_CONFIG_ID: Optional[str] = Field(
+        default=None, description="Composio auth config ID for Todoist"
+    )
+    TEST_COMPOSIO_TODOIST_ACCOUNT_ID: Optional[str] = Field(
+        default=None, description="Composio account ID for Todoist"
+    )
+
     # Test behavior settings
     SKIP_STARTUP: bool = Field(
         default=False, description="Skip running start.sh and container health checks"
@@ -139,35 +147,6 @@ class TestSettings(BaseSettings):
             headers["x-api-key"] = self.AIRWEAVE_API_KEY
 
         return headers
-
-    @property
-    def composio_config(self) -> dict:
-        """Get Composio configuration as dict."""
-        return {
-            "provider_name": self.TEST_AUTH_PROVIDER_NAME,
-            "api_key": self.TEST_COMPOSIO_API_KEY,
-        }
-
-    @property
-    def composio_asana_config(self) -> dict:
-        """Get Composio configuration as dict."""
-        return {
-            "auth_config_id": self.TEST_COMPOSIO_AUTH_CONFIG_ID,
-            "account_id": self.TEST_COMPOSIO_ACCOUNT_ID,
-        }
-
-    @property
-    def composio_gmail_config(self) -> dict:
-        """Get Composio configuration as dict."""
-        return {
-            "auth_config_id": self.TEST_COMPOSIO_GMAIL_AUTH_CONFIG_ID,
-            "account_id": self.TEST_COMPOSIO_GMAIL_ACCOUNT_ID,
-        }
-
-    @property
-    def test_google_credentials(self) -> tuple[str, str]:
-        """Get Google OAuth credentials as tuple."""
-        return (self.TEST_GOOGLE_CLIENT_ID, self.TEST_GOOGLE_CLIENT_SECRET)
 
     # Convenience properties with lowercase names for backwards compatibility
     @property

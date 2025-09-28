@@ -12,10 +12,10 @@ import asyncio
 from typing import Dict, List
 
 
-@pytest.mark.asyncio
 class TestCollections:
     """Test suite for Collections API."""
 
+    @pytest.mark.asyncio
     async def test_create_collection(self, api_client: httpx.AsyncClient):
         """Test creating a new collection."""
         collection_data = {"name": f"Test Collection {int(time.time())}"}
@@ -33,6 +33,7 @@ class TestCollections:
         # Cleanup
         await api_client.delete(f"/collections/{collection['readable_id']}")
 
+    @pytest.mark.asyncio
     async def test_create_collection_auto_readable_id(self, api_client: httpx.AsyncClient):
         """Test that readable_id is auto-generated if not provided."""
         collection_data = {"name": "Auto ID Collection"}
@@ -50,6 +51,7 @@ class TestCollections:
         # Cleanup
         await api_client.delete(f"/collections/{collection['readable_id']}")
 
+    @pytest.mark.asyncio
     async def test_read_collection(self, api_client: httpx.AsyncClient, collection: Dict):
         """Test reading a collection by readable_id."""
         response = await api_client.get(f"/collections/{collection['readable_id']}")
@@ -61,6 +63,7 @@ class TestCollections:
         assert collection["readable_id"] == collection["readable_id"]
         assert collection["name"] == collection["name"]
 
+    @pytest.mark.asyncio
     async def test_update_collection(self, api_client: httpx.AsyncClient, collection: Dict):
         """Test updating a collection."""
         update_data = {
@@ -78,6 +81,7 @@ class TestCollections:
         assert updated["id"] == collection["id"]
         assert updated["readable_id"] == collection["readable_id"]
 
+    @pytest.mark.asyncio
     async def test_list_collections(self, api_client: httpx.AsyncClient):
         """Test listing collections."""
         # Create a few collections for testing
@@ -105,6 +109,7 @@ class TestCollections:
         # Cleanup concurrently
         await asyncio.gather(*[api_client.delete(f"/collections/{rid}") for rid in created_ids])
 
+    @pytest.mark.asyncio
     async def test_list_collections_pagination(self, api_client: httpx.AsyncClient):
         """Test listing collections with pagination."""
 
@@ -134,6 +139,7 @@ class TestCollections:
         # Cleanup concurrently
         await asyncio.gather(*[api_client.delete(f"/collections/{rid}") for rid in created_ids])
 
+    @pytest.mark.asyncio
     async def test_delete_collection(self, api_client: httpx.AsyncClient):
         """Test deleting a collection."""
         # Create a collection to delete
@@ -153,6 +159,7 @@ class TestCollections:
 
         assert response.status_code == 404
 
+    @pytest.mark.asyncio
     async def test_collection_not_found(self, api_client: httpx.AsyncClient):
         """Test error handling for non-existent collection."""
         response = await api_client.get("/collections/non-existent-collection-xyz")
@@ -161,6 +168,7 @@ class TestCollections:
         error = response.json()
         assert "detail" in error
 
+    @pytest.mark.asyncio
     async def test_create_collection_validation(self, api_client: httpx.AsyncClient):
         """Test validation when creating a collection."""
         # Test with empty name
@@ -173,6 +181,7 @@ class TestCollections:
 
         assert response.status_code == 422
 
+    @pytest.mark.asyncio
     async def test_update_non_existent_collection(self, api_client: httpx.AsyncClient):
         """Test updating a non-existent collection."""
         response = await api_client.patch(
@@ -181,6 +190,7 @@ class TestCollections:
 
         assert response.status_code == 404
 
+    @pytest.mark.asyncio
     async def test_delete_non_existent_collection(self, api_client: httpx.AsyncClient):
         """Test deleting a non-existent collection."""
         response = await api_client.delete("/collections/non-existent-xyz")
@@ -188,6 +198,7 @@ class TestCollections:
         # Should return 404 or 204 (idempotent delete)
         assert response.status_code in [404, 204]
 
+    @pytest.mark.asyncio
     async def test_collection_with_source_connections(self, api_client: httpx.AsyncClient, config):
         """Test that collections with source connections handle deletion properly."""
         # Create a collection

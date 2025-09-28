@@ -8,6 +8,7 @@ import pytest
 import pytest_asyncio
 import uuid
 import time
+import asyncio
 from typing import AsyncGenerator, Dict, Optional
 import httpx
 from config import settings
@@ -40,7 +41,7 @@ async def api_client() -> AsyncGenerator[httpx.AsyncClient, None]:
         yield client
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="function")
 async def collection(api_client: httpx.AsyncClient) -> AsyncGenerator[Dict, None]:
     """Create a test collection that's cleaned up after use."""
     # Create collection
@@ -64,14 +65,48 @@ async def collection(api_client: httpx.AsyncClient) -> AsyncGenerator[Dict, None
 
 
 @pytest_asyncio.fixture
+async def module_api_client() -> AsyncGenerator[httpx.AsyncClient, None]:
+    """Create async HTTP client for API requests."""
+    async with httpx.AsyncClient(
+        base_url=settings.api_url,
+        headers=settings.api_headers,
+        timeout=httpx.Timeout(settings.default_timeout),
+        follow_redirects=True,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def module_collection(module_api_client: httpx.AsyncClient) -> AsyncGenerator[Dict, None]:
+    """Create a test collection that's shared across the entire module."""
+    # Create collection
+    collection_data = {"name": f"Module Test Collection {int(time.time())}"}
+    response = await module_api_client.post("/collections/", json=collection_data)
+
+    if response.status_code != 200:
+        pytest.fail(f"Failed to create module test collection: {response.text}")
+
+    collection = response.json()
+
+    # Yield for tests to use
+    yield collection
+
+    # Cleanup
+    try:
+        await module_api_client.delete(f"/collections/{collection['readable_id']}")
+    except:
+        pass  # Best effort cleanup
+
+
+@pytest_asyncio.fixture
 async def composio_auth_provider(
-    api_client: httpx.AsyncClient, config
+    module_api_client: httpx.AsyncClient, config
 ) -> AsyncGenerator[Dict, None]:
     """Create Composio auth provider connection for testing."""
     if not config.TEST_COMPOSIO_API_KEY:
-        pytest.skip("Composio API key not configured")
+        pytest.fail("Composio API key not configured")
 
-    provider_readable_id = f"composio-test-{int(time.time())}"
+    provider_readable_id = f"composio-test"
     auth_provider_payload = {
         "name": "Test Composio Provider",
         "short_name": "composio",
@@ -79,7 +114,14 @@ async def composio_auth_provider(
         "auth_fields": {"api_key": config.TEST_COMPOSIO_API_KEY},
     }
 
-    response = await api_client.put("/auth-providers/connect", json=auth_provider_payload)
+    response = await module_api_client.get(f"/auth-providers/{provider_readable_id}")
+
+    if response.status_code == 200:
+        provider = response.json()
+        if provider["auth_fields"]["api_key"] == config.TEST_COMPOSIO_API_KEY:
+            yield provider
+
+    response = await module_api_client.put("/auth-providers/connect", json=auth_provider_payload)
 
     if response.status_code != 200:
         pytest.fail(f"Failed to create Composio auth provider: {response.text}")
@@ -89,23 +131,62 @@ async def composio_auth_provider(
     # Yield for test to use
     yield provider
 
-    # Cleanup
-    try:
-        await api_client.delete(f"/auth-providers/{provider['readable_id']}")
-    except:
-        pass  # Best effort cleanup
 
-
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="function")
 async def source_connection_fast(
     api_client: httpx.AsyncClient,
     collection: Dict,
     composio_auth_provider: Dict,
     config,
 ) -> AsyncGenerator[Dict, None]:
-    """Create a fast Asana source connection via Composio."""
+    """Create a fast Todoist source connection via Composio.
+
+    Ideally this should take less than 30 seconds to sync.
+    """
     connection_data = {
-        "name": f"Asana Fast Connection {int(time.time())}",
+        "name": f"Todoist Fast Connection {uuid.uuid4().hex[:8]}",
+        "short_name": "todoist",
+        "readable_collection_id": collection["readable_id"],
+        "authentication": {
+            "provider_readable_id": composio_auth_provider["readable_id"],
+            "provider_config": {
+                "auth_config_id": config.TEST_COMPOSIO_TODOIST_AUTH_CONFIG_ID,
+                "account_id": config.TEST_COMPOSIO_TODOIST_ACCOUNT_ID,
+            },
+        },
+        "sync_immediately": False,
+    }
+
+    response = await api_client.post("/source-connections", json=connection_data)
+
+    if response.status_code != 200:
+        pytest.fail(f"Failed to create Todoist connection: {response.text}")
+
+    connection = response.json()
+
+    # Yield for test to use
+    yield connection
+
+    # Cleanup
+    try:
+        await api_client.delete(f"/source-connections/{connection['id']}")
+    except:
+        pass  # Best effort cleanup
+
+
+@pytest_asyncio.fixture
+async def source_connection_medium(
+    api_client: httpx.AsyncClient,
+    collection: Dict,
+    composio_auth_provider: Dict,
+    config,
+) -> AsyncGenerator[Dict, None]:
+    """Create a medium-speed Asana source connection via Composio.
+
+    Ideally this should take between 1 and 3 minutes to sync.
+    """
+    connection_data = {
+        "name": f"Asana Medium Connection {int(time.time())}",
         "short_name": "asana",
         "readable_collection_id": collection["readable_id"],
         "authentication": {
@@ -115,7 +196,7 @@ async def source_connection_fast(
                 "account_id": config.TEST_COMPOSIO_ASANA_ACCOUNT_ID,
             },
         },
-        "sync_immediately": False,
+        "sync_immediately": False,  # Control sync timing in tests
     }
 
     response = await api_client.post("/source-connections", json=connection_data)
@@ -136,54 +217,89 @@ async def source_connection_fast(
 
 
 @pytest_asyncio.fixture
-async def source_connection_medium(
-    api_client: httpx.AsyncClient, collection: Dict, config
+async def module_source_connection_stripe(
+    module_api_client: httpx.AsyncClient, module_collection: Dict, config
 ) -> AsyncGenerator[Dict, None]:
-    """Create a medium-speed Stripe source connection for testing quick syncs.
+    """Create a Stripe source connection that's shared across the entire module.
 
-    Uses real Stripe API key from environment variables.
-    Full sync but faster than Gmail.
+    This fixture is module-scoped to avoid recreating the connection for each test.
+    Performs initial sync and waits for completion to ensure data is available.
     """
     connection_data = {
-        "name": f"Stripe Medium Connection {int(time.time())}",
+        "name": f"Module Stripe Connection {int(time.time())}",
         "short_name": "stripe",
-        "readable_collection_id": collection["readable_id"],
-        "authentication": {"credentials": {"api_key": config.stripe_api_key}},
-        "sync_immediately": False,  # Control sync timing in tests
+        "readable_collection_id": module_collection["readable_id"],
+        "authentication": {"credentials": {"api_key": config.TEST_STRIPE_API_KEY}},
+        "sync_immediately": True,  # Sync immediately on creation
     }
 
-    response = await api_client.post("/source-connections", json=connection_data)
+    response = await module_api_client.post("/source-connections", json=connection_data)
 
     if response.status_code == 400 and "invalid" in response.text.lower():
         # Skip if using dummy/invalid credentials
-        pytest.skip(f"Skipping due to invalid Stripe credentials: {response.text}")
+        pytest.fail(f"Skipping due to invalid Stripe credentials: {response.text}")
 
     if response.status_code != 200:
-        pytest.fail(f"Failed to create Stripe connection: {response.text}")
+        pytest.fail(f"Failed to create module Stripe connection: {response.text}")
 
     connection = response.json()
 
-    # Yield for test to use
+    # Wait for initial sync to complete by checking sync job status
+    max_wait_time = 180  # 3 minutes
+    poll_interval = 2
+    elapsed = 0
+    sync_completed = False
+
+    while elapsed < max_wait_time:
+        await asyncio.sleep(poll_interval)
+        elapsed += poll_interval
+
+        # Get detailed connection info to check sync status
+        status_response = await module_api_client.get(f"/source-connections/{connection['id']}")
+        if status_response.status_code == 200:
+            conn_details = status_response.json()
+
+            # Check the status field - based on SourceConnection schema
+            if conn_details.get("status") in ["active", "error"]:
+                # Sync has completed (either successfully or with error)
+                sync_completed = True
+                break
+
+            # Also check if we have sync details with last_job
+            sync_info = conn_details.get("sync")
+            if sync_info and sync_info.get("last_job"):
+                last_job = sync_info["last_job"]
+                job_status = last_job.get("status")
+                if job_status in ["completed", "failed", "cancelled"]:
+                    sync_completed = True
+                    break
+
+    if not sync_completed:
+        print(f"Warning: Initial sync may not have completed after {max_wait_time} seconds")
+
+    # Yield for tests to use
     yield connection
 
     # Cleanup
     try:
-        await api_client.delete(f"/source-connections/{connection['id']}")
+        await module_api_client.delete(f"/source-connections/{connection['id']}")
     except:
         pass  # Best effort cleanup
 
 
 @pytest_asyncio.fixture
-async def source_connection_slow(
+async def source_connection_continuous_slow(
     api_client: httpx.AsyncClient, collection: Dict, composio_auth_provider: Dict, config
 ) -> AsyncGenerator[Dict, None]:
     """Create a slow Gmail source connection via Composio.
+
+    This should take at least 5 minutes to sync.
 
     Uses cursor fields and is the slowest sync option.
     """
     # Skip if Gmail config not available
     if not config.TEST_COMPOSIO_GMAIL_AUTH_CONFIG_ID or not config.TEST_COMPOSIO_GMAIL_ACCOUNT_ID:
-        pytest.skip("Gmail Composio configuration not available")
+        pytest.fail("Gmail Composio configuration not available")
 
     connection_data = {
         "name": f"Gmail Slow Connection {int(time.time())}",
@@ -232,9 +348,9 @@ async def pipedream_auth_provider(api_client: httpx.AsyncClient) -> Dict:
     pipedream_client_secret = os.environ.get("TEST_PIPEDREAM_CLIENT_SECRET")
 
     if not all([pipedream_client_id, pipedream_client_secret]):
-        pytest.skip("Pipedream credentials not configured")
+        pytest.fail("Pipedream credentials not configured")
 
-    provider_id = f"pipedream-test-{int(time.time())}"
+    provider_id = f"pipedream-test-{uuid.uuid4().hex[:8]}"
     auth_provider_payload = {
         "name": "Test Pipedream Provider",
         "short_name": "pipedream",

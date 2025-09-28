@@ -9,10 +9,10 @@ import pytest
 import httpx
 
 
-@pytest.mark.asyncio
 class TestSources:
     """Test suite for Sources API endpoints."""
 
+    @pytest.mark.asyncio
     async def test_list_sources(self, api_client: httpx.AsyncClient):
         """Test listing all available sources."""
         response = await api_client.get("/sources/list")
@@ -31,6 +31,7 @@ class TestSources:
         assert "auth_methods" in first_source
         # icon_url is optional
 
+    @pytest.mark.asyncio
     async def test_get_source_by_name(self, api_client: httpx.AsyncClient):
         """Test getting a specific source by short_name."""
         # Test with a known source (stripe should always exist)
@@ -48,6 +49,7 @@ class TestSources:
         assert "auth_fields" in source
         assert "config_fields" in source
 
+    @pytest.mark.asyncio
     async def test_get_multiple_sources(self, api_client: httpx.AsyncClient):
         """Test getting details for multiple known sources."""
         known_sources = ["stripe", "notion", "linear", "asana", "hubspot_crm"]
@@ -61,6 +63,7 @@ class TestSources:
                 assert source["short_name"] == source_name
                 assert "auth_methods" in source
 
+    @pytest.mark.asyncio
     async def test_source_auth_methods(self, api_client: httpx.AsyncClient):
         """Test that sources have valid auth methods."""
         response = await api_client.get("/sources/list")
@@ -79,6 +82,7 @@ class TestSources:
             for auth_method in source["auth_methods"]:
                 assert auth_method in valid_auth_methods, f"Invalid auth method: {auth_method}"
 
+    @pytest.mark.asyncio
     async def test_source_not_found(self, api_client: httpx.AsyncClient):
         """Test error handling for non-existent source."""
         response = await api_client.get("/sources/detail/non_existent_source_xyz")
@@ -88,6 +92,7 @@ class TestSources:
         assert "detail" in error
         assert "not found" in error["detail"].lower()
 
+    @pytest.mark.asyncio
     async def test_sources_have_required_fields(self, api_client: httpx.AsyncClient):
         """Test that all sources have required fields."""
         response = await api_client.get("/sources/list")
@@ -102,6 +107,7 @@ class TestSources:
                 ), f"Source {source.get('short_name', 'unknown')} missing field: {field}"
                 assert source[field] is not None, f"Source {source['short_name']} has null {field}"
 
+    @pytest.mark.asyncio
     async def test_source_fields_structure(self, api_client: httpx.AsyncClient):
         """Test that source fields have proper structure."""
         # Get a source with fields

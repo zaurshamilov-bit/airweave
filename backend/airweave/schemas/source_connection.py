@@ -132,11 +132,31 @@ class SourceConnectionCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=255, description="Connection description")
     config: Optional[Dict[str, Any]] = Field(None, description="Source-specific configuration")
     schedule: Optional[ScheduleConfig] = None
-    sync_immediately: bool = Field(True, description="Run initial sync after creation")
+    sync_immediately: Optional[bool] = Field(
+        None,
+        description=(
+            "Run initial sync after creation. Defaults to True for direct/token/auth_provider, "
+            "False for OAuth browser/BYOC flows (which sync after authentication)"
+        ),
+    )
     authentication: Optional[AuthenticationConfig] = Field(
         None,
         description="Authentication config (defaults to OAuth browser flow for OAuth sources)",
     )
+
+    @model_validator(mode="after")
+    def set_sync_immediately_default(self):
+        """Set sync_immediately default based on authentication type."""
+        if self.sync_immediately is None and self.authentication is not None:
+            # OAuth browser or BYOC should NOT sync immediately
+            if isinstance(self.authentication, OAuthBrowserAuthentication):
+                self.sync_immediately = False
+            # Direct, token, or auth provider SHOULD sync immediately
+            else:
+                # All other auth types default to True
+                self.sync_immediately = True
+        # If auth is None, service layer handles it (depends on source type)
+        return self
 
 
 class SourceConnectionUpdate(BaseModel):

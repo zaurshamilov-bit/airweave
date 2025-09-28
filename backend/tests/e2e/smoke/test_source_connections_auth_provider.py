@@ -14,10 +14,10 @@ from typing import Dict
 SLEEP_TIME = 30
 
 
-@pytest.mark.asyncio
 class TestAuthProviderAuthentication:
     """Test suite for auth provider source connections."""
 
+    @pytest.mark.asyncio
     async def test_composio_auth_provider(
         self,
         api_client: httpx.AsyncClient,
@@ -57,6 +57,7 @@ class TestAuthProviderAuthentication:
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
     async def test_composio_auth_provider_sync_immediately(
         self,
         api_client: httpx.AsyncClient,
@@ -64,19 +65,19 @@ class TestAuthProviderAuthentication:
         composio_auth_provider: Dict,
         config,
     ):
-        """Test Composio auth provider for Asana."""
+        """Test Composio auth provider for Todoist."""
 
         # Create source connection using the auth provider fixture
         connection_payload = {
-            "name": "Test Asana via Composio",
-            "short_name": "asana",
+            "name": "Test Todoist via Composio",
+            "short_name": "todoist",
             "readable_collection_id": collection["readable_id"],
-            "description": "Testing auth provider authentication with Asana",
+            "description": "Testing auth provider authentication with Todoist",
             "authentication": {
                 "provider_readable_id": composio_auth_provider["readable_id"],
                 "provider_config": {
-                    "auth_config_id": config.TEST_COMPOSIO_ASANA_AUTH_CONFIG_ID,
-                    "account_id": config.TEST_COMPOSIO_ASANA_ACCOUNT_ID,
+                    "auth_config_id": config.TEST_COMPOSIO_TODOIST_AUTH_CONFIG_ID,
+                    "account_id": config.TEST_COMPOSIO_TODOIST_ACCOUNT_ID,
                 },
             },
             "sync_immediately": True,
@@ -109,6 +110,7 @@ class TestAuthProviderAuthentication:
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
     async def test_pipedream_proxy_auth_provider(
         self, api_client: httpx.AsyncClient, collection: Dict, pipedream_auth_provider: Dict, config
     ):
@@ -183,6 +185,7 @@ class TestAuthProviderAuthentication:
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
     async def test_invalid_auth_provider(self, api_client: httpx.AsyncClient, collection: Dict):
         """Test using non-existent auth provider."""
         connection_payload = {

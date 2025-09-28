@@ -13,10 +13,10 @@ import asyncio
 from typing import Dict
 
 
-@pytest.mark.asyncio
 class TestOAuthAuthentication:
     """Test suite for OAuth authentication source connections."""
 
+    @pytest.mark.asyncio
     async def test_oauth_browser_flow(self, api_client: httpx.AsyncClient, collection: Dict):
         """Test OAuth browser flow (creates shell connection)."""
         payload = {
@@ -44,6 +44,31 @@ class TestOAuthAuthentication:
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
+    async def test_oauth_browser_defaults_sync_immediately_false(
+        self, api_client: httpx.AsyncClient, collection: Dict
+    ):
+        """Test that OAuth browser defaults to sync_immediately=False when not specified."""
+        payload = {
+            "name": "Test OAuth Default No Sync",
+            "short_name": "linear",
+            "readable_collection_id": collection["readable_id"],
+            "authentication": {},  # OAuth browser flow
+            # Note: sync_immediately is not specified, should default to False
+        }
+
+        response = await api_client.post("/source-connections", json=payload)
+        response.raise_for_status()
+        connection = response.json()
+
+        # OAuth browser should not have sync details (no immediate sync)
+        assert connection["sync"] is None
+        assert connection["status"] == "pending_auth"
+
+        # Cleanup
+        await api_client.delete(f"/source-connections/{connection['id']}")
+
+    @pytest.mark.asyncio
     async def test_oauth_token_injection_notion(
         self, api_client: httpx.AsyncClient, collection: Dict, config
     ):
@@ -71,6 +96,35 @@ class TestOAuthAuthentication:
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
+    async def test_oauth_token_defaults_sync_immediately_true(
+        self, api_client: httpx.AsyncClient, collection: Dict, config
+    ):
+        """Test that OAuth token injection defaults to sync_immediately=True when not specified."""
+        payload = {
+            "name": "Test OAuth Token Default Sync",
+            "short_name": "notion",
+            "readable_collection_id": collection["readable_id"],
+            "authentication": {
+                "access_token": config.TEST_NOTION_TOKEN,
+            },
+            # Note: sync_immediately is not specified, should default to True
+        }
+
+        response = await api_client.post("/source-connections", json=payload)
+        response.raise_for_status()
+        connection = response.json()
+
+        # OAuth token should have sync details (immediate sync triggered)
+        # Since sync_immediately defaults to True for token injection
+        assert connection["auth"]["method"] == "oauth_token"
+        assert connection["auth"]["authenticated"] == True
+        assert connection["status"] in ["active", "syncing"]
+
+        # Cleanup
+        await api_client.delete(f"/source-connections/{connection['id']}")
+
+    @pytest.mark.asyncio
     async def test_oauth_byoc_google_drive(
         self, api_client: httpx.AsyncClient, collection: Dict, config
     ):
@@ -103,6 +157,7 @@ class TestOAuthAuthentication:
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
     async def test_minimal_oauth_payload(self, api_client: httpx.AsyncClient, collection: Dict):
         """Test minimal OAuth payload defaults."""
         # Minimal payload - should default to OAuth browser
@@ -125,6 +180,7 @@ class TestOAuthAuthentication:
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
+    @pytest.mark.asyncio
     async def test_oauth_wrong_auth_method(self, api_client: httpx.AsyncClient, collection: Dict):
         """Test using OAuth on source that doesn't support it."""
         # Try OAuth token on Stripe (which only supports API key)
@@ -141,3 +197,40 @@ class TestOAuthAuthentication:
         error = response.json()
         detail = error.get("detail", "").lower()
         assert "does not support" in detail or "unsupported" in detail
+
+    @pytest.mark.asyncio
+    async def test_oauth_browser_flow_with_sync_immediately(
+        self, api_client: httpx.AsyncClient, collection: Dict
+    ):
+        """Test OAuth browser flow with sync_immediately=true."""
+        payload = {
+            "name": "OAuth Browser Flow with Sync Immediately",
+            "short_name": "gmail",
+            "readable_collection_id": collection["readable_id"],
+            "authentication": {},
+            "sync_immediately": True,
+        }
+        response = await api_client.post("/source-connections", json=payload)
+        assert response.status_code == 400
+        error = response.json()
+        assert "sync_immediately" in error["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_oauth_byoc_with_sync_immediately(
+        self, api_client: httpx.AsyncClient, collection: Dict
+    ):
+        """Test OAuth BYOC with sync_immediately=true."""
+        payload = {
+            "name": "OAuth BYOC with Sync Immediately",
+            "short_name": "gmail",
+            "readable_collection_id": collection["readable_id"],
+            "authentication": {
+                "client_id": "test-client-id",
+                "client_secret": "test-client-secret",
+            },
+            "sync_immediately": True,
+        }
+        response = await api_client.post("/source-connections", json=payload)
+        assert response.status_code == 400
+        error = response.json()
+        assert "sync_immediately" in error["detail"].lower()
