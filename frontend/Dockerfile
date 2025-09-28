@@ -5,9 +5,8 @@ WORKDIR /app
 # Copy package files only
 COPY package.json ./
 
-# Delete any existing lock file and node_modules, then fresh install
-# This ensures we get the right platform-specific binaries
-RUN npm install
+# Install deps but skip the fucking postinstall scripts that keep segfaulting
+RUN npm install --ignore-scripts
 
 # Copy application code
 COPY . .
