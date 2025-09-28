@@ -32,7 +32,7 @@ class SyncContext:
     - router - the DAG router
     - cursor - the cursor for the sync
     - collection - the collection that the sync is for
-    - source connection - the source connection that the sync is for
+    - connection - the source connection that the sync is for
     - guard rail - the guard rail service
     - logger - contextual logger with sync job metadata
 
@@ -55,7 +55,7 @@ class SyncContext:
     router: SyncDAGRouter
     cursor: SyncCursor
     collection: schemas.Collection
-    source_connection: schemas.Connection
+    connection: schemas.Connection
     entity_map: dict[type[BaseEntity], UUID]
     ctx: ApiContext
     guard_rail: GuardRailService
@@ -85,7 +85,7 @@ class SyncContext:
         router: SyncDAGRouter,
         cursor: SyncCursor,
         collection: schemas.Collection,
-        source_connection: schemas.Connection,
+        connection: schemas.Connection,
         entity_map: dict[type[BaseEntity], UUID],
         ctx: ApiContext,
         guard_rail: GuardRailService,
@@ -111,7 +111,7 @@ class SyncContext:
         self.router = router
         self.cursor = cursor
         self.collection = collection
-        self.source_connection = source_connection
+        self.connection = connection
         self.entity_map = entity_map
         self.ctx = ctx
         self.guard_rail = guard_rail

@@ -39,8 +39,7 @@ class RunSourceConnectionWorkflow:
                     start_to_close_timeout=timeout,
                     heartbeat_timeout=timedelta(minutes=1) if force_full_sync else None,
                     retry_policy=RetryPolicy(
-                        maximum_attempts=1,  # Don't retry if job already exists
-                        initial_interval=timedelta(seconds=1),
+                        maximum_attempts=1,  # NO RETRIES - fail fast
                     ),
                 )
             except Exception as e:
@@ -56,7 +55,7 @@ class RunSourceConnectionWorkflow:
         sync_job_dict: Optional[Dict[str, Any]],  # Made optional for scheduled runs
         sync_dag_dict: Dict[str, Any],
         collection_dict: Dict[str, Any],
-        source_connection_dict: Dict[str, Any],
+        connection_dict: Dict[str, Any],  # Connection schema, NOT SourceConnection
         ctx_dict: Dict[str, Any],
         access_token: Optional[str] = None,
         force_full_sync: bool = False,  # Force full sync with deletion
@@ -68,8 +67,8 @@ class RunSourceConnectionWorkflow:
             sync_job_dict: The sync job as dict (optional for scheduled runs)
             sync_dag_dict: The sync DAG as dict
             collection_dict: The collection as dict
-            source_connection_dict: The source connection as dict
-            ctx_dict: The authentication context as dict
+            connection_dict: The connection as dict (Connection schema, NOT SourceConnection)
+            ctx_dict: The API context as dict
             access_token: Optional access token
             force_full_sync: If True, forces a full sync with orphaned entity deletion
         """
@@ -90,7 +89,7 @@ class RunSourceConnectionWorkflow:
                     sync_job_dict,
                     sync_dag_dict,
                     collection_dict,
-                    source_connection_dict,
+                    connection_dict,
                     ctx_dict,
                     access_token,
                     force_full_sync,
@@ -101,9 +100,7 @@ class RunSourceConnectionWorkflow:
                 ),  # quicker cancel delivery on next RPC heartbeat
                 cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
                 retry_policy=RetryPolicy(
-                    initial_interval=timedelta(seconds=1),
-                    maximum_interval=timedelta(minutes=5),
-                    maximum_attempts=1,
+                    maximum_attempts=1,  # NO RETRIES - fail fast
                 ),
             )
 

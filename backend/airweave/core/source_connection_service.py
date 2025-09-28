@@ -1,7 +1,7 @@
 """Clean source connection service with auth method inference."""
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional, Tuple
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -13,6 +13,7 @@ from airweave.api.context import ApiContext
 from airweave.core.auth_provider_service import auth_provider_service
 from airweave.core.config import settings as core_settings
 from airweave.core.shared_models import SyncJobStatus
+from airweave.core.source_connection_service_helpers import source_connection_helpers
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
 from airweave.crud import connection_init_session
@@ -37,7 +38,7 @@ from airweave.schemas.source_connection import (
 class SourceConnectionService:
     """Service for managing source connections and their lifecycle."""
 
-    def _get_default_cron_schedule(self, ctx: ApiContext) -> str:
+    def _get_default_daily_cron_schedule(self, ctx: ApiContext) -> str:
         """Generate a default daily cron schedule based on current UTC time.
 
         Returns:
@@ -55,6 +56,47 @@ class SourceConnectionService:
             f"No cron schedule provided, defaulting to daily at {hour:02d}:{minute:02d} UTC"
         )
         return cron_schedule
+
+    def _get_default_continuous_cron_schedule(self, ctx: ApiContext) -> str:
+        """Get default cron schedule for continuous sources.
+
+        Returns:
+            A cron expression for 5-minute intervals.
+        """
+        ctx.logger.info("Continuous source defaulting to 5-minute schedule")
+        return "*/5 * * * *"
+
+    def _determine_schedule_for_source(
+        self, obj_in: Any, source: schemas.Source, ctx: ApiContext
+    ) -> Optional[str]:
+        """Determine the appropriate schedule based on source type and input.
+
+        Args:
+            obj_in: The source connection creation input
+            source: The source model
+            ctx: API context
+
+        Returns:
+            CRON schedule string or None if no schedule should be created
+        """
+        # Check if schedule has a cron value first
+        if hasattr(obj_in, "schedule") and obj_in.schedule and hasattr(obj_in.schedule, "cron"):
+            # If cron is explicitly None, no schedule
+            if obj_in.schedule.cron is None:
+                ctx.logger.info("Schedule cron explicitly set to null, no schedule will be created")
+                return None
+            return obj_in.schedule.cron
+
+        # For auth provider connections, schedule is typically omitted and becomes None
+        # We should still create default schedules for these
+        # The only way to explicitly disable schedule is to pass schedule: {cron: null}
+
+        # Determine defaults based on source type
+        if getattr(source, "supports_continuous", False):
+            return self._get_default_continuous_cron_schedule(ctx)
+        else:
+            # For regular sources, default to daily
+            return self._get_default_daily_cron_schedule(ctx)
 
     def _validate_cron_schedule_for_source(
         self, cron_schedule: str, source: schemas.Source, ctx: ApiContext
@@ -162,7 +204,7 @@ class SourceConnectionService:
         else:
             raise HTTPException(status_code=400, detail="Invalid authentication configuration")
 
-    async def create(
+    async def create(  # noqa: C901
         self,
         db: AsyncSession,
         *,
@@ -192,6 +234,24 @@ class SourceConnectionService:
                 detail=f"Source {obj_in.short_name} does not support this authentication method. "
                 f"Supported methods: {[m.value for m in supported]}",
             )
+
+        # Handle the edge case where authentication was None (defaults to OAuth browser)
+        # and Pydantic couldn't determine the default
+        if obj_in.sync_immediately is None:
+            if auth_method in [AuthenticationMethod.OAUTH_BROWSER, AuthenticationMethod.OAUTH_BYOC]:
+                obj_in.sync_immediately = False
+            else:
+                # Direct, OAuth token, and auth provider default to True
+                obj_in.sync_immediately = True
+
+        # Validate OAuth browser/BYOC cannot have sync_immediately=true
+        if auth_method in [AuthenticationMethod.OAUTH_BROWSER, AuthenticationMethod.OAUTH_BYOC]:
+            if obj_in.sync_immediately:
+                raise HTTPException(
+                    status_code=400,
+                    detail="OAuth connections cannot use sync_immediately. "
+                    "Sync will start after authentication.",
+                )
 
         # Route based on auth method
         if auth_method == AuthenticationMethod.DIRECT:
@@ -286,15 +346,18 @@ class SourceConnectionService:
         obj_in: SourceConnectionUpdate,
         ctx: ApiContext,
     ) -> SourceConnection:
-        """Update a source connection."""
-        # First check if the source connection exists
-        source_conn = await crud.source_connection.get(db, id=id, ctx=ctx)
-        if not source_conn:
-            raise HTTPException(status_code=404, detail="Source connection not found")
+        """Update a source connection.
 
+        Handles:
+        - Config field updates with validation
+        - Schedule updates (create, update, or remove)
+        - Credential updates for direct auth only
+        """
         async with UnitOfWork(db) as uow:
             # Re-fetch the source_conn within the UoW session to avoid session mismatch
             source_conn = await crud.source_connection.get(uow.session, id=id, ctx=ctx)
+            if not source_conn:
+                raise HTTPException(status_code=404, detail="Source connection not found")
 
             # Update fields
             update_data = obj_in.model_dump(exclude_unset=True)
@@ -308,25 +371,7 @@ class SourceConnectionService:
                 del update_data["config"]
 
             # Handle schedule update
-            if (
-                "schedule" in update_data and update_data["schedule"]
-            ):  # TODO: only if actually different
-                if source_conn.sync_id:
-                    new_cron = update_data["schedule"].get("cron")
-                    if new_cron:
-                        # Get the source to validate schedule
-                        source = await self._get_and_validate_source(
-                            uow.session, source_conn.short_name
-                        )
-                        self._validate_cron_schedule_for_source(new_cron, source, ctx)
-                    await self._update_sync_schedule(
-                        uow.session,
-                        source_conn.sync_id,
-                        new_cron,
-                        ctx,
-                        uow,
-                    )
-                    del update_data["schedule"]
+            await self._handle_schedule_update(uow, source_conn, update_data, ctx)
 
             # Handle credential update (direct auth only)
             if "credentials" in update_data:
@@ -373,6 +418,27 @@ class SourceConnectionService:
 
         # Build response before deletion
         response = await self._build_source_connection_response(db, source_conn, ctx)
+
+        # Cancel any running jobs before deletion
+        if source_conn.sync_id:
+            # Get the latest running job for this source connection
+            latest_job = await crud.sync_job.get_latest_by_sync_id(db, sync_id=source_conn.sync_id)
+            if latest_job and latest_job.status in [SyncJobStatus.PENDING, SyncJobStatus.RUNNING]:
+                ctx.logger.info(
+                    f"Cancelling job {latest_job.id} for source connection {id} before deletion"
+                )
+                try:
+                    # Cancel the job through the normal cancellation flow
+                    await self.cancel_job(
+                        db,
+                        source_connection_id=id,
+                        job_id=latest_job.id,
+                        ctx=ctx,
+                    )
+                    ctx.logger.info(f"Successfully cancelled job {latest_job.id}")
+                except Exception as e:
+                    # Log but don't fail the deletion if cancellation fails
+                    ctx.logger.warning(f"Failed to cancel job {latest_job.id} during deletion: {e}")
 
         # Clean up data
         if source_conn.sync_id:
@@ -436,27 +502,15 @@ class SourceConnectionService:
             connection = await self._create_connection(
                 uow.session, obj_in.name, source, credential.id, ctx, uow
             )
+
             await uow.session.flush()
 
-            # Create sync WITHOUT Temporal schedule (we'll create it after source_connection is set)
-            cron_schedule = obj_in.schedule.cron if obj_in.schedule else None
-            if cron_schedule is None:
-                cron_schedule = self._get_default_cron_schedule(ctx)
+            connection_schema = schemas.Connection.model_validate(connection, from_attributes=True)
 
-            # Validate the schedule for this source
-            self._validate_cron_schedule_for_source(cron_schedule, source, ctx)
-
-            sync, sync_job = await self._create_sync_without_schedule(
-                uow.session,
-                obj_in.name,
-                connection.id,
-                collection.id,
-                cron_schedule,
-                obj_in.sync_immediately,
-                ctx,
-                uow,
+            # Handle sync creation with schedule
+            sync_id, sync, sync_job = await self._handle_sync_creation(
+                uow, obj_in, source, connection.id, collection.id, ctx
             )
-            await uow.session.flush()
 
             # Create source connection
             source_conn = await self._create_source_connection(
@@ -464,7 +518,7 @@ class SourceConnectionService:
                 obj_in,
                 connection.id,
                 collection.readable_id,
-                sync.id,
+                sync_id,
                 validated_config,
                 is_authenticated=True,
                 ctx=ctx,
@@ -472,40 +526,30 @@ class SourceConnectionService:
             )
             await uow.session.flush()
 
-            # Now create the Temporal schedule after source_connection is linked to sync
-            if cron_schedule and sync.id:
-                from airweave.platform.temporal.schedule_service import temporal_schedule_service
+            # Create Temporal schedule if needed
+            cron_schedule = self._determine_schedule_for_source(obj_in, source, ctx)
+            await self._create_temporal_schedule_if_needed(uow, cron_schedule, sync_id, ctx)
 
-                await temporal_schedule_service.create_or_update_schedule(
-                    sync_id=sync.id,
-                    cron_schedule=cron_schedule,
-                    db=uow.session,
-                    ctx=ctx,
-                    uow=uow,
-                )
-
-            # Convert to schemas while still in session
-            if sync_job and obj_in.sync_immediately:
-                # Ensure all models are flushed and refreshed before converting
-                await uow.session.flush()
-                await uow.session.refresh(sync_job)
-                await uow.session.refresh(collection)
-
-                sync_schema = schemas.Sync.model_validate(sync, from_attributes=True)
-                sync_job_schema = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
-                collection_schema = schemas.Collection.model_validate(
-                    collection, from_attributes=True
-                )
+            # Prepare schemas for workflow if needed
+            (
+                sync_schema,
+                sync_job_schema,
+                collection_schema,
+            ) = await self._prepare_sync_schemas_for_workflow(
+                uow, sync, sync_job, collection, obj_in
+            )
 
             await uow.commit()
             await uow.session.refresh(source_conn)
 
-            response = await self._build_source_connection_response(uow.session, source_conn, ctx)
+        # Build response with the main db session after commit
+        response = await self._build_source_connection_response(db, source_conn, ctx)
 
         # Trigger sync if requested
         if sync_job and obj_in.sync_immediately:
+            # Get the Connection object for the workflow
             await self._trigger_sync_workflow(
-                db, response, sync_schema, sync_job_schema, collection_schema, ctx
+                db, connection_schema, sync_schema, sync_job_schema, collection_schema, ctx
             )
 
         return response
@@ -596,7 +640,8 @@ class SourceConnectionService:
             await uow.commit()
             await uow.session.refresh(source_conn)
 
-            response = await self._build_source_connection_response(uow.session, source_conn, ctx)
+        # Build response with the main db session after commit
+        response = await self._build_source_connection_response(db, source_conn, ctx)
 
         return response
 
@@ -658,26 +703,12 @@ class SourceConnectionService:
                 uow.session, obj_in.name, source, credential.id, ctx, uow
             )
             await uow.session.flush()
+            connection_schema = schemas.Connection.model_validate(connection, from_attributes=True)
 
-            # Create sync WITHOUT Temporal schedule (we'll create it after source_connection is set)
-            cron_schedule = obj_in.schedule.cron if obj_in.schedule else None
-            if cron_schedule is None:
-                cron_schedule = self._get_default_cron_schedule(ctx)
-
-            # Validate the schedule for this source
-            self._validate_cron_schedule_for_source(cron_schedule, source, ctx)
-
-            sync, sync_job = await self._create_sync_without_schedule(
-                uow.session,
-                obj_in.name,
-                connection.id,
-                collection.id,
-                cron_schedule,
-                obj_in.sync_immediately,
-                ctx,
-                uow,
+            # Handle sync creation with schedule
+            sync_id, sync, sync_job = await self._handle_sync_creation(
+                uow, obj_in, source, connection.id, collection.id, ctx
             )
-            await uow.session.flush()
 
             # Create source connection
             source_conn = await self._create_source_connection(
@@ -685,7 +716,7 @@ class SourceConnectionService:
                 obj_in,
                 connection.id,
                 collection.readable_id,
-                sync.id,
+                sync_id,
                 validated_config,
                 is_authenticated=True,
                 ctx=ctx,
@@ -693,40 +724,29 @@ class SourceConnectionService:
             )
             await uow.session.flush()
 
-            # Now create the Temporal schedule after source_connection is linked to sync
-            if cron_schedule and sync.id:
-                from airweave.platform.temporal.schedule_service import temporal_schedule_service
+            # Create Temporal schedule if needed
+            cron_schedule = self._determine_schedule_for_source(obj_in, source, ctx)
+            await self._create_temporal_schedule_if_needed(uow, cron_schedule, sync_id, ctx)
 
-                await temporal_schedule_service.create_or_update_schedule(
-                    sync_id=sync.id,
-                    cron_schedule=cron_schedule,
-                    db=uow.session,
-                    ctx=ctx,
-                    uow=uow,
-                )
-
-            # Convert to schemas while still in session
-            if sync_job and obj_in.sync_immediately:
-                # Ensure all models are flushed and refreshed before converting
-                await uow.session.flush()
-                await uow.session.refresh(sync_job)
-                await uow.session.refresh(collection)
-
-                sync_schema = schemas.Sync.model_validate(sync, from_attributes=True)
-                sync_job_schema = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
-                collection_schema = schemas.Collection.model_validate(
-                    collection, from_attributes=True
-                )
+            # Prepare schemas for workflow if needed
+            (
+                sync_schema,
+                sync_job_schema,
+                collection_schema,
+            ) = await self._prepare_sync_schemas_for_workflow(
+                uow, sync, sync_job, collection, obj_in
+            )
 
             await uow.commit()
             await uow.session.refresh(source_conn)
 
-            response = await self._build_source_connection_response(uow.session, source_conn, ctx)
+        # Build response with the main db session after commit
+        response = await self._build_source_connection_response(db, source_conn, ctx)
 
         # Trigger sync if requested
         if sync_job and obj_in.sync_immediately:
             await self._trigger_sync_workflow(
-                db, response, sync_schema, sync_job_schema, collection_schema, ctx
+                db, connection_schema, sync_schema, sync_job_schema, collection_schema, ctx
             )
 
         return response
@@ -809,25 +829,10 @@ class SourceConnectionService:
             )
             await uow.session.flush()
 
-            # Create sync WITHOUT Temporal schedule (we'll create it after source_connection is set)
-            cron_schedule = obj_in.schedule.cron if obj_in.schedule else None
-            if cron_schedule is None:
-                cron_schedule = self._get_default_cron_schedule(ctx)
-
-            # Validate the schedule for this source
-            self._validate_cron_schedule_for_source(cron_schedule, source, ctx)
-
-            sync, sync_job = await self._create_sync_without_schedule(
-                uow.session,
-                obj_in.name,
-                connection.id,
-                collection.id,
-                cron_schedule,
-                obj_in.sync_immediately,
-                ctx,
-                uow,
+            # Handle sync creation with schedule
+            sync_id, sync, sync_job = await self._handle_sync_creation(
+                uow, obj_in, source, connection.id, collection.id, ctx
             )
-            await uow.session.flush()
 
             # Create source connection
             source_conn = await self._create_source_connection(
@@ -835,7 +840,7 @@ class SourceConnectionService:
                 obj_in,
                 connection.id,
                 collection.readable_id,
-                sync.id,
+                sync_id,
                 validated_config,
                 is_authenticated=True,
                 ctx=ctx,
@@ -845,50 +850,255 @@ class SourceConnectionService:
             )
             await uow.session.flush()
 
-            # Now create the Temporal schedule after source_connection is linked to sync
-            if cron_schedule and sync.id:
-                from airweave.platform.temporal.schedule_service import temporal_schedule_service
+            # Create Temporal schedule if needed
+            cron_schedule = self._determine_schedule_for_source(obj_in, source, ctx)
+            await self._create_temporal_schedule_if_needed(uow, cron_schedule, sync_id, ctx)
 
-                await temporal_schedule_service.create_or_update_schedule(
-                    sync_id=sync.id,
-                    cron_schedule=cron_schedule,
-                    db=uow.session,
-                    ctx=ctx,
-                    uow=uow,
-                )
-
-            # Convert to schemas while still in session
-            if sync_job and obj_in.sync_immediately:
-                # Ensure all models are flushed and refreshed before converting
-                await uow.session.flush()
-                await uow.session.refresh(sync_job)
-                await uow.session.refresh(collection)
-
-                sync_schema = schemas.Sync.model_validate(sync, from_attributes=True)
-                sync_job_schema = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
-                collection_schema = schemas.Collection.model_validate(
-                    collection, from_attributes=True
-                )
+            # Prepare schemas for workflow if needed
+            (
+                sync_schema,
+                sync_job_schema,
+                collection_schema,
+            ) = await self._prepare_sync_schemas_for_workflow(
+                uow, sync, sync_job, collection, obj_in
+            )
 
             await uow.commit()
             await uow.session.refresh(source_conn)
 
-            response = await self._build_source_connection_response(uow.session, source_conn, ctx)
+        # Build response with the main db session after commit
+        response = await self._build_source_connection_response(db, source_conn, ctx)
 
         # Trigger sync if requested
         if sync_job and obj_in.sync_immediately:
+            # Get the Connection object for the workflow
+            connection_schema = (
+                await source_connection_helpers.get_connection_for_source_connection(
+                    db=db, source_connection=source_conn, ctx=ctx
+                )
+            )
             await self._trigger_sync_workflow(
-                db, response, sync_schema, sync_job_schema, collection_schema, ctx
+                db, connection_schema, sync_schema, sync_job_schema, collection_schema, ctx
             )
 
         return response
 
     # Helper methods
 
+    async def _handle_sync_creation(
+        self,
+        uow,
+        obj_in: SourceConnectionCreate,
+        source: schemas.Source,
+        connection_id: UUID,
+        collection_id: UUID,
+        ctx: ApiContext,
+    ) -> Tuple[Optional[UUID], Optional[schemas.Sync], Optional[schemas.SyncJob]]:
+        """Common logic for creating sync with schedule during source connection creation.
+
+        Args:
+            uow: Unit of work
+            obj_in: Source connection creation input
+            source: Source model
+            connection_id: Connection ID (model.connection.id)
+            collection_id: Collection ID
+            ctx: API context
+
+        Returns:
+            Tuple of (sync_id, sync_schema, sync_job_schema) where schemas may be None
+        """
+        # Determine schedule based on source type and input
+        cron_schedule = self._determine_schedule_for_source(obj_in, source, ctx)
+
+        # Only create sync if we have a schedule or need immediate run
+        if not cron_schedule and not obj_in.sync_immediately:
+            return None, None, None
+
+        # Validate the schedule if provided
+        if cron_schedule:
+            self._validate_cron_schedule_for_source(cron_schedule, source, ctx)
+
+        # Create sync WITHOUT Temporal schedule (we'll create it after source_connection is set)
+        sync, sync_job = await self._create_sync_without_schedule(
+            uow.session,
+            obj_in.name,
+            connection_id,
+            collection_id,
+            cron_schedule,
+            obj_in.sync_immediately,
+            ctx,
+            uow,
+        )
+        await uow.session.flush()
+
+        sync_id = sync.id if sync else None
+        return sync_id, sync, sync_job
+
+    async def _create_temporal_schedule_if_needed(
+        self,
+        uow,
+        cron_schedule: Optional[str],
+        sync_id: Optional[UUID],
+        ctx: ApiContext,
+    ) -> None:
+        """Create Temporal schedule if we have both a cron schedule and sync_id.
+
+        Args:
+            uow: Unit of work
+            cron_schedule: CRON expression
+            sync_id: Sync ID
+            ctx: API context
+        """
+        if cron_schedule and sync_id:
+            from airweave.platform.temporal.schedule_service import temporal_schedule_service
+
+            await temporal_schedule_service.create_or_update_schedule(
+                sync_id=sync_id,
+                cron_schedule=cron_schedule,
+                db=uow.session,
+                ctx=ctx,
+                uow=uow,
+            )
+
+    async def _handle_schedule_update(
+        self,
+        uow,
+        source_conn,
+        update_data: dict,
+        ctx: ApiContext,
+    ) -> None:
+        """Handle schedule updates for a source connection.
+
+        This method handles three cases:
+        1. Updating an existing sync's schedule
+        2. Creating a new sync when adding a schedule to a connection without one
+        3. Removing a schedule (setting cron to None)
+
+        Args:
+            uow: Unit of work
+            source_conn: Source connection being updated
+            update_data: Update data dictionary (modified in place)
+            ctx: API context
+        """
+        if "schedule" not in update_data:
+            return
+
+        # If schedule is None, treat it as removing the schedule
+        if update_data["schedule"] is None:
+            new_cron = None
+        else:
+            new_cron = update_data["schedule"].get("cron")
+
+        if source_conn.sync_id:
+            # Update existing sync's schedule
+            if new_cron:
+                # Get the source to validate schedule
+                source = await self._get_and_validate_source(uow.session, source_conn.short_name)
+                self._validate_cron_schedule_for_source(new_cron, source, ctx)
+            await self._update_sync_schedule(
+                uow.session,
+                source_conn.sync_id,
+                new_cron,
+                ctx,
+                uow,
+            )
+        elif new_cron:
+            # No sync exists but we're adding a schedule - create a new sync
+            # Get the source to validate schedule
+            source = await self._get_and_validate_source(uow.session, source_conn.short_name)
+            self._validate_cron_schedule_for_source(new_cron, source, ctx)
+
+            # Check if connection_id exists (might be None for OAuth flows)
+            if not source_conn.connection_id:
+                ctx.logger.warning(
+                    f"Cannot create schedule for SC {source_conn.id} without connection_id"
+                )
+                # Skip schedule creation for connections without connection_id
+                del update_data["schedule"]
+                return
+
+            # Get the collection
+            collection = await self._get_collection(
+                uow.session, source_conn.readable_collection_id, ctx
+            )
+
+            # Create a new sync with the schedule
+            sync, _ = await self._create_sync_without_schedule(
+                uow.session,
+                source_conn.name,
+                source_conn.connection_id,
+                collection.id,
+                new_cron,
+                False,  # Don't run immediately on update
+                ctx,
+                uow,
+            )
+
+            # Apply the sync_id update to the source connection now
+            # so that temporal_schedule_service can find it
+            source_conn = await crud.source_connection.update(
+                uow.session,
+                db_obj=source_conn,
+                obj_in={"sync_id": sync.id},
+                ctx=ctx,
+                uow=uow,
+            )
+            await uow.session.flush()
+
+            # Create the Temporal schedule
+            from airweave.platform.temporal.schedule_service import (
+                temporal_schedule_service,
+            )
+
+            await temporal_schedule_service.create_or_update_schedule(
+                sync_id=sync.id,
+                cron_schedule=new_cron,
+                db=uow.session,
+                ctx=ctx,
+                uow=uow,
+            )
+
+        if "schedule" in update_data:
+            del update_data["schedule"]
+
+    async def _prepare_sync_schemas_for_workflow(
+        self,
+        uow,
+        sync: Optional[schemas.Sync],
+        sync_job: Optional[schemas.SyncJob],
+        collection: schemas.Collection,
+        obj_in: SourceConnectionCreate,
+    ) -> Tuple[Optional[schemas.Sync], Optional[schemas.SyncJob], Optional[schemas.Collection]]:
+        """Prepare sync schemas for Temporal workflow if immediate sync is requested.
+
+        Args:
+            uow: Unit of work
+            sync: Sync schema
+            sync_job: Sync job schema
+            collection: Collection model
+            obj_in: Source connection creation input
+
+        Returns:
+            Tuple of (sync_schema, sync_job_schema, collection_schema) or (None, None, None)
+        """
+        if sync_job and obj_in.sync_immediately:
+            # Ensure all models are flushed and refreshed before converting
+            await uow.session.flush()
+            await uow.session.refresh(sync_job)
+            await uow.session.refresh(collection)
+
+            sync_schema = schemas.Sync.model_validate(sync, from_attributes=True)
+            sync_job_schema = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
+            collection_schema = schemas.Collection.model_validate(collection, from_attributes=True)
+
+            return sync_schema, sync_job_schema, collection_schema
+
+        return None, None, None
+
     async def _trigger_sync_workflow(
         self,
         db: AsyncSession,
-        source_conn: schemas.SourceConnection,
+        connection: schemas.Connection,
         sync: schemas.Sync,
         sync_job: schemas.SyncJob,
         collection: schemas.Collection,
@@ -913,7 +1123,7 @@ class SourceConnectionService:
             sync_job=sync_job,
             sync_dag=sync_dag_schema,
             collection=collection,
-            source_connection=source_conn,
+            connection=connection,
             ctx=ctx,
         )
 
@@ -971,6 +1181,11 @@ class SourceConnectionService:
         )
         sync_dag_schema = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
 
+        # Get the actual Connection object (not SourceConnection!)
+        connection_schema = await source_connection_helpers.get_connection_for_source_connection(
+            db=db, source_connection=source_conn, ctx=ctx
+        )
+
         # Trigger sync through Temporal only
         sync, sync_job = await sync_service.trigger_sync_run(
             db, sync_id=source_conn.sync_id, ctx=ctx
@@ -981,7 +1196,7 @@ class SourceConnectionService:
             sync_job=sync_job,
             sync_dag=sync_dag_schema,
             collection=collection_schema,
-            source_connection=source_connection_schema,
+            connection=connection_schema,  # Pass Connection, not SourceConnection
             ctx=ctx,
         )
 

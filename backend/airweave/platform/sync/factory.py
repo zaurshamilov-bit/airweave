@@ -51,7 +51,7 @@ class SyncFactory:
         sync_job: schemas.SyncJob,
         dag: schemas.SyncDag,
         collection: schemas.Collection,
-        source_connection: schemas.SourceConnection,
+        connection: schemas.Connection,  # Passed but unused - we load from DB
         ctx: ApiContext,
         access_token: Optional[str] = None,
         max_workers: int = None,
@@ -68,7 +68,7 @@ class SyncFactory:
             sync_job: The sync job
             dag: The DAG for the sync
             collection: The collection to sync to
-            source_connection: The source connection
+            connection: The connection (unused - we load source connection from DB)
             ctx: The API context
             access_token: Optional token to use instead of stored credentials
             max_workers: Maximum number of concurrent workers (default: from settings)
@@ -94,7 +94,7 @@ class SyncFactory:
             sync_job=sync_job,
             dag=dag,
             collection=collection,
-            source_connection=source_connection,
+            connection=connection,  # Unused parameter
             ctx=ctx,
             access_token=access_token,
             force_full_sync=force_full_sync,
@@ -141,7 +141,7 @@ class SyncFactory:
         sync_job: schemas.SyncJob,
         dag: schemas.SyncDag,
         collection: schemas.Collection,
-        source_connection: schemas.SourceConnection,
+        connection: schemas.Connection,
         ctx: ApiContext,
         access_token: Optional[str] = None,
         force_full_sync: bool = False,
@@ -154,7 +154,7 @@ class SyncFactory:
             sync_job: The sync job
             dag: The DAG for the sync
             collection: The collection to sync to
-            source_connection: The source connection
+            connection: The connection (unused - we load source connection from DB)
             ctx: The API context
             access_token: Optional token to use instead of stored credentials
             force_full_sync: If True, forces a full sync with orphaned entity deletion
@@ -277,7 +277,7 @@ class SyncFactory:
             sync_job=sync_job,
             dag=dag,
             collection=collection,
-            source_connection=source_connection,
+            connection=connection,  # Unused parameter
             progress=progress,
             entity_state_tracker=entity_state_tracker,
             cursor=cursor,

@@ -38,8 +38,27 @@
             "justMyCode": false,
             "cwd": "${workspaceFolder}/backend",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/backend"
+                "PYTHONPATH": "${workspaceFolder}/backend",
+                "TESTING": "true"
             },
+            "envFile": "${workspaceFolder}/backend/tests/e2e/.env.test",
+            "python": "${command:python.interpreterPath}"
+        },
+        {
+            "name": "Pytest: Custom",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": "${input:pytestArgs}",
+            "console": "integratedTerminal",
+            "consoleName": "🧪 Pytest",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}/backend",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend",
+                "TESTING": "true"
+            },
+            "envFile": "${workspaceFolder}/backend/tests/e2e/.env.test",
             "python": "${command:python.interpreterPath}"
         },
         {
@@ -141,6 +160,12 @@
             "type": "promptString",
             "description": "Enter monke arguments (e.g., 'github' or 'github asana' or '--all' or '--changed')",
             "default": "github"
+        },
+        {
+            "id": "pytestArgs",
+            "type": "promptString",
+            "description": "Pytest args (e.g., 'tests/e2e/smoke/test_cleanup.py -v -s' or '${file} -k test_slack')",
+            "default": "${file} -v -s"
         }
     ]
 }

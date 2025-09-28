@@ -73,7 +73,7 @@ class TemporalScheduleService:
         sync_dict: dict,
         sync_dag_dict: dict,
         collection_dict: dict,
-        source_connection_dict: dict,
+        connection_dict: dict,
         user_dict: dict,
         db: AsyncSession,
         ctx,
@@ -89,7 +89,7 @@ class TemporalScheduleService:
             sync_dict: The sync configuration as dict
             sync_dag_dict: The sync DAG as dict
             collection_dict: The collection as dict
-            source_connection_dict: The source connection as dict
+            connection_dict: The connection as dict (Connection schema, NOT SourceConnection)
             user_dict: The current user as dict
             db: Database session
             ctx: Authentication context
@@ -152,7 +152,7 @@ class TemporalScheduleService:
             None,  # No pre-created sync job for scheduled runs
             sync_dag_dict,
             collection_dict,
-            source_connection_dict,
+            connection_dict,
             user_dict,
             access_token,
         ]
@@ -174,7 +174,7 @@ class TemporalScheduleService:
                 spec=schedule_spec,
                 state=ScheduleState(
                     note=note,
-                    paused=True,
+                    paused=False,
                 ),
             ),
         )
@@ -185,7 +185,7 @@ class TemporalScheduleService:
             update_fields = {
                 "temporal_schedule_id": schedule_id,
                 "sync_type": sync_type,
-                "status": "INACTIVE",  # Mark as inactive since schedule is paused
+                "status": "ACTIVE",  # Mark as active since schedule is running
             }
 
             # Store cron schedule - unified field for all types
@@ -198,9 +198,7 @@ class TemporalScheduleService:
                 ctx=ctx,
             )
 
-        logger.info(
-            f"Created {schedule_type} schedule {schedule_id} for sync {sync_id} (paused initially)"
-        )
+        logger.info(f"Created {schedule_type} schedule {schedule_id} for sync {sync_id} (active)")
         return schedule_id
 
     async def create_minute_level_schedule(
@@ -210,7 +208,7 @@ class TemporalScheduleService:
         sync_dict: dict,
         sync_dag_dict: dict,
         collection_dict: dict,
-        source_connection_dict: dict,
+        connection_dict: dict,
         user_dict: dict,
         db: AsyncSession,
         ctx,
@@ -223,7 +221,7 @@ class TemporalScheduleService:
             sync_dict=sync_dict,
             sync_dag_dict=sync_dag_dict,
             collection_dict=collection_dict,
-            source_connection_dict=source_connection_dict,
+            connection_dict=connection_dict,
             user_dict=user_dict,
             db=db,
             ctx=ctx,
@@ -238,7 +236,7 @@ class TemporalScheduleService:
         sync_dict: dict,
         sync_dag_dict: dict,
         collection_dict: dict,
-        source_connection_dict: dict,
+        connection_dict: dict,
         user_dict: dict,
         db: AsyncSession,
         ctx,
@@ -251,7 +249,7 @@ class TemporalScheduleService:
             sync_dict=sync_dict,
             sync_dag_dict=sync_dag_dict,
             collection_dict=collection_dict,
-            source_connection_dict=source_connection_dict,
+            connection_dict=connection_dict,
             user_dict=user_dict,
             db=db,
             ctx=ctx,
@@ -266,7 +264,7 @@ class TemporalScheduleService:
         sync_dict: dict,
         sync_dag_dict: dict,
         collection_dict: dict,
-        source_connection_dict: dict,
+        connection_dict: dict,
         user_dict: dict,
         db: AsyncSession,
         ctx,
@@ -280,7 +278,7 @@ class TemporalScheduleService:
             sync_dict: The sync configuration as dict
             sync_dag_dict: The sync DAG as dict
             collection_dict: The collection as dict
-            source_connection_dict: The source connection as dict
+            connection_dict: The connection as dict (Connection schema, NOT SourceConnection)
             user_dict: The current user as dict
             db: Database session
             ctx: Authentication context
@@ -329,7 +327,7 @@ class TemporalScheduleService:
                         None,  # No pre-created sync job for scheduled runs
                         sync_dag_dict,
                         collection_dict,
-                        source_connection_dict,
+                        connection_dict,
                         user_dict,
                         access_token,
                         True,  # force_full_sync=True for cleanup
@@ -339,15 +337,13 @@ class TemporalScheduleService:
                 ),
                 spec=schedule_spec,
                 state=ScheduleState(
-                    note=f"Daily cleanup schedule for sync {sync_id} (paused initially)",
-                    paused=True,
+                    note=f"Daily cleanup schedule for sync {sync_id} (active)",
+                    paused=False,  # Start active
                 ),
             ),
         )
 
-        logger.info(
-            f"Created daily cleanup schedule {schedule_id} for sync {sync_id} (paused initially)"
-        )
+        logger.info(f"Created daily cleanup schedule {schedule_id} for sync {sync_id} (active)")
         return schedule_id
 
     async def update_schedule(
@@ -702,18 +698,22 @@ class TemporalScheduleService:
         if not sync_dag:
             raise ValueError(f"No DAG found for sync {sync_id}")
 
+        # Get the actual Connection object (not SourceConnection!)
+        from airweave.core.source_connection_service_helpers import source_connection_helpers
+
+        connection_schema = await source_connection_helpers.get_connection_for_source_connection(
+            db=db, source_connection=source_connection, ctx=ctx
+        )
+
         sync_schema = schemas.Sync.model_validate(sync, from_attributes=True)
         sync_dag_schema = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
         collection_schema = schemas.Collection.model_validate(collection, from_attributes=True)
-        source_connection_schema = schemas.SourceConnectionSimple.model_validate(
-            source_connection, from_attributes=True
-        )
 
         # Convert to dicts for Temporal workflow
         sync_dict = sync_schema.model_dump(mode="json")
         sync_dag_dict = sync_dag_schema.model_dump(mode="json")
         collection_dict = collection_schema.model_dump(mode="json")
-        source_connection_dict = source_connection_schema.model_dump(mode="json")
+        connection_dict = connection_schema.model_dump(mode="json")
 
         # Determine schedule type based on cron pattern
         import re
@@ -739,7 +739,7 @@ class TemporalScheduleService:
                 sync_dict=sync_dict,
                 sync_dag_dict=sync_dag_dict,
                 collection_dict=collection_dict,
-                source_connection_dict=source_connection_dict,
+                connection_dict=connection_dict,
                 user_dict=user_dict,
                 db=db,
                 ctx=ctx,
@@ -752,7 +752,7 @@ class TemporalScheduleService:
                 sync_dict=sync_dict,
                 sync_dag_dict=sync_dag_dict,
                 collection_dict=collection_dict,
-                source_connection_dict=source_connection_dict,
+                connection_dict=connection_dict,
                 user_dict=user_dict,
                 db=db,
                 ctx=ctx,
