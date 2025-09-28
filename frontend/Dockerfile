@@ -5,9 +5,9 @@ WORKDIR /app
 # Copy package files
 COPY package.json ./
 
-# Install dependencies with legacy peer deps to avoid conflicts
-# This is more reliable in Docker environments with cross-platform builds
-RUN npm install --legacy-peer-deps
+# Install dependencies while completely ignoring postinstall scripts that cause segfaults
+# SWC and other native modules will be handled by the build process itself
+RUN npm install --legacy-peer-deps --ignore-scripts
 
 # Copy application code
 COPY . .
