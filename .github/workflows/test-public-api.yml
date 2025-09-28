@@ -69,6 +69,9 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY || 'dummy-key' }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY || 'dummy-key' }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY || 'dummy-key' }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY || 'dummy-key' }}
           # Required for start.sh to skip interactive prompts
           NONINTERACTIVE: "1"
           # Set required environment variables for the containers
@@ -77,6 +80,12 @@ jobs:
         run: |
           echo "Starting services using start.sh..."
           # start.sh will create .env from .env.example and generate keys
+          # Ensure AI keys are in .env so containers pick them up
+          echo "OPENAI_API_KEY=${OPENAI_API_KEY}" >> .env
+          echo "MISTRAL_API_KEY=${MISTRAL_API_KEY}" >> .env
+          echo "COHERE_API_KEY=${COHERE_API_KEY}" >> .env
+          echo "GROQ_API_KEY=${GROQ_API_KEY}" >> .env
+          echo "CEREBRAS_API_KEY=${CEREBRAS_API_KEY}" >> .env
           ./start.sh --noninteractive
 
           # The script already does health checks, but let's verify
