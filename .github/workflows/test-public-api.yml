@@ -39,8 +39,6 @@ jobs:
         run: |
           echo "Building backend image for testing..."
           docker build -t test-backend:latest ./backend
-          echo "Building frontend image for testing..."
-          docker build -t test-frontend:latest ./frontend
 
       - name: Setup environment and start services
         env:
@@ -55,19 +53,8 @@ jobs:
           AUTH0_ENABLED: "false"
           DEV_MODE: "true"
         run: |
-          echo "Creating .env file for CI..."
-          cat > .env << EOF
-          BACKEND_IMAGE=test-backend:latest
-          FRONTEND_IMAGE=test-frontend:latest
-          OPENAI_API_KEY=${OPENAI_API_KEY}
-          STRIPE_API_KEY=${STRIPE_API_KEY}
-          MISTRAL_API_KEY=${MISTRAL_API_KEY}
-          AUTH0_ENABLED=false
-          DEV_MODE=true
-          SKIP_AZURE_STORAGE=true
-          EOF
-
           echo "Starting services using start.sh..."
+          # start.sh will create .env from .env.example and generate keys
           ./start.sh --noninteractive
 
           # The script already does health checks, but let's verify
@@ -112,7 +99,6 @@ jobs:
           TEST_PIPEDREAM_EXTERNAL_USER_ID: ${{ secrets.TEST_PIPEDREAM_EXTERNAL_USER_ID }}
           # Override images to use locally built test images
           BACKEND_IMAGE: test-backend:latest
-          FRONTEND_IMAGE: test-frontend:latest
         run: |
           cd backend
           pytest tests/e2e/smoke -n 4 -v --tb=short
