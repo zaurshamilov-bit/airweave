@@ -8,9 +8,10 @@ basic lifecycle events (expansion_start, expansion_done), but no incremental
 "delta" events.
 """
 
+import json as _json
 from typing import Any, Dict, List, Optional
 
-from openai import AsyncOpenAI
+from groq import AsyncGroq
 
 from airweave.core.config import settings
 from airweave.schemas.search import QueryExpansions, QueryExpansionStrategy
@@ -39,7 +40,7 @@ class QueryExpansion(SearchOperation):
         """
         self.strategy = strategy
         self.max_expansions = max_expansions
-        self._openai_client = None
+        self._groq_client = None
 
     @property
     def name(self) -> str:
@@ -47,15 +48,16 @@ class QueryExpansion(SearchOperation):
         return "query_expansion"
 
     @property
-    def openai_client(self) -> Optional[AsyncOpenAI]:
-        """Lazy-load OpenAI client.
+    def groq_client(self) -> Optional[AsyncGroq]:
+        """Lazy-load Groq async client.
 
         Returns:
-            AsyncOpenAI: The OpenAI client. If OPENAI_API_KEY is not set, returns None.
+            AsyncGroq: The Groq client. Requires GROQ_API_KEY via env.
         """
-        if self._openai_client is None and settings.OPENAI_API_KEY:
-            self._openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        return self._openai_client
+        if self._groq_client is None and settings.GROQ_API_KEY:
+            # AsyncGroq reads GROQ_API_KEY from env; no need to pass explicitly
+            self._groq_client = AsyncGroq()
+        return self._groq_client
 
     async def execute(self, context: Dict[str, Any]) -> None:
         """Expand the query into multiple variations.
@@ -154,7 +156,8 @@ class QueryExpansion(SearchOperation):
 
         # Handle AUTO strategy
         if requested == QueryExpansionStrategy.AUTO:
-            if settings.OPENAI_API_KEY:
+            # Use GROQ key presence to decide LLM availability for expansion
+            if getattr(settings, "GROQ_API_KEY", None):
                 return QueryExpansionStrategy.LLM
             return QueryExpansionStrategy.NO_EXPANSION
 
@@ -191,37 +194,57 @@ class QueryExpansion(SearchOperation):
         Returns:
             List of queries with the original query as the first item
         """
-        if not self.openai_client:
-            return [query]
+        if not self.groq_client:
+            # Fail fast when LLM strategy is selected but client is unavailable
+            raise RuntimeError("QueryExpansion LLM client not configured (GROQ_API_KEY missing)")
 
         try:
-            # Generate alternatives using OpenAI (non-streaming structured output)
+            # Generate alternatives using Groq Structured Outputs (non-streaming)
             system_message = self._get_expansion_system_prompt()
             user_message = self._get_expansion_user_prompt(query)
 
-            completion = await self.openai_client.responses.parse(
-                model="gpt-5-nano",
-                input=[
+            response = await self.groq_client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message},
                 ],
-                max_output_tokens=2000,
-                text_format=QueryExpansions,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "query_expansions",
+                        "schema": QueryExpansions.model_json_schema(),
+                    },
+                },
+                max_completion_tokens=2000,
             )
 
-            parsed_result = completion.output_parsed
-            if not parsed_result:
-                raise Exception("Structured parse result is None")
-            logger.debug(f"[QueryExpansion] Structured parse result: {parsed_result}")
-            alternatives = parsed_result.alternatives if parsed_result else []
+            content = None
+            try:
+                content = response.choices[0].message.content  # type: ignore
+            except Exception:
+                content = None
+
+            if not (isinstance(content, str) and content.strip()):
+                # Fail fast: LLM did not return structured content
+                raise RuntimeError("QueryExpansion received no structured content from LLM")
+
+            try:
+                obj = _json.loads(content)
+                parsed = QueryExpansions.model_validate(obj)
+                logger.debug(f"[QueryExpansion] Structured parse result: {parsed}")
+                alternatives: List[str] = parsed.alternatives or []
+            except Exception as je:
+                # Fail fast on schema/JSON parse errors
+                raise RuntimeError(f"QueryExpansion failed to parse structured output: {je}")
 
             valid_alternatives = self._validate_alternatives(alternatives, query)
             return self._build_expansion_result(query, valid_alternatives)
 
         except Exception as e:
-            logger.debug(f"[QueryExpansion] Structured parse failed: {e}")
-            # On failure, fall back to original query only
-            return [query]
+            # Propagate failure so the executor can fail the search (fail-fast)
+            logger.error(f"[QueryExpansion] LLM request failed: {e}")
+            raise
 
     def _get_expansion_system_prompt(self) -> str:
         """Get the system prompt for query expansion."""

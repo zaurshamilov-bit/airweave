@@ -5,8 +5,12 @@ structured filters, enabling users to filter results without knowing the
 exact filter syntax.
 """
 
+import json as _json
 from typing import Any, Dict, List, Optional, Set
 
+from groq import AsyncGroq
+
+from airweave.core.config import settings
 from airweave.search.operations.base import SearchOperation
 
 
@@ -27,15 +31,16 @@ class QueryInterpretation(SearchOperation):
         Refined query: "tickets"
     """
 
-    def __init__(self, model: str = "gpt-5-nano", confidence_threshold: float = 0.7):
+    def __init__(self, model: str = "openai/gpt-oss-120b", confidence_threshold: float = 0.7):
         """Initialize query interpretation.
 
         Args:
-            model: OpenAI model to use for extraction
+            model: Groq model to use for extraction
             confidence_threshold: Minimum confidence to apply extracted filters (0.7 default)
         """
         self.model = model
         self.confidence_threshold = confidence_threshold
+        self._groq_client: Optional[AsyncGroq] = None
 
     @property
     def name(self) -> str:
@@ -46,6 +51,14 @@ class QueryInterpretation(SearchOperation):
     def optional(self) -> bool:
         """Fail-fast: interpretation is required when enabled in config."""
         return False
+
+    @property
+    def groq_client(self) -> Optional[AsyncGroq]:
+        """Lazy-load Groq async client using GROQ_API_KEY from env/settings."""
+        if self._groq_client is None and getattr(settings, "GROQ_API_KEY", None):
+            # AsyncGroq picks up GROQ_API_KEY from the environment
+            self._groq_client = AsyncGroq()
+        return self._groq_client
 
     async def execute(self, context: Dict[str, Any]) -> None:
         """Extract filters from the query using LLM.
@@ -63,7 +76,7 @@ class QueryInterpretation(SearchOperation):
         """
         query = context["query"]
         logger = context["logger"]
-        openai_api_key = context.get("openai_api_key")
+        groq_api_key = getattr(settings, "GROQ_API_KEY", None)
         db = context.get("db")
         collection_id = context["config"].collection_id
 
@@ -77,9 +90,9 @@ class QueryInterpretation(SearchOperation):
                 except Exception:
                     pass
 
-        if not openai_api_key:
+        if not groq_api_key:
             # If interpretation op is present, absence of key is a configuration error
-            raise RuntimeError("QueryInterpretation requires OPENAI_API_KEY but none is configured")
+            raise RuntimeError("QueryInterpretation requires GROQ_API_KEY but none is configured")
 
         logger.debug(f"[{self.name}] Analyzing query for filters: {query[:100]}...")
         expanded_queries = context.get("expanded_queries")
@@ -100,7 +113,6 @@ class QueryInterpretation(SearchOperation):
             ExtractedFilters = filter_models["ExtractedFilters"]
 
             extracted = await self._get_llm_extraction(
-                openai_api_key,
                 query,
                 expanded_queries,
                 available_fields,
@@ -236,36 +248,54 @@ class QueryInterpretation(SearchOperation):
 
     async def _get_llm_extraction(
         self,
-        openai_api_key: str,
         query: str,
         expanded_queries: Any,
         available_fields: Dict,
         ExtractedFilters: Any,
         logger: Any,
     ) -> Optional[Any]:
-        """Get filter extraction from LLM."""
-        from openai import AsyncOpenAI
-
-        # Create OpenAI client
-        client = AsyncOpenAI(api_key=openai_api_key)
+        """Get filter extraction from LLM using Groq Structured Outputs."""
+        if not self.groq_client:
+            raise RuntimeError(
+                "QueryInterpretation LLM client not configured (GROQ_API_KEY missing)"
+            )
 
         # Create prompt with available fields and explicit source list
         system_prompt = self._build_system_prompt(available_fields)
         user_prompt = self._build_user_prompt_for_extraction(query, expanded_queries)
 
         try:
-            resp = await client.responses.parse(
+            response = await self.groq_client.chat.completions.create(
                 model=self.model,
-                input=[
+                messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                text_format=ExtractedFilters,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "extracted_filters",
+                        "schema": ExtractedFilters.model_json_schema(),
+                    },
+                },
+                max_completion_tokens=2000,
             )
-            extracted = getattr(resp, "output_parsed", None)
-            if not extracted:
-                logger.debug(f"[{self.name}] Responses.parse returned no parsed object")
+
+            content = None
+            try:
+                content = response.choices[0].message.content  # type: ignore
+            except Exception:
+                content = None
+
+            if not (isinstance(content, str) and content.strip()):
+                logger.debug(f"[{self.name}] Groq returned no structured content")
                 return None
+
+            try:
+                obj = _json.loads(content)
+                extracted = ExtractedFilters.model_validate(obj)
+            except Exception as je:
+                raise RuntimeError(f"Interpretation failed to parse structured output: {je}")
 
             logger.debug(f"\n\n[{self.name}] Raw structured extraction: {extracted}\n\n")
 
@@ -279,13 +309,13 @@ class QueryInterpretation(SearchOperation):
 
             logger.info(
                 f"[{self.name}] Extracted filters with confidence "
-                f"{extracted.confidence:.2f}: {summary_hint}"
+                f"{getattr(extracted, 'confidence', 0.0):.2f}: {summary_hint}"
             )
 
             return extracted
         except Exception as e:
             # Hard failure of interpretation step – raise to fail the operation
-            logger.error(f"[{self.name}] Responses.parse failed: {e}")
+            logger.error(f"[{self.name}] Groq structured extraction failed: {e}")
             raise
 
     def _check_confidence(self, extracted: Any, logger: Any) -> bool:

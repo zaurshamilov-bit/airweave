@@ -4,8 +4,12 @@ This module contains the LLM reranking operation that uses OpenAI
 to reorder search results based on relevance to the original query.
 """
 
+import json as _json
 from typing import Any, Dict, List, Optional
 
+from groq import AsyncGroq
+
+from airweave.core.config import settings
 from airweave.search.operations.base import SearchOperation
 
 
@@ -17,7 +21,7 @@ class LLMReranking(SearchOperation):
     relevant results appear at the top.
     """
 
-    def __init__(self, model: str = "gpt-5-nano", max_candidates: int = 100):
+    def __init__(self, model: str = "openai/gpt-oss-120b", max_candidates: int = 100):
         """Initialize LLM reranking.
 
         Args:
@@ -50,29 +54,30 @@ class LLMReranking(SearchOperation):
         Writes to context:
             - final_results: Reranked and limited results
         """
-        from openai import AsyncOpenAI
         from pydantic import BaseModel, Field
 
         results = context.get("raw_results", [])
         query = context["query"]
         config = context["config"]
         logger = context["logger"]
-        openai_api_key = context.get("openai_api_key")
+        groq_api_key = getattr(settings, "GROQ_API_KEY", None)
 
         if not results:
             context["final_results"] = []
             logger.info(f"[{self.name}] No results to rerank")
             return
 
-        if not openai_api_key:
+        if not groq_api_key:
             # Fail-fast policy: reranking enabled but no key configured
-            raise RuntimeError("LLMReranking requires OPENAI_API_KEY but none is configured")
+            raise RuntimeError("LLMReranking requires GROQ_API_KEY but none is configured")
 
         logger.info(f"[{self.name}] Reranking {len(results)} results using LLM")
 
         try:
             # Prepare candidate set for the LLM
+            logger.info(f"\n\nResults: {results}\n\n")
             results_for_llm = self._prepare_candidates(results)
+            logger.info(f"\n\nResults for LLM: {results_for_llm}\n\n")
 
             # Define structured output for reranking (no streaming deltas)
             class RankedResult(BaseModel):
@@ -86,8 +91,8 @@ class LLMReranking(SearchOperation):
                     description="Results ordered by relevance, most relevant first"
                 )
 
-            # Create OpenAI client
-            client = AsyncOpenAI(api_key=openai_api_key)
+            # Create Groq async client (reads GROQ_API_KEY from environment)
+            client = AsyncGroq()
 
             # Build prompts and budget candidates for context window
             system_prompt = self._build_system_prompt()
@@ -117,9 +122,9 @@ class LLMReranking(SearchOperation):
                     op_name=self.name,
                 )
 
-            # Call OpenAI Responses API (non-streaming structured output)
-            rankings_list, reranked = await self._call_openai_responses(
-                client, system_prompt, user_prompt, RerankedResults
+            # Call Groq Chat Completions with Structured Outputs (non-streaming)
+            rankings_list, reranked = await self._call_groq_structured(
+                client, system_prompt, user_prompt, RerankedResults, logger
             )
 
             # Apply final ranking and enforce response limit
@@ -128,9 +133,7 @@ class LLMReranking(SearchOperation):
                 reranked=reranked,
                 limit=config.limit,
             )
-            logger.info(
-                f"[{self.name}] Successfully reranked to {len(context['final_results'])} results"
-            )
+            logger.info(f"[{self.name}] Successfully reranked to {context['final_results']}")
 
             # Emit finish events
             await self._emit_finish_events(emitter, rankings_list)
@@ -164,18 +167,25 @@ class LLMReranking(SearchOperation):
         prepared: List[Dict[str, Any]] = []
         for i, result in enumerate(results[:k]):
             payload = result.get("payload", {})
+            # Prefer embeddable_text as the primary text for LLM consumption,
+            # falling back to chunk/content/text as needed.
             content = (
-                payload.get("md_content")
+                payload.get("embeddable_text")
+                or payload.get("md_content")
                 or payload.get("content")
                 or payload.get("text", "")
-                or payload.get("embeddable_text", "")
             )
             prepared.append(
                 {
                     "index": i,
                     "source": payload.get("source_name", "Unknown"),
-                    "title": payload.get("title", "Untitled"),
+                    # Prefer richer, domain-aware titles first
+                    "title": payload.get("md_title")
+                    or payload.get("title")
+                    or payload.get("name")
+                    or "Untitled",
                     "content": content,
+                    "embeddable_text": payload.get("embeddable_text", ""),
                     "score": result.get("score", 0),
                 }
             )
@@ -261,26 +271,48 @@ class LLMReranking(SearchOperation):
         except Exception:
             pass
 
-    async def _call_openai_responses(
+    async def _call_groq_structured(
         self,
         client: Any,
         system_prompt: str,
         user_prompt: str,
         RerankedResults: Any,
+        logger: Any,
     ) -> tuple[List[Dict[str, Any]], Any]:
-        completion = await client.responses.parse(
+        logger.info(f"\n\n[{self.name}] Calling Groq Structured Outputs\n\n")
+        response = await client.chat.completions.create(
             model=self.model,
-            input=[
+            messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            text_format=RerankedResults,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "reranked_results",
+                    "schema": RerankedResults.model_json_schema(),
+                },
+            },
         )
-        parsed = getattr(completion, "output_parsed", None)
-        if not parsed:
+        logger.info(f"\n\n[{self.name}] Groq Structured Outputs response: {response}\n\n")
+        content = None
+        try:
+            content = response.choices[0].message.content  # type: ignore
+        except Exception:
+            content = None
+
+        if not (isinstance(content, str) and content.strip()):
             raise RuntimeError("LLMReranking produced no structured output")
+
+        try:
+            obj = _json.loads(content)
+            parsed = RerankedResults.model_validate(obj)
+        except Exception as je:
+            raise RuntimeError(f"LLMReranking failed to parse structured output: {je}")
+
         if not getattr(parsed, "rankings", None):
             raise RuntimeError("LLMReranking returned empty rankings")
+
         rankings_list: List[Dict[str, Any]] = [
             {"index": r.index, "relevance_score": r.relevance_score} for r in parsed.rankings
         ]

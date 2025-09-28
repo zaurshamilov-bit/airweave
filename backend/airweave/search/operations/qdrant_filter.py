@@ -49,13 +49,18 @@ class QdrantFilterOperation(SearchOperation):
             # Normalize keys so users can provide simple field names (e.g., source_name)
             try:
                 normalized_filter = self._normalize_filter_dict(self.filter_dict)
-            except Exception:
-                # Fallback to original if normalization fails
-                normalized_filter = self.filter_dict
+            except Exception as e:
+                # Fail-fast: invalid filter structure provided by user
+                logger.error(f"[QdrantFilter] Invalid user filter: {e}")
+                raise
 
             # Merge with existing filter from earlier operations (e.g., interpretation)
             existing_filter = context.get("filter")
-            merged_filter = self._merge_filters(existing_filter, normalized_filter)
+            try:
+                merged_filter = self._merge_filters(existing_filter, normalized_filter)
+            except Exception as e:
+                logger.error(f"[QdrantFilter] Failed to merge filters: {e}")
+                raise
 
             # Set the merged filter in context for vector search to use
             context["filter"] = merged_filter
