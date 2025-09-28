@@ -110,7 +110,7 @@ export const SourceSelectorView: React.FC<SourceSelectorViewProps> = ({
             setError(null);
 
             try {
-                const response = await apiClient.get("/sources/list");
+                const response = await apiClient.get("/sources/");
                 if (response.ok) {
                     const data = await response.json();
                     setSources(data);

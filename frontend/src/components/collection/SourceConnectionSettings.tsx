@@ -36,6 +36,14 @@ import { EditSourceConnectionDialog } from './EditSourceConnectionDialog';
 import { emitCollectionEvent, SOURCE_CONNECTION_UPDATED } from '@/lib/events';
 import { DESIGN_SYSTEM } from '@/lib/design-system';
 
+interface Schedule {
+  cron?: string;
+  next_run?: string;
+  continuous?: boolean;
+  cursor_field?: string;
+  cursor_value?: any;
+}
+
 interface SourceConnection {
   id: string;
   name: string;
@@ -57,8 +65,7 @@ interface SourceConnection {
   last_sync_job_started_at?: string;
   last_sync_job_completed_at?: string;
   last_sync_job_error?: string;
-  cron_schedule?: string;
-  next_scheduled_run?: string;
+  schedule?: Schedule;  // Changed from cron_schedule to schedule object
   auth_provider?: string;
   auth_provider_config?: Record<string, any>;
 }
@@ -108,8 +115,8 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
 
   // Initialize schedule config when sourceConnection changes
   useEffect(() => {
-    if (sourceConnection?.cron_schedule) {
-      const cronParts = sourceConnection.cron_schedule.split(' ');
+    if (sourceConnection?.schedule?.cron) {
+      const cronParts = sourceConnection.schedule.cron.split(' ');
       const utcMinute = parseInt(cronParts[0]);
       const utcHour = cronParts[1] !== '*' ? parseInt(cronParts[1]) : undefined;
 
@@ -118,7 +125,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
         frequency: "custom",
         hour: utcHour,
         minute: utcMinute,
-        cronExpression: sourceConnection.cron_schedule
+        cronExpression: sourceConnection.schedule.cron
       });
     } else {
       setScheduleConfig({
@@ -134,7 +141,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
 
     try {
       // Fetch source details
-      const sourceResponse = await apiClient.get(`/sources/detail/${sourceConnection.short_name}`);
+      const sourceResponse = await apiClient.get(`/sources/${sourceConnection.short_name}`);
       if (sourceResponse.ok) {
         const sourceData = await sourceResponse.json();
         setSourceDetails(sourceData);
@@ -195,11 +202,12 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
         return;
       }
 
-      const updateData = { cron_schedule: cronExpression };
+      const updateData = {
+        schedule: cronExpression ? { cron: cronExpression } : null
+      };
 
-      const response = await apiClient.put(
+      const response = await apiClient.patch(
         `/source-connections/${sourceConnection.id}`,
-        null,
         updateData
       );
 

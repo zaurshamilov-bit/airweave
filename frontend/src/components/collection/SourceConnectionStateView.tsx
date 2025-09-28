@@ -24,6 +24,7 @@ import { DESIGN_SYSTEM } from '@/lib/design-system';
 import { useCollectionCreationStore } from '@/stores/collectionCreationStore';
 import type { SingleActionCheckResponse } from '@/types';
 import { useUsageStore } from '@/lib/stores/usage';
+import { parseCronExpression, formatTimeUntil } from '@/utils/cronParser';
 
 // Source Connection interface - matches backend schema
 interface LastSyncJob {
@@ -42,9 +43,9 @@ interface LastSyncJob {
 }
 
 interface Schedule {
-  cron_expression?: string;
-  next_run_at?: string;
-  is_continuous?: boolean;
+  cron?: string;  // Backend uses 'cron', not 'cron_expression'
+  next_run?: string;  // Backend uses 'next_run', not 'next_run_at'
+  continuous?: boolean;  // Backend uses 'continuous', not 'is_continuous'
   cursor_field?: string;
   cursor_value?: any;
 }
@@ -115,7 +116,6 @@ const SourceConnectionStateView: React.FC<Props> = ({
 }) => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [sourceConnection, setSourceConnection] = useState<SourceConnection | null>(sourceConnectionData || null);
-  const [nextRunTime, setNextRunTime] = useState<string | null>(null);
   const [lastRanDisplay, setLastRanDisplay] = useState<string>('Never');
   const [isRefreshingAuth, setIsRefreshingAuth] = useState(false);
 
@@ -219,62 +219,12 @@ const SourceConnectionStateView: React.FC<Props> = ({
     }
   }, []);
 
-  // Calculate next run time from cron expression
-  const calculateNextRunTime = useCallback((cronExpression: string | null) => {
-    if (!cronExpression) return null;
-
-    try {
-      const parts = cronExpression.split(' ');
-      if (parts.length !== 5) return null;
-
-      const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-      const now = new Date();
-
-      // Create next run date in UTC since cron expressions are typically in UTC
-      const nextRun = new Date(now);
-
-      // Simplified calculation for daily schedules
-      if (hour !== '*' && dayOfMonth === '*' && dayOfWeek === '*') {
-        const targetHour = parseInt(hour);
-        const targetMinute = parseInt(minute) || 0;
-
-        // Set the UTC time for next run
-        nextRun.setUTCHours(targetHour, targetMinute, 0, 0);
-
-        // If the time has already passed today, move to tomorrow
-        if (nextRun <= now) {
-          nextRun.setUTCDate(nextRun.getUTCDate() + 1);
-        }
-      }
-
-      // Calculate time difference from now
-      const diffMs = nextRun.getTime() - now.getTime();
-      const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-      const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-      if (diffHrs > 0) {
-        return `${diffHrs}h ${diffMins}m`;
-      } else if (diffMins > 0) {
-        return `${diffMins}m`;
-      } else {
-        return 'Soon';
-      }
-    } catch (error) {
-      console.error("Error calculating next run time:", error);
-      return null;
-    }
-  }, []);
 
   // Fetch source connection details (only when not provided as prop)
   const fetchSourceConnection = useCallback(async (regenerateAuthUrl = false) => {
     // If data is provided as prop, use it instead of fetching
     if (sourceConnectionData) {
       setSourceConnection(sourceConnectionData);
-      // Calculate next run time
-      if (sourceConnectionData.schedule?.cron_expression) {
-        const nextRun = calculateNextRunTime(sourceConnectionData.schedule.cron_expression);
-        setNextRunTime(nextRun);
-      }
       return;
     }
 
@@ -287,18 +237,12 @@ const SourceConnectionStateView: React.FC<Props> = ({
         const data = await response.json();
         setSourceConnection(data);
 
-        // Calculate next run time
-        if (data.schedule?.cron_expression) {
-          const nextRun = calculateNextRunTime(data.schedule.cron_expression);
-          setNextRunTime(nextRun);
-        }
-
         // No need for separate auth URL fetch, it's handled by the regenerateAuthUrl parameter
       }
     } catch (error) {
       console.error('Failed to fetch source connection:', error);
     }
-  }, [sourceConnectionId, sourceConnectionData, calculateNextRunTime]);
+  }, [sourceConnectionId, sourceConnectionData]);
 
   // Handler for refreshing authentication URL
   const handleRefreshAuthUrl = useCallback(async () => {
@@ -398,23 +342,9 @@ const SourceConnectionStateView: React.FC<Props> = ({
   useEffect(() => {
     if (sourceConnectionData && sourceConnectionData !== sourceConnection) {
       setSourceConnection(sourceConnectionData);
-      // Calculate next run time
-      if (sourceConnectionData.schedule?.cron_expression) {
-        const nextRun = calculateNextRunTime(sourceConnectionData.schedule.cron_expression);
-        setNextRunTime(nextRun);
-      }
     }
-  }, [sourceConnectionData, calculateNextRunTime]);
+  }, [sourceConnectionData]);
 
-  // Update next run time when schedule changes
-  useEffect(() => {
-    if (sourceConnection?.schedule?.cron_expression) {
-      const nextRun = calculateNextRunTime(sourceConnection.schedule.cron_expression);
-      setNextRunTime(nextRun);
-    } else {
-      setNextRunTime(null);
-    }
-  }, [sourceConnection?.schedule?.cron_expression, calculateNextRunTime]);
 
   // Update last ran display
   useEffect(() => {
@@ -728,17 +658,48 @@ const SourceConnectionStateView: React.FC<Props> = ({
             </div>
 
             {/* Schedule Card */}
-            <div className={cn("h-8 px-3 py-1.5 border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[100px]", isDark ? "bg-gray-900" : "bg-white")}>
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">SCHEDULE</span>
-              <div className="flex items-center gap-1">
-                <Clock className="h-3 w-3 text-muted-foreground" />
-                <span className="text-xs font-medium text-foreground">
-                  {sourceConnection?.schedule?.cron_expression ?
-                    (nextRunTime ? `In ${nextRunTime}` : 'Scheduled') :
-                    'Manual'}
-                </span>
-              </div>
-            </div>
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className={cn("h-8 px-3 py-1.5 border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[100px] cursor-help", isDark ? "bg-gray-900" : "bg-white")}>
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">SCHEDULE</span>
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs font-medium text-foreground">
+                        {(() => {
+                          const parsed = parseCronExpression(sourceConnection?.schedule?.cron);
+                          if (parsed) {
+                            const nextRunStr = formatTimeUntil(sourceConnection?.schedule?.next_run);
+                            return nextRunStr ? `${parsed.shortDescription} (${nextRunStr})` : parsed.shortDescription;
+                          }
+                          return 'Manual';
+                        })()}
+                      </span>
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="text-xs space-y-1">
+                    <p className="font-medium">
+                      {(() => {
+                        const parsed = parseCronExpression(sourceConnection?.schedule?.cron);
+                        return parsed ? parsed.description : 'Manual sync only';
+                      })()}
+                    </p>
+                    {sourceConnection?.schedule?.next_run && (
+                      <p className="text-muted-foreground">
+                        Next run: {new Date(sourceConnection.schedule.next_run).toLocaleString()}
+                      </p>
+                    )}
+                    {sourceConnection?.schedule?.cron && (
+                      <p className="text-muted-foreground font-mono text-[10px]">
+                        {sourceConnection.schedule.cron}
+                      </p>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
             {/* Last Sync Card - Only show when not actively syncing */}
             {!(isRunning || isPending || isCancellingStatus) && (

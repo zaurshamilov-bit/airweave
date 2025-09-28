@@ -15,7 +15,7 @@ class TestSources:
     @pytest.mark.asyncio
     async def test_list_sources(self, api_client: httpx.AsyncClient):
         """Test listing all available sources."""
-        response = await api_client.get("/sources/list")
+        response = await api_client.get("/sources/")
 
         assert response.status_code == 200, f"Failed to list sources: {response.text}"
 
@@ -35,7 +35,7 @@ class TestSources:
     async def test_get_source_by_name(self, api_client: httpx.AsyncClient):
         """Test getting a specific source by short_name."""
         # Test with a known source (stripe should always exist)
-        response = await api_client.get("/sources/detail/stripe")
+        response = await api_client.get("/sources/stripe")
 
         assert response.status_code == 200, f"Failed to get source: {response.text}"
 
@@ -55,7 +55,7 @@ class TestSources:
         known_sources = ["stripe", "notion", "linear", "asana", "hubspot_crm"]
 
         for source_name in known_sources:
-            response = await api_client.get(f"/sources/detail/{source_name}")
+            response = await api_client.get(f"/sources/{source_name}")
 
             # Some sources might not be available in all environments
             if response.status_code == 200:
@@ -66,7 +66,7 @@ class TestSources:
     @pytest.mark.asyncio
     async def test_source_auth_methods(self, api_client: httpx.AsyncClient):
         """Test that sources have valid auth methods."""
-        response = await api_client.get("/sources/list")
+        response = await api_client.get("/sources/")
         sources = response.json()
 
         valid_auth_methods = [
@@ -85,7 +85,7 @@ class TestSources:
     @pytest.mark.asyncio
     async def test_source_not_found(self, api_client: httpx.AsyncClient):
         """Test error handling for non-existent source."""
-        response = await api_client.get("/sources/detail/non_existent_source_xyz")
+        response = await api_client.get("/sources/non_existent_source_xyz")
 
         assert response.status_code == 404
         error = response.json()
@@ -95,7 +95,7 @@ class TestSources:
     @pytest.mark.asyncio
     async def test_sources_have_required_fields(self, api_client: httpx.AsyncClient):
         """Test that all sources have required fields."""
-        response = await api_client.get("/sources/list")
+        response = await api_client.get("/sources/")
         sources = response.json()
 
         required_fields = ["short_name", "name", "description", "auth_methods"]
@@ -111,7 +111,7 @@ class TestSources:
     async def test_source_fields_structure(self, api_client: httpx.AsyncClient):
         """Test that source fields have proper structure."""
         # Get a source with fields
-        response = await api_client.get("/sources/detail/stripe")
+        response = await api_client.get("/sources/stripe")
         source = response.json()
 
         # Check auth_fields structure
