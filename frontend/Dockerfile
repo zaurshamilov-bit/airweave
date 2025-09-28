@@ -3,10 +3,11 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package.json ./
+COPY package.json package-lock.json ./
 
-# First install dependencies without using the lockfile
-RUN npm install --no-package-lock
+# Remove the lockfile and regenerate it for the container platform
+# This ensures all platform-specific dependencies are correctly resolved
+RUN rm -f package-lock.json && npm install
 
 # Copy application code
 COPY . .
