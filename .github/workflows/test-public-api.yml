@@ -35,17 +35,40 @@ jobs:
           cd backend
           pip install -r tests/e2e/requirements.txt
 
+      - name: Setup Docker layer caching
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-docker-${{ hashFiles('docker/docker-compose.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-docker-
+
+      - name: Pre-pull heavy Docker images
+        run: |
+          echo "Pre-pulling Docker images in parallel..."
+          docker pull postgres:16 &
+          docker pull redis:7-alpine &
+          docker pull semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2 &
+          docker pull qdrant/qdrant:latest &
+          docker pull temporalio/auto-setup:1.24.2 &
+          docker pull temporalio/ui:2.26.2 &
+          wait
+          echo "All images pre-pulled successfully"
+
       - name: Build test images locally
         run: |
           echo "Building backend image for testing..."
           docker build -t test-backend:latest ./backend
           echo "Building frontend image for testing..."
           docker build -t test-frontend:latest ./frontend
+          echo "Building sync worker image for testing..."
+          docker build -t test-sync-worker:latest ./sync-worker
 
       - name: Setup environment and start services
         env:
           BACKEND_IMAGE: test-backend:latest
           FRONTEND_IMAGE: test-frontend:latest
+          TEMPORAL_WORKER_IMAGE: test-sync-worker:latest
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY || 'dummy-key' }}
@@ -103,7 +126,7 @@ jobs:
           BACKEND_IMAGE: test-backend:latest
         run: |
           cd backend
-          pytest tests/e2e/smoke -n 4 -v --tb=short
+          pytest tests/e2e/smoke -n 3 -v --tb=short
 
       - name: Cleanup Docker containers
         if: always()
