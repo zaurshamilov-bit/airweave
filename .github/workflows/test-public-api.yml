@@ -61,14 +61,11 @@ jobs:
           docker build -t test-backend:latest ./backend
           echo "Building frontend image for testing..."
           docker build -t test-frontend:latest ./frontend
-          echo "Building sync worker image for testing..."
-          docker build -t test-sync-worker:latest ./sync-worker
 
       - name: Setup environment and start services
         env:
           BACKEND_IMAGE: test-backend:latest
           FRONTEND_IMAGE: test-frontend:latest
-          TEMPORAL_WORKER_IMAGE: test-sync-worker:latest
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY || 'dummy-key' }}
