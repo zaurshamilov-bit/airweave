@@ -122,9 +122,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: Optional[str] = None
     MISTRAL_API_KEY: Optional[str] = None
     FIRECRAWL_API_KEY: Optional[str] = None
-    GROQ_API_KEY: Optional[str] = None
-    COHERE_API_KEY: Optional[str] = None
-    CEREBRAS_API_KEY: Optional[str] = None
+
     AZURE_KEYVAULT_NAME: Optional[str] = None
 
     # Temporal configuration

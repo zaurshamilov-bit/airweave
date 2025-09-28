@@ -188,22 +188,9 @@ class RecencyBias(SearchOperation):
 
         from airweave.platform.destinations.qdrant import QdrantDestination
 
-        # Recency is non-critical; if destination cannot be created, skip gracefully
-        try:
-            destination = await QdrantDestination.create(
-                collection_id=UUID(config.collection_id), logger=logger
-            )
-        except Exception as e:
-            logger.debug(f"[RecencyBias] Skipping recency due to destination error: {e}")
-            context["decay_config"] = None
-            if callable(emitter):
-                try:
-                    await emitter(
-                        "recency_skipped", {"reason": "destination_error"}, op_name=self.name
-                    )
-                except Exception:
-                    pass
-            return
+        destination = await QdrantDestination.create(
+            collection_id=UUID(config.collection_id), logger=logger
+        )
 
         # Query oldest/newest using the chosen field
         chosen_field: Optional[str] = None
