@@ -13,7 +13,8 @@ RUN npm install --no-package-lock --ignore-scripts
 COPY . .
 
 # Build the application in production mode
-RUN npm run build
+# Increase Node memory and use npx to run vite directly
+RUN NODE_OPTIONS="--max-old-space-size=4096" npx vite build
 
 # Runtime stage
 FROM node:20-alpine
