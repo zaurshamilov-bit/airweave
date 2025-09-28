@@ -246,7 +246,12 @@ class TestRunningAndCancellingSyncs:
         assert response.status_code == 400
 
         error = response.json()
-        assert "cancelling" in error["detail"].lower() or "in progress" in error["detail"].lower()
+        # The error message format is "Cannot start new sync: a sync job is already {status}"
+        # where status can be "running", "pending", or "cancelling"
+        error_detail = error["detail"].lower()
+        assert "a sync job is already" in error_detail and (
+            "running" in error_detail or "cancelling" in error_detail or "pending" in error_detail
+        )
 
         # Wait for cancellation to complete
         await self._wait_for_job_status(api_client, conn_id, job_id, "cancelled", timeout=20)
