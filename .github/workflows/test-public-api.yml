@@ -42,6 +42,27 @@ jobs:
           echo "Building frontend image for testing..."
           docker build -t test-frontend:latest ./frontend
 
+      - name: Start services using start.sh
+        env:
+          BACKEND_IMAGE: test-backend:latest
+          FRONTEND_IMAGE: test-frontend:latest
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          STRIPE_API_KEY: ${{ secrets.TEST_STRIPE_API_KEY }}
+          # Set required environment variables for the containers
+          AUTH0_ENABLED: "false"
+          DEV_MODE: "true"
+        run: |
+          echo "Starting services using start.sh..."
+          ./start.sh
+          echo "Waiting for services to be healthy..."
+          sleep 30
+          echo "Docker containers status:"
+          docker ps
+          echo "Checking backend health..."
+          curl -f http://localhost:8000/health || echo "Backend health check failed"
+          echo "Checking frontend..."
+          curl -f http://localhost:3000 || echo "Frontend check failed"
+
       - name: Run E2E Smoke Tests
         env:
           TEST_ENV: local
