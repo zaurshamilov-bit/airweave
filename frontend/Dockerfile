@@ -1,18 +1,15 @@
-FROM node:20-alpine AS builder
+
+FROM node:20 AS builder
 
 WORKDIR /app
 
-# Copy package files only
-COPY package.json ./
-
-# Skip postinstall scripts to avoid platform-specific binary issues
-RUN npm install --ignore-scripts
-
-# Copy application code
+# Copy everything at once
 COPY . .
 
-# Build the application in production mode
-RUN npm run build
+# Install dependencies and build in a single layer
+# Using npx to run vite directly, with Node options to increase memory
+RUN npm install --ignore-scripts && \
+    NODE_OPTIONS="--max-old-space-size=4096" npx vite build
 
 # Runtime stage
 FROM node:20-alpine
