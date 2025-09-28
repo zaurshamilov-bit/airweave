@@ -65,23 +65,50 @@ class LLMReranking(SearchOperation):
             return
 
         if not openai_api_key:
-            # Fail-fast policy: reranking enabled but no key configured
-            raise RuntimeError("LLMReranking requires OPENAI_API_KEY but none is configured")
+            # If no API key, just use original results
+            context["final_results"] = results[: config.limit]
+            logger.warning(f"[{self.name}] No OpenAI API key, using original order")
+            return
 
         logger.info(f"[{self.name}] Reranking {len(results)} results using LLM")
 
         try:
-            # Prepare candidate set for the LLM
-            results_for_llm = self._prepare_candidates(results)
+            # Prepare results for LLM with indices
+            k = min(len(results), self.max_candidates)
+            results_for_llm = []
+            for i, result in enumerate(results[:k]):
+                payload = result.get("payload", {})
+                content = (
+                    payload.get("md_content")
+                    or payload.get("content")
+                    or payload.get("text", "")
+                    or payload.get("embeddable_text", "")
+                )
 
-            # Define structured output for reranking (no streaming deltas)
+                results_for_llm.append(
+                    {
+                        "index": i,
+                        "source": payload.get("source_name", "Unknown"),
+                        "title": payload.get("title", "Untitled"),
+                        "content": content,
+                        "score": result.get("score", 0),
+                    }
+                )
+
+            # Define structured output for reranking
+            class Step(BaseModel):
+                text: str
+
             class RankedResult(BaseModel):
                 index: int = Field(description="Original index of the result")
                 relevance_score: float = Field(
                     ge=0.0, le=1.0, description="Relevance score from 0 to 1"
                 )
+                reasoning: str = Field(description="Brief explanation for the ranking")
 
             class RerankedResults(BaseModel):
+                # IMPORTANT: steps first to stream early
+                steps: List[Step] = Field(default_factory=list)
                 rankings: List[RankedResult] = Field(
                     description="Results ordered by relevance, most relevant first"
                 )
@@ -89,55 +116,175 @@ class LLMReranking(SearchOperation):
             # Create OpenAI client
             client = AsyncOpenAI(api_key=openai_api_key)
 
-            # Build prompts and budget candidates for context window
-            system_prompt = self._build_system_prompt()
-            chosen, user_prompt = self._build_user_prompt_with_budget(
-                query=query, candidates=results_for_llm
+            # Create prompt
+            system_prompt = (
+                "You are a search result reranking expert. Your task is to reorder search "
+                "results based on their relevance to the user's query.\n\n"
+                "Use the vector similarity score as one helpful signal, but do not rely on it "
+                "exclusively.\n"
+                "- Prioritize direct topical relevance to the user's query\n"
+                "- Prefer higher quality, complete, and specific information over vague or "
+                "boilerplate text\n"
+                "- Consider source reliability and authoritativeness\n"
+                "- When items are equally relevant, the higher vector score should break ties\n\n"
+                "Only rerank when it improves relevance. If the initial order already reflects "
+                "the best results, keep the order unchanged.\n\n"
+                "Streaming requirements:\n"
+                "- First, emit a 'steps' array of concise reasoning strings explaining how "
+                "you assess relevance.\n"
+                "- Then, emit 'rankings' as a list of objects with index and relevance_score.\n"
+                "- Keep steps short and incremental so they can be "
+                "streamed as they are produced.\n\n"
+                "Return results ordered from most to least relevant."
             )
+
+            user_prompt = f"""Query: {query}
+
+Search Results:
+{self._format_results_for_prompt(results_for_llm)}
+
+Please rerank these results from most to least relevant to the query."""
 
             request_id: Optional[str] = context.get("request_id")
-            emitter = context.get("emit") if request_id else None
 
-            # Log number of results included in the prompt
-            try:
-                logger.info(
-                    f"\n\n[{self.name}] Prompt includes {len(chosen)} candidate(s) "
-                    f"out of {len(results_for_llm)} retrieved\n\n"
+            if request_id:
+                # Streaming path
+                emitter = context.get("emit")
+                if callable(emitter):
+                    await emitter(
+                        "reranking_start",
+                        {"model": self.model, "strategy": "llm", "k": len(results_for_llm)},
+                        op_name=self.name,
+                    )
+
+                rankings_snapshot: List[Dict[str, Any]] = []
+                last_emitted_snapshot: List[Dict[str, Any]] = []
+                last_steps_len = 0
+                async with client.beta.chat.completions.stream(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    response_format=RerankedResults,
+                ) as stream:
+                    async for event in stream:
+                        if getattr(event, "type", "") == "content.delta":
+                            parsed = getattr(event, "parsed", None)
+                            if parsed:
+                                # Normalize dict to Pydantic model
+                                try:
+                                    if isinstance(parsed, dict):
+                                        parsed = RerankedResults.model_validate(parsed)
+                                except Exception:
+                                    continue
+
+                                # Reasoning FIRST via steps array
+                                try:
+                                    if isinstance(parsed.steps, list):
+                                        for i in range(last_steps_len, len(parsed.steps)):
+                                            step = parsed.steps[i]
+                                            text = getattr(step, "text", None) or str(step)
+                                            if (
+                                                isinstance(text, str)
+                                                and text.strip()
+                                                and callable(emitter)
+                                            ):
+                                                await emitter(
+                                                    "reranking_reason_delta",
+                                                    {"text": text},
+                                                    op_name=self.name,
+                                                )
+                                        last_steps_len = len(parsed.steps)
+                                except Exception:
+                                    pass
+
+                                # Then rankings snapshot
+                                if getattr(parsed, "rankings", None):
+                                    rankings_snapshot = [
+                                        {
+                                            "index": r.index,
+                                            "relevance_score": r.relevance_score,
+                                        }
+                                        for r in parsed.rankings
+                                    ]
+                                    if (
+                                        callable(emitter)
+                                        and rankings_snapshot != last_emitted_snapshot
+                                    ):
+                                        await emitter(
+                                            "reranking_delta",
+                                            {"rankings_snapshot": rankings_snapshot},
+                                            op_name=self.name,
+                                        )
+                                        last_emitted_snapshot = [*rankings_snapshot]
+
+                # Apply final order
+                final_results: List[Dict[str, Any]] = []
+                ranked_indices = set()
+                for item in rankings_snapshot:
+                    idx = item.get("index", -1)
+                    if isinstance(idx, int) and 0 <= idx < len(results):
+                        final_results.append(results[idx])
+                        ranked_indices.add(idx)
+                # Fill remaining
+                for i, result in enumerate(results):
+                    if i not in ranked_indices and len(final_results) < config.limit:
+                        final_results.append(result)
+
+                context["final_results"] = final_results[: config.limit]
+                if callable(emitter):
+                    await emitter(
+                        "reranking_done",
+                        {"rankings": rankings_snapshot, "applied": True},
+                        op_name=self.name,
+                    )
+                logger.info(f"[{self.name}] Reranking stream complete")
+            else:
+                # Non-streaming path
+                response = await client.beta.chat.completions.parse(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    response_format=RerankedResults,
                 )
-            except Exception:
-                pass
 
-            # Log prompt stats
-            self._log_prompt_stats(logger, system_prompt, user_prompt, len(chosen))
+                if response.choices[0].message.parsed:
+                    reranked = response.choices[0].message.parsed
 
-            if callable(emitter):
-                await emitter(
-                    "reranking_start",
-                    {"model": self.model, "strategy": "llm", "k": len(chosen)},
-                    op_name=self.name,
-                )
+                    # Reorder results based on LLM ranking
+                    final_results = []
+                    for ranked_item in reranked.rankings:
+                        if ranked_item.index < len(results):
+                            final_results.append(results[ranked_item.index])
+                            logger.debug(
+                                f"[{self.name}] Ranked position {len(final_results)}: "
+                                f"index={ranked_item.index}, "
+                                f"score={ranked_item.relevance_score:.2f}, "
+                                f"reason={ranked_item.reasoning[:50]}..."
+                            )
 
-            # Call OpenAI Responses API (non-streaming structured output)
-            rankings_list, reranked = await self._call_openai_responses(
-                client, system_prompt, user_prompt, RerankedResults
-            )
+                    # Add any remaining results that weren't ranked
+                    ranked_indices = {r.index for r in reranked.rankings}
+                    for i, result in enumerate(results):
+                        if i not in ranked_indices and len(final_results) < config.limit:
+                            final_results.append(result)
 
-            # Apply final ranking and enforce response limit
-            context["final_results"] = self._apply_ranking(
-                results=results,
-                reranked=reranked,
-                limit=config.limit,
-            )
-            logger.info(
-                f"[{self.name}] Successfully reranked to {len(context['final_results'])} results"
-            )
-
-            # Emit finish events
-            await self._emit_finish_events(emitter, rankings_list)
+                    context["final_results"] = final_results[: config.limit]
+                    logger.info(
+                        f"[{self.name}] Successfully reranked to "
+                        f"{len(context['final_results'])} results"
+                    )
+                else:
+                    # Fallback to original order
+                    context["final_results"] = results[: config.limit]
+                    logger.warning(f"[{self.name}] No reranking received, using original order")
 
         except Exception as e:
             logger.error(f"[{self.name}] Failed: {e}", exc_info=True)
-            # Fail-fast per policy
+            # Propagate to fail the search per policy
             raise
 
     def _format_results_for_prompt(self, results: List[Dict]) -> str:
@@ -157,168 +304,3 @@ class LLMReranking(SearchOperation):
                 f"Original Score: {r['score']:.3f}"
             )
         return "\n\n".join(formatted)
-
-    # ----------------------------- Helpers ------------------------------------
-    def _prepare_candidates(self, results: List[Dict]) -> List[Dict[str, Any]]:
-        k = min(len(results), self.max_candidates)
-        prepared: List[Dict[str, Any]] = []
-        for i, result in enumerate(results[:k]):
-            payload = result.get("payload", {})
-            content = (
-                payload.get("md_content")
-                or payload.get("content")
-                or payload.get("text", "")
-                or payload.get("embeddable_text", "")
-            )
-            prepared.append(
-                {
-                    "index": i,
-                    "source": payload.get("source_name", "Unknown"),
-                    "title": payload.get("title", "Untitled"),
-                    "content": content,
-                    "score": result.get("score", 0),
-                }
-            )
-        return prepared
-
-    def _build_system_prompt(self) -> str:
-        return (
-            "You are a search result reranking expert. Your task is to reorder search "
-            "results based on their relevance to the user's query.\n\n"
-            "Use the vector similarity score as one helpful signal, but do not rely on it "
-            "exclusively.\n"
-            "- Prioritize direct topical relevance to the user's query\n"
-            "- Prefer higher quality, complete, and specific information over vague or "
-            "boilerplate text\n"
-            "- Consider source reliability and authoritativeness\n"
-            "- When items are equally relevant, the higher vector score should break ties\n\n"
-            "Only rerank when it improves relevance. If the initial order already reflects "
-            "the best results, keep the order unchanged.\n\n"
-            "Return results ordered from most to least relevant."
-        )
-
-    def _build_user_prompt_with_budget(
-        self, *, query: str, candidates: List[Dict[str, Any]]
-    ) -> tuple[List[Dict[str, Any]], str]:
-        MAX_CONTEXT_TOKENS = 125_000
-        SAFETY_TOKENS = 2_000
-
-        def estimate_tokens(text: str) -> int:
-            try:
-                return int(len(text) / 4)
-            except Exception:
-                return int(float(len(text)) / 4)
-
-        def fmt_single(item: Dict[str, Any]) -> str:
-            try:
-                return (
-                    f"[{item['index']}] Source: {item['source']}, Title: {item['title']}\n"
-                    f"Content: {item['content']}\n"
-                    f"Original Score: {item.get('score', 0):.3f}"
-                )
-            except Exception:
-                return str(item)
-
-        system_prompt = self._build_system_prompt()
-        header = f"Query: {query}\n\nSearch Results:\n"
-        footer = "\n\nPlease rerank these results from most to least relevant to the query."
-        static_tokens = (
-            estimate_tokens(system_prompt) + estimate_tokens(header) + estimate_tokens(footer)
-        )
-
-        chosen: List[Dict[str, Any]] = []
-        running = static_tokens
-        for idx, item in enumerate(candidates):
-            part = fmt_single(item)
-            sep = estimate_tokens("\n\n") if idx > 0 else 0
-            need = estimate_tokens(part) + sep
-            if running + need + SAFETY_TOKENS <= MAX_CONTEXT_TOKENS:
-                chosen.append(item)
-                running += need
-            else:
-                break
-
-        if not chosen and candidates:
-            first = fmt_single(candidates[0])
-            if static_tokens + estimate_tokens(first) + SAFETY_TOKENS <= MAX_CONTEXT_TOKENS:
-                chosen = [candidates[0]]
-
-        formatted = self._format_results_for_prompt(chosen) if chosen else ""
-        user_prompt = f"{header}{formatted}{footer}"
-        return chosen, user_prompt
-
-    def _log_prompt_stats(
-        self, logger: Any, system_prompt: str, user_prompt: str, chosen_count: int
-    ) -> None:
-        try:
-            total_chars = len(system_prompt) + len(user_prompt)
-            estimated_tokens = total_chars / 4
-            logger.info(
-                f"\n\n[{self.name}] Estimated input tokens: ~{estimated_tokens:.0f} "
-                f"(system={len(system_prompt)}, user={len(user_prompt)}, "
-                f"candidates={chosen_count})\n\n"
-            )
-        except Exception:
-            pass
-
-    async def _call_openai_responses(
-        self,
-        client: Any,
-        system_prompt: str,
-        user_prompt: str,
-        RerankedResults: Any,
-    ) -> tuple[List[Dict[str, Any]], Any]:
-        completion = await client.responses.parse(
-            model=self.model,
-            input=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            text_format=RerankedResults,
-        )
-        parsed = getattr(completion, "output_parsed", None)
-        if not parsed:
-            raise RuntimeError("LLMReranking produced no structured output")
-        if not getattr(parsed, "rankings", None):
-            raise RuntimeError("LLMReranking returned empty rankings")
-        rankings_list: List[Dict[str, Any]] = [
-            {"index": r.index, "relevance_score": r.relevance_score} for r in parsed.rankings
-        ]
-        return rankings_list, parsed
-
-    def _apply_ranking(
-        self, *, results: List[Dict[str, Any]], reranked: Any, limit: int
-    ) -> List[Dict[str, Any]]:
-        final_results: List[Dict[str, Any]] = []
-        ranked_indices = set()
-        for ranked_item in reranked.rankings:
-            if not isinstance(ranked_item.index, int) or ranked_item.index < 0:
-                raise RuntimeError("LLMReranking provided invalid index")
-            if ranked_item.index >= len(results):
-                raise RuntimeError("LLMReranking index out of bounds")
-            final_results.append(results[ranked_item.index])
-            ranked_indices.add(ranked_item.index)
-
-        for i, result in enumerate(results):
-            if i not in ranked_indices and len(final_results) < limit:
-                final_results.append(result)
-        return final_results[:limit]
-
-    async def _emit_finish_events(
-        self, emitter: Optional[Any], rankings_list: List[Dict[str, Any]]
-    ) -> None:
-        if not callable(emitter):
-            return
-        try:
-            if rankings_list:
-                await emitter("rankings", {"rankings": rankings_list}, op_name=self.name)
-        except Exception:
-            pass
-        try:
-            await emitter(
-                "reranking_done",
-                {"rankings": rankings_list, "applied": bool(rankings_list)},
-                op_name=self.name,
-            )
-        except Exception:
-            pass

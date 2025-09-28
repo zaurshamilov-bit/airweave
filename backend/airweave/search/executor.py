@@ -173,8 +173,8 @@ class SearchExecutor:
                         context["timings"][op.name] = op_time
                         executed.add(op.name)
 
-                        ctx.logger.debug(
-                            f"\n\n[SearchExecutor] Operation {op.name} completed in {op_time:.2f}ms\n\n"
+                        ctx.logger.info(
+                            f"[SearchExecutor] Operation {op.name} completed in {op_time:.2f}ms"
                         )
 
                         # Emit operator_end

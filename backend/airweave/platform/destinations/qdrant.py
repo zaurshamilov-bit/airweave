@@ -487,18 +487,10 @@ class QdrantDestination(VectorDBDestination):
         self,
         params: dict,
         decay_config: Optional[DecayConfig] = None,
-        *,
-        limit: Optional[int] = None,
     ) -> dict:
         """Wrap an index search with optional decay formula (same semantics as old code)."""
         if decay_config is None:
-            # Ensure a top-level limit is present for final result size
-            if limit is None:
-                try:
-                    limit = int(params.get("limit")) if params.get("limit") is not None else None
-                except Exception:
-                    limit = None
-            return {**params, **({"limit": limit} if limit is not None else {})}
+            return params
 
         scale_seconds = decay_config.get_scale_seconds()
         decay_params = rest.DecayParamsExpression(
@@ -536,17 +528,9 @@ class QdrantDestination(VectorDBDestination):
         except Exception:
             pass
 
-        # Ensure a top-level limit is present for final result size
-        if limit is None:
-            try:
-                limit = int(params.get("limit")) if params.get("limit") is not None else None
-            except Exception:
-                limit = None
-
         return {
             "prefetch": rest.Prefetch(**params),
             "query": rest.FormulaQuery(formula=weighted_formula),
-            **({"limit": limit} if limit is not None else {}),
         }
 
     async def _prepare_query_request(
@@ -566,9 +550,7 @@ class QdrantDestination(VectorDBDestination):
                 "using": DEFAULT_VECTOR_NAME,
                 "limit": limit,
             }
-            query_request_params = self._prepare_index_search_request(
-                neural_params, decay_config, limit=limit
-            )
+            query_request_params = self._prepare_index_search_request(neural_params, decay_config)
 
         if search_method == "keyword":
             if not sparse_vector:
@@ -581,9 +563,7 @@ class QdrantDestination(VectorDBDestination):
                 "using": KEYWORD_VECTOR_NAME,
                 "limit": limit,
             }
-            query_request_params = self._prepare_index_search_request(
-                keyword_params, decay_config, limit=limit
-            )
+            query_request_params = self._prepare_index_search_request(keyword_params, decay_config)
 
         if search_method == "hybrid":
             if not sparse_vector:
@@ -626,9 +606,6 @@ class QdrantDestination(VectorDBDestination):
                     params={}, decay_config=decay_config
                 )
                 query_request_params = {"prefetch": [rrf_prefetch], "query": decay_params["query"]}
-
-            # Ensure top-level limit is set for final results
-            query_request_params["limit"] = limit
 
         return rest.QueryRequest(**query_request_params)
 
