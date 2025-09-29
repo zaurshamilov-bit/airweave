@@ -566,16 +566,19 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             cron_schedule = obj_in["cron_schedule"]
             if cron_schedule is not None:
                 try:
-                    from datetime import datetime
+                    from datetime import datetime, timezone
 
                     from croniter import croniter
 
                     # Create a croniter instance with the cron expression
-                    base = utc_now_naive()
+                    # Use timezone-aware UTC datetime as base
+                    base = datetime.now(timezone.utc)
                     iter = croniter(cron_schedule, base)
 
-                    # Get the next run time
-                    next_run = iter.get_next(datetime)
+                    # Get the next run time (will be timezone-aware)
+                    next_run_aware = iter.get_next(datetime)
+                    # Convert to naive for database storage (PostgreSQL stores as UTC)
+                    next_run = next_run_aware.replace(tzinfo=None)
                     obj_in["next_scheduled_run"] = next_run
                 except Exception as e:
                     import logging
