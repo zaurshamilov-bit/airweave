@@ -4,31 +4,47 @@ edit-this-page-url: https://github.com/airweave-ai/airweave/blob/main/fern/docs/
 slug: concepts
 ---
 
-Understanding the core building blocks of Airweave.
+Airweave connects to your apps, databases, and documents, then turns them into knowledge you can search. To understand how it works, you only need a few core concepts.
 
-## Source
+## <Icon icon="fa-solid fa-database" size="5" color="#4199D3" /> Source
 
-A **Source** is a data integration that knows how to connect to and extract data from external systems. Sources define authentication requirements, configuration options, and the specific entities they can extract.
+A **Source** is a specific application, database, or workspace that Airweave has a connector for. Sources are the external systems where your data lives.
 
-Examples: Gmail, GitHub, Notion, PostgreSQL, Stripe
+**Examples:** Zendesk, GitHub, Google Drive, Notion, PostgreSQL, Stripe
 
-## Collection
+## <Icon icon="fa-solid fa-plug" size="5" color="#4199D3"/> Connector
 
-A **Collection** is a searchable knowledge base composed of one or more source connections. Collections provide a unified search interface across all connected data sources.
+A **Connector** is the integration that Airweave provides for a source. It defines what data types can be synced, how authentication works, and the specific entities that can be extracted.
 
-- Contains multiple source connections
-- Provides unified search API endpoint
-- Maintains vector embeddings for semantic search
+**Examples:**
+- Zendesk connector (for tickets, users, organizations)
+- GitHub connector (for repositories, issues, pull requests)
+- Google Drive connector (for documents, folders, comments)
 
-## Source Connection
+## <Icon icon="fa-solid fa-link" size="5" color="#4199D3"/> Source Connection
 
-A **Source Connection** links a specific source to a collection with configured credentials and settings. Each connection represents an authenticated instance of a source within a collection.
+A **Source Connection** is a live connection created from a connector between Airweave and a specific source using your credentials. In that sense, each connection represents an authenticated and synced instance of connection between Airweave and a source.
 
-## Entities
+**Examples:**
+- A live connection between Airweave and a Zendesk workspace
+- A live connection between Airweave and a specific GitHub repository
 
-**Entities** are the structured data objects extracted from sources and stored in collections. Each source defines its own entity types based on the data it can extract.
+## <Icon icon="fa-solid fa-file-alt" size="5" color="#4199D3" /> Entity
 
-- Threads, messages, and attachments from Gmail
-- Repositories, files, and commits from GitHub
-- Pages, databases, and blocks from Notion
-- Tables, rows, and schemas from PostgreSQL
+An **Entity** is an individual data item pulled from a source. These are the actual pieces of data that get synced and made searchable.
+
+**Examples:**
+- A Zendesk ticket or message
+- A GitHub issue or pull request
+- A Google Doc or spreadsheet
+- A database table row
+
+## <Icon icon="fa-solid fa-layer-group" size="5" color="#4199D3"/> Collection
+
+A **Collection** is a searchable knowledge base made up of synced data from one or more source connections. When you search a collection, queries run across all entities from all its connected sources.
+
+**Key features:**
+- Unified search interface across multiple sources
+- Vector embeddings for semantic search
+- Real-time data synchronization
+- Configurable search parameters and filters

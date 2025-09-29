@@ -7,12 +7,24 @@ slug: auth-providers
 
 ## Introduction
 
-Auth providers allow you to seamlessly integrate with third-party platforms that already manage your data source connections. Instead of requiring users to authenticate separately with each service, Airweave can reuse existing authenticated connections from platforms like Composio and Pipedream, streamlining the setup process and reducing authentication overhead.
+Authentication providers let you reuse existing authenticated connections from third-party platforms such as **Composio** or **Pipedream**. Instead of requiring users to sign in separately for each service, Airweave integrates with these providers and automatically pulls credentials when needed. This reduces setup time and eliminates duplicate authentication steps.
 
 ## How It Works
 
 Authentication providers enable Airweave to leverage these existing connections through a simple three-step process:
 
-1. **Connect Provider**: Add your auth provider credentials to Airweave
-2. **Configure Source**: Specify which existing connection to use when setting up a data source
-3. **Automatic Retrieval**: Credentials are fetched seamlessly during sync operations
+
+<Steps>
+
+  <Step title="Connect Provider" toc={true}>
+    Add your provider credentials in Airweave
+  </Step>
+
+   <Step title="Configure Source" toc={true}>
+    Select the existing connection you want to reuse when creating a data source.
+  </Step>
+
+   <Step title="Automatic Retrieval" toc={true}>
+    Credentials are fetched automatically during sync operations
+  </Step>
+</Steps>
