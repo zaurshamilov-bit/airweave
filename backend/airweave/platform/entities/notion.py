@@ -194,13 +194,13 @@ class NotionFileEntity(FileEntity):
 
     # Notion-specific fields
     file_type: str = AirweaveField(
-        ..., description="The type of file (file, external, file_upload)"
+        ..., description="The type of file (file, external, file_upload)", embeddable=False
     )
-    url: str = AirweaveField(..., description="The URL to access the file")
+    url: str = AirweaveField(..., description="The URL to access the file", embeddable=False)
     expiry_time: Optional[datetime] = AirweaveField(
-        None, description="When the file URL expires (for Notion-hosted files)"
+        None, description="When the file URL expires (for Notion-hosted files)", embeddable=False
     )
-    caption: str = AirweaveField(default="", description="The caption of the file")
+    caption: str = AirweaveField(default="", description="The caption of the file", embeddable=True)
 
     # Initialize metadata field to ensure it exists
     metadata: Optional[Dict[str, Any]] = AirweaveField(
