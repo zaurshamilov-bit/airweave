@@ -40,6 +40,7 @@ export interface AuthProviderConnection {
     modified_by_email?: string;
     created_at: string;
     modified_at: string;
+    masked_client_id?: string;  // Masked client ID for OAuth providers (e.g., "cli_abc...xyz")
 }
 
 interface AuthProvidersStore {

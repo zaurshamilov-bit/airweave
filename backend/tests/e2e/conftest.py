@@ -114,14 +114,17 @@ async def composio_auth_provider(
         "auth_fields": {"api_key": config.TEST_COMPOSIO_API_KEY},
     }
 
-    response = await module_api_client.get(f"/auth-providers/{provider_readable_id}")
+    response = await module_api_client.get(f"/auth-providers/connections/{provider_readable_id}")
 
     if response.status_code == 200:
         provider = response.json()
-        if provider["auth_fields"]["api_key"] == config.TEST_COMPOSIO_API_KEY:
+        # Note: auth_fields are not returned in the connection response (credentials are encrypted)
+        # Check if the connection exists and matches our readable_id
+        if provider.get("readable_id") == provider_readable_id:
             yield provider
+            return
 
-    response = await module_api_client.put("/auth-providers/connect", json=auth_provider_payload)
+    response = await module_api_client.post("/auth-providers/", json=auth_provider_payload)
 
     if response.status_code != 200:
         pytest.fail(f"Failed to create Composio auth provider: {response.text}")
@@ -361,7 +364,7 @@ async def pipedream_auth_provider(api_client: httpx.AsyncClient) -> Dict:
         },
     }
 
-    response = await api_client.put("/auth-providers/connect", json=auth_provider_payload)
+    response = await api_client.post("/auth-providers/", json=auth_provider_payload)
 
     if response.status_code != 200:
         pytest.fail(f"Failed to create Pipedream auth provider: {response.text}")

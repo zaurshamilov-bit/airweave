@@ -183,6 +183,11 @@ class AuthProviderConnection(BaseModel):
     )
     created_at: datetime
     modified_at: datetime
+    # Masked client_id for display purposes (e.g., "cli_abc...xyz")
+    masked_client_id: Optional[str] = Field(
+        None,
+        description="Masked client ID for OAuth providers (first 7 and last 4 characters visible)",
+    )
 
     class Config:
         """Pydantic configuration."""

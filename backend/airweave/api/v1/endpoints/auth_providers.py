@@ -256,21 +256,25 @@ async def list_auth_provider_connections(
     # Apply skip and limit manually since get_by_integration_type doesn't support them
     connections = connections[skip : skip + limit]
 
-    # Convert to AuthProviderConnection schema
-    return [
-        schemas.AuthProviderConnection(
-            id=connection.id,
-            name=connection.name,
-            readable_id=connection.readable_id,
-            short_name=connection.short_name,
-            description=connection.description,
-            created_by_email=connection.created_by_email,
-            modified_by_email=connection.modified_by_email,
-            created_at=connection.created_at,
-            modified_at=connection.modified_at,
+    # Convert to AuthProviderConnection schema with masked client_id
+    result = []
+    for connection in connections:
+        masked_client_id = await _get_masked_client_id(db, connection, ctx)
+        result.append(
+            schemas.AuthProviderConnection(
+                id=connection.id,
+                name=connection.name,
+                readable_id=connection.readable_id,
+                short_name=connection.short_name,
+                description=connection.description,
+                created_by_email=connection.created_by_email,
+                modified_by_email=connection.modified_by_email,
+                created_at=connection.created_at,
+                modified_at=connection.modified_at,
+                masked_client_id=masked_client_id,
+            )
         )
-        for connection in connections
-    ]
+    return result
 
 
 @router.get("/connections/{readable_id}", response_model=schemas.AuthProviderConnection)
@@ -308,6 +312,9 @@ async def get_auth_provider_connection(
             detail=f"Connection {readable_id} is not an auth provider connection",
         )
 
+    # Get masked client_id if available
+    masked_client_id = await _get_masked_client_id(db, connection, ctx)
+
     # Return as AuthProviderConnection schema
     return schemas.AuthProviderConnection(
         id=connection.id,
@@ -319,168 +326,8 @@ async def get_auth_provider_connection(
         modified_by_email=connection.modified_by_email,
         created_at=connection.created_at,
         modified_at=connection.modified_at,
+        masked_client_id=masked_client_id,
     )
-
-
-@router.put("/connect", response_model=schemas.AuthProviderConnection)
-async def connect_or_update_auth_provider(
-    *,
-    db: AsyncSession = Depends(deps.get_db),
-    auth_provider_connection_in: schemas.AuthProviderConnectionCreate,
-    ctx: ApiContext = Depends(deps.get_context),
-) -> schemas.AuthProviderConnection:
-    """Create or update an auth provider connection.
-
-    If a connection for this auth provider already exists for the organization,
-    it will be updated with the new credentials and fields.
-    If no connection exists, a new one will be created.
-
-    Args:
-    -----
-        db: The database session
-        ctx: The current authentication context
-        auth_provider_connection_in: The auth provider connection data
-
-    Returns:
-    --------
-        schemas.AuthProviderConnection: The created or updated connection
-    """
-    async with UnitOfWork(db) as uow:
-        try:
-            # 1. Validate auth provider exists
-            auth_provider = await crud.auth_provider.get_by_short_name(
-                uow.session, auth_provider_connection_in.short_name
-            )
-            if not auth_provider:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Auth provider not found: {auth_provider_connection_in.short_name}",
-                )
-
-            # 2. Check if connection already exists for this auth provider and organization
-            existing_connections = await crud.connection.get_by_integration_type(
-                uow.session,
-                integration_type=IntegrationType.AUTH_PROVIDER,
-                ctx=ctx,
-            )
-
-            existing_connection = None
-            for conn in existing_connections:
-                if conn.short_name == auth_provider_connection_in.short_name:
-                    existing_connection = conn
-                    break
-
-            # 3. Validate auth fields (needed for both create and update)
-            validated_auth_fields = await _validate_auth_fields(
-                uow.session,
-                auth_provider_connection_in.short_name,
-                auth_provider_connection_in.auth_fields,
-            )
-
-            if existing_connection:
-                # UPDATE EXISTING CONNECTION
-                logger.info(
-                    f"Updating existing auth provider connection: {existing_connection.readable_id}"
-                )
-
-                # Update auth credentials
-                await _update_auth_credentials(uow, existing_connection, validated_auth_fields, ctx)
-
-                # Update connection fields
-                connection_update_data = {
-                    "name": auth_provider_connection_in.name,
-                    "description": (
-                        "Auth provider connection for {auth_provider_connection_in.name}"
-                    ),
-                }
-
-                connection_update = schemas.ConnectionUpdate(**connection_update_data)
-                await crud.connection.update(
-                    uow.session,
-                    db_obj=existing_connection,
-                    obj_in=connection_update,
-                    ctx=ctx,
-                    uow=uow,
-                )
-
-                # Ensure timestamps are updated
-                from airweave.core.datetime_utils import utc_now_naive
-
-                existing_connection.modified_at = utc_now_naive()
-                if ctx.has_user_context:
-                    existing_connection.modified_by_email = ctx.tracking_email
-                uow.session.add(existing_connection)
-
-                await uow.session.flush()
-                await uow.session.refresh(existing_connection)
-
-                connection = existing_connection
-
-            else:
-                # CREATE NEW CONNECTION
-                logger.info(
-                    "Creating new auth provider connection for: "
-                    "{auth_provider_connection_in.short_name}"
-                )
-
-                # Create integration credential with encrypted auth credentials
-                integration_credential_data = schemas.IntegrationCredentialCreateEncrypted(
-                    name=f"{auth_provider_connection_in.name} Credentials",
-                    integration_short_name=auth_provider_connection_in.short_name,
-                    description=f"Credentials for {auth_provider_connection_in.name}",
-                    integration_type=IntegrationType.AUTH_PROVIDER,
-                    authentication_method=AuthenticationMethod.DIRECT,
-                    encrypted_credentials=credentials.encrypt(validated_auth_fields),
-                    auth_config_class=auth_provider.auth_config_class,
-                )
-
-                integration_credential = await crud.integration_credential.create(
-                    uow.session,
-                    obj_in=integration_credential_data,
-                    ctx=ctx,
-                    uow=uow,
-                )
-                await uow.session.flush()
-
-                # Create connection
-                connection_data = schemas.ConnectionCreate(
-                    name=auth_provider_connection_in.name,
-                    readable_id=auth_provider_connection_in.readable_id,
-                    description=f"Auth provider connection for {auth_provider_connection_in.name}",
-                    integration_type=IntegrationType.AUTH_PROVIDER,
-                    status=ConnectionStatus.ACTIVE,
-                    integration_credential_id=integration_credential.id,
-                    short_name=auth_provider_connection_in.short_name,
-                )
-
-                connection = await crud.connection.create(
-                    uow.session,
-                    obj_in=connection_data,
-                    ctx=ctx,
-                    uow=uow,
-                )
-                await uow.session.flush()
-
-            # 4. Return response
-            return schemas.AuthProviderConnection(
-                id=connection.id,
-                name=connection.name,
-                readable_id=connection.readable_id,
-                short_name=connection.short_name,
-                description=connection.description,
-                created_by_email=connection.created_by_email,
-                modified_by_email=connection.modified_by_email,
-                created_at=connection.created_at,
-                modified_at=connection.modified_at,
-            )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to connect/update auth provider: {str(e)}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to connect/update auth provider: {str(e)}"
-            ) from e
 
 
 @router.get("/detail/{short_name}", response_model=schemas.AuthProvider)
@@ -630,7 +477,10 @@ async def connect_auth_provider(
             )
             await uow.session.flush()
 
-            # 6. Return response
+            # 6. Get masked client_id if available
+            masked_client_id = await _get_masked_client_id(uow.session, connection, ctx)
+
+            # 7. Return response
             return schemas.AuthProviderConnection(
                 id=connection.id,
                 name=connection.name,
@@ -641,6 +491,7 @@ async def connect_auth_provider(
                 modified_by_email=connection.modified_by_email,
                 created_at=connection.created_at,
                 modified_at=connection.modified_at,
+                masked_client_id=masked_client_id,
             )
 
         except HTTPException:
@@ -803,6 +654,52 @@ async def _update_connection_fields(
         await uow.session.refresh(connection)
 
 
+async def _get_masked_client_id(
+    db: AsyncSession, connection: Any, ctx: ApiContext
+) -> Optional[str]:
+    """Get the masked client_id from the connection's credentials.
+
+    Args:
+        db: The database session
+        connection: The connection object
+        ctx: The API context
+
+    Returns:
+        Masked client_id string (e.g., "cli_abc...xyz") or None if not available
+    """
+    try:
+        # Only process for OAuth providers that have client_id
+        if not connection.integration_credential_id:
+            return None
+
+        # Get the credential
+        credential = await crud.integration_credential.get(
+            db, id=connection.integration_credential_id, ctx=ctx
+        )
+
+        if not credential:
+            return None
+
+        # Decrypt credentials
+        decrypted = credentials.decrypt(credential.encrypted_credentials)
+
+        # Check if client_id exists
+        client_id = decrypted.get("client_id")
+        if not client_id:
+            return None
+
+        # Mask the client_id - show first 7 and last 4 characters
+        if len(client_id) <= 15:
+            # Too short to mask effectively, show partial
+            return f"{client_id[:4]}..."
+        else:
+            return f"{client_id[:7]}...{client_id[-4:]}"
+
+    except Exception as e:
+        logger.debug(f"Could not extract client_id for masking: {e}")
+        return None
+
+
 async def _validate_auth_provider_connection(
     db: AsyncSession, readable_id: str, ctx: ApiContext
 ) -> Any:
@@ -866,7 +763,10 @@ async def update_auth_provider_connection(
                 uow, connection, auth_provider_connection_update, ctx, auth_fields_updated
             )
 
-            # 4. Return updated connection
+            # 4. Get masked client_id if available
+            masked_client_id = await _get_masked_client_id(uow.session, connection, ctx)
+
+            # 5. Return updated connection
             return schemas.AuthProviderConnection(
                 id=connection.id,
                 name=connection.name,
@@ -877,6 +777,7 @@ async def update_auth_provider_connection(
                 modified_by_email=connection.modified_by_email,
                 created_at=connection.created_at,
                 modified_at=connection.modified_at,
+                masked_client_id=masked_client_id,
             )
 
         except HTTPException:
