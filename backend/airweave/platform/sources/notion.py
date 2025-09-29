@@ -6,7 +6,7 @@ responses to entity objects.
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
@@ -1123,7 +1123,10 @@ class NotionSource(BaseSource):
         return ""
 
     def _parse_datetime(self, datetime_str: Optional[str]) -> Optional[datetime]:
-        """Parse datetime string to datetime object."""
+        """Parse datetime string to datetime object.
+
+        Returns a timezone-naive datetime in UTC for consistency with the rest of the system.
+        """
         if not datetime_str:
             return None
 
@@ -1131,7 +1134,15 @@ class NotionSource(BaseSource):
             # Handle ISO format with timezone
             if datetime_str.endswith("Z"):
                 datetime_str = datetime_str[:-1] + "+00:00"
-            return datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
+
+            # Parse the datetime (will be timezone-aware)
+            dt = datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
+
+            # Convert to UTC if it has timezone info, then make it naive
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+            return dt
         except (ValueError, AttributeError):
             self.logger.warning(f"Could not parse datetime: {datetime_str}")
             return None
