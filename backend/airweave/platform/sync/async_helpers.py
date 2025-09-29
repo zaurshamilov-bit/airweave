@@ -40,7 +40,7 @@ async def run_in_thread_pool(func: Callable[..., T], *args, **kwargs) -> T:
 
     This avoids creating excessive threads by using a controlled thread pool.
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     executor = await get_cpu_executor()
 
     # If there are keyword arguments, wrap the function with partial

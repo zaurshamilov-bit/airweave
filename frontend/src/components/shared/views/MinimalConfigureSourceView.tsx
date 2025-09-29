@@ -116,7 +116,7 @@ export const MinimalConfigureSourceView: React.FC<MinimalConfigureSourceViewProp
             console.log('🔧 [MinimalConfigureSourceView] Fetching source details for:', sourceShortName);
             setLoading(true);
             try {
-                const response = await apiClient.get(`/sources/detail/${sourceShortName}`);
+                const response = await apiClient.get(`/sources/${sourceShortName}`);
 
                 if (response.ok) {
                     const data = await response.json();

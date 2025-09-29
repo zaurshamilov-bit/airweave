@@ -29,6 +29,7 @@ from airweave.core.logging import ContextualLogger
 from airweave.core.pubsub import core_pubsub
 from airweave.core.shared_models import ActionType
 from airweave.core.source_connection_service import source_connection_service
+from airweave.core.source_connection_service_helpers import source_connection_helpers
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
 from airweave.db.session import AsyncSessionLocal
@@ -105,7 +106,7 @@ async def get(
     return db_obj
 
 
-@router.put("/{readable_id}", response_model=schemas.Collection)
+@router.patch("/{readable_id}", response_model=schemas.Collection)
 async def update(
     collection: schemas.CollectionUpdate,
     readable_id: str = Path(
@@ -423,13 +424,19 @@ async def refresh_all_source_connections(
         try:
             # Start the sync job in the background or via Temporal
             if await temporal_service.is_temporal_enabled():
+                # Get the Connection object (not SourceConnection)
+                connection_schema = (
+                    await source_connection_helpers.get_connection_for_source_connection(
+                        db=db, source_connection=sc, ctx=ctx
+                    )
+                )
                 # Use Temporal workflow
                 await temporal_service.run_source_connection_workflow(
                     sync=sync,
                     sync_job=sync_job,
                     sync_dag=sync_dag,
                     collection=collection_obj,  # Use the already converted object
-                    source_connection=source_connection,
+                    connection=connection_schema,  # Pass Connection, not SourceConnection
                     ctx=ctx,
                 )
             else:

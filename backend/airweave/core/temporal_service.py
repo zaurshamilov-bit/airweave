@@ -1,7 +1,6 @@
 """Service for integrating Temporal workflows."""
 
 from typing import Optional
-from uuid import uuid4
 
 from temporalio.client import WorkflowHandle
 
@@ -22,7 +21,7 @@ class TemporalService:
         sync_job: schemas.SyncJob,
         sync_dag: schemas.SyncDag,
         collection: schemas.Collection,
-        source_connection: schemas.SourceConnection,
+        connection: schemas.Connection,  # Connection, NOT SourceConnection
         ctx: ApiContext,
         access_token: Optional[str] = None,
     ) -> WorkflowHandle:
@@ -33,7 +32,7 @@ class TemporalService:
             sync_job: The sync job
             sync_dag: The sync DAG
             collection: The collection
-            source_connection: The source connection
+            connection: The connection (Connection schema, NOT SourceConnection)
             ctx: The API context
             access_token: Optional access token
 
@@ -44,10 +43,10 @@ class TemporalService:
         task_queue = settings.TEMPORAL_TASK_QUEUE
 
         # Generate a unique workflow ID
-        workflow_id = f"sync-{sync_job.id}-{uuid4()}"
+        workflow_id = f"sync-{sync_job.id}"
 
         ctx.logger.info(f"Starting Temporal workflow {workflow_id} for sync job {sync_job.id}")
-        ctx.logger.info(f"Source: {source_connection.name} | Collection: {collection.name}")
+        ctx.logger.info(f"Connection: {connection.name} | Collection: {collection.name}")
 
         # Convert Pydantic models to dicts for JSON serialization
         handle = await client.start_workflow(
@@ -57,7 +56,7 @@ class TemporalService:
                 sync_job.model_dump(mode="json"),
                 sync_dag.model_dump(mode="json"),
                 collection.model_dump(mode="json"),
-                source_connection.model_dump(mode="json"),
+                connection.model_dump(mode="json"),
                 ctx.to_serializable_dict(),  # Use serializable dict instead of model_dump
                 access_token,
             ],
@@ -69,73 +68,31 @@ class TemporalService:
 
         return handle
 
-    async def cancel_sync_job_workflow(self, sync_job_id: str) -> bool:
-        """Cancel a running workflow by sync job ID.
+    async def cancel_sync_job_workflow(self, sync_job_id: str, ctx: ApiContext) -> dict:
+        """Request cancellation of a running workflow by sync job ID.
 
-        This will search for workflows with IDs matching the pattern sync-{sync_job_id}-*
-        and cancel them. The workflow will catch the CancelledError and update the
-        sync job status to CANCELLED.
+        Semantics: This method only acknowledges that a cancellation request was
+        sent to Temporal. It does not guarantee the Workflow has observed and
+        completed graceful cancellation yet.
 
         Args:
             sync_job_id: The sync job ID to cancel
+            ctx: The API context
 
         Returns:
-            True if a workflow was found and cancelled, False otherwise
+            True if a cancellation request was sent, False otherwise
         """
+        client = await temporal_client.get_client()
+        workflow_id = f"sync-{sync_job_id}"
         try:
-            client = await temporal_client.get_client()
-
-            # List workflows to find the one matching our sync job
-            # Only look for RUNNING workflows
-            workflows = []
-            query = f'WorkflowId STARTS_WITH "sync-{sync_job_id}-" AND ExecutionStatus = "Running"'
-            logger.info(f"Searching for workflows with query: {query}")
-
-            async for workflow in client.list_workflows(query=query):
-                workflows.append(workflow)
-                logger.info(f"Found workflow: {workflow.id} with status: {workflow.status}")
-
-            if not workflows:
-                logger.warning(f"No running workflow found for sync job {sync_job_id}")
-
-                # Let's also check without the status filter to see if workflow
-                # exists but is not running
-                all_workflows = []
-                async for workflow in client.list_workflows(
-                    query=f'WorkflowId STARTS_WITH "sync-{sync_job_id}-"'
-                ):
-                    all_workflows.append(workflow)
-                    logger.info(
-                        f"Found workflow (any status): {workflow.id} with status: {workflow.status}"
-                    )
-
-                if all_workflows:
-                    logger.info(
-                        f"Found {len(all_workflows)} workflow(s) for sync job "
-                        f"{sync_job_id}, but none are running"
-                    )
-
-                return False
-
-            # Cancel the workflow(s)
-            cancelled_count = 0
-            for workflow in workflows:
-                try:
-                    handle = client.get_workflow_handle(workflow.id)
-                    await handle.cancel()
-                    logger.info(
-                        f"Successfully sent cancel request for workflow {workflow.id} "
-                        f"(sync job {sync_job_id})"
-                    )
-                    cancelled_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to cancel workflow {workflow.id}: {e}")
-
-            return cancelled_count > 0
-
+            handle = client.get_workflow_handle(workflow_id)
+            await handle.cancel()
+            ctx.logger.info(f"\n\nCancellation requested for workflow {workflow_id}\n\n")
+            return True
         except Exception as e:
-            logger.error(f"Failed to cancel workflow for sync job {sync_job_id}: {e}")
-            raise
+            # Workflow may not exist or Temporal may be unavailable
+            ctx.logger.error(f"Failed to request cancellation for {workflow_id}: {e}")
+            return False
 
     async def is_temporal_enabled(self) -> bool:
         """Check if Temporal is enabled and available.

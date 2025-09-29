@@ -32,7 +32,7 @@ class SyncContext:
     - router - the DAG router
     - cursor - the cursor for the sync
     - collection - the collection that the sync is for
-    - source connection - the source connection that the sync is for
+    - connection - the source connection that the sync is for
     - guard rail - the guard rail service
     - logger - contextual logger with sync job metadata
 
@@ -55,13 +55,15 @@ class SyncContext:
     router: SyncDAGRouter
     cursor: SyncCursor
     collection: schemas.Collection
-    source_connection: schemas.Connection
+    connection: schemas.Connection
     entity_map: dict[type[BaseEntity], UUID]
     ctx: ApiContext
     guard_rail: GuardRailService
     logger: ContextualLogger
 
     force_full_sync: bool = False
+    # Whether any destination supports keyword (sparse) indexing. Set once before run.
+    has_keyword_index: bool = False
 
     # batching knobs (read by SyncOrchestrator at init)
     should_batch: bool = True
@@ -83,7 +85,7 @@ class SyncContext:
         router: SyncDAGRouter,
         cursor: SyncCursor,
         collection: schemas.Collection,
-        source_connection: schemas.Connection,
+        connection: schemas.Connection,
         entity_map: dict[type[BaseEntity], UUID],
         ctx: ApiContext,
         guard_rail: GuardRailService,
@@ -93,6 +95,7 @@ class SyncContext:
         should_batch: bool = True,
         batch_size: int = 64,
         max_batch_latency_ms: int = 200,
+        has_keyword_index: bool = False,
     ):
         """Initialize the sync context."""
         self.source = source
@@ -108,7 +111,7 @@ class SyncContext:
         self.router = router
         self.cursor = cursor
         self.collection = collection
-        self.source_connection = source_connection
+        self.connection = connection
         self.entity_map = entity_map
         self.ctx = ctx
         self.guard_rail = guard_rail
@@ -119,3 +122,5 @@ class SyncContext:
         self.should_batch = should_batch
         self.batch_size = batch_size
         self.max_batch_latency_ms = max_batch_latency_ms
+        # Destination capabilities (precomputed)
+        self.has_keyword_index = has_keyword_index

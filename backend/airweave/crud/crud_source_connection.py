@@ -191,7 +191,10 @@ class CRUDSourceConnection(
                     sc.status = SourceConnectionStatus.PENDING_AUTH
                 elif sc._last_sync_job["status"] == SyncJobStatus.FAILED:
                     sc.status = SourceConnectionStatus.ERROR
-                elif sc._last_sync_job["status"] == SyncJobStatus.RUNNING:
+                elif sc._last_sync_job["status"] in (
+                    SyncJobStatus.RUNNING,
+                    SyncJobStatus.CANCELLING,
+                ):
                     sc.status = SourceConnectionStatus.SYNCING
                 else:
                     sc.status = SourceConnectionStatus.ACTIVE
@@ -346,9 +349,17 @@ class CRUDSourceConnection(
         if not sync:
             return None
 
+        # Convert naive UTC datetime to timezone-aware for proper serialization
+        next_run_at = None
+        if sync.next_scheduled_run:
+            from datetime import timezone
+
+            # Database stores naive UTC, make it timezone-aware
+            next_run_at = sync.next_scheduled_run.replace(tzinfo=timezone.utc)
+
         return {
             "cron_expression": sync.cron_schedule,
-            "next_run_at": sync.next_scheduled_run,
+            "next_run_at": next_run_at,
             "is_continuous": getattr(sync, "is_continuous", False),
             "cursor_field": getattr(sync, "cursor_field", None),
             "cursor_value": getattr(sync, "cursor_value", None),
@@ -455,6 +466,9 @@ class CRUDSourceConnection(
         )
         result = await db.execute(query)
         source_connection = result.scalar_one_or_none()
+        if not source_connection:
+            return None
+
         await self._validate_organization_access(ctx, source_connection.organization_id)
         return source_connection
 

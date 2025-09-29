@@ -19,6 +19,7 @@ class SyncJobStatus(str, Enum):
     RUNNING = "running"  # Changed from IN_PROGRESS for consistency
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLING = "cancelling"
     CANCELLED = "cancelled"
 
 

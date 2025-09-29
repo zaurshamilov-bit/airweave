@@ -35,6 +35,7 @@ from airweave.platform.sync.entity_processor import EntityProcessor
 from airweave.platform.sync.orchestrator import SyncOrchestrator
 from airweave.platform.sync.pubsub import SyncEntityStateTracker, SyncProgress
 from airweave.platform.sync.router import SyncDAGRouter
+from airweave.platform.sync.stream import AsyncSourceStream
 from airweave.platform.sync.token_manager import TokenManager
 from airweave.platform.sync.worker_pool import AsyncWorkerPool
 
@@ -50,7 +51,7 @@ class SyncFactory:
         sync_job: schemas.SyncJob,
         dag: schemas.SyncDag,
         collection: schemas.Collection,
-        source_connection: schemas.SourceConnection,
+        connection: schemas.Connection,  # Passed but unused - we load from DB
         ctx: ApiContext,
         access_token: Optional[str] = None,
         max_workers: int = None,
@@ -67,7 +68,7 @@ class SyncFactory:
             sync_job: The sync job
             dag: The DAG for the sync
             collection: The collection to sync to
-            source_connection: The source connection
+            connection: The connection (unused - we load source connection from DB)
             ctx: The API context
             access_token: Optional token to use instead of stored credentials
             max_workers: Maximum number of concurrent workers (default: from settings)
@@ -93,7 +94,7 @@ class SyncFactory:
             sync_job=sync_job,
             dag=dag,
             collection=collection,
-            source_connection=source_connection,
+            connection=connection,  # Unused parameter
             ctx=ctx,
             access_token=access_token,
             force_full_sync=force_full_sync,
@@ -109,14 +110,19 @@ class SyncFactory:
         entity_processor = EntityProcessor()
 
         # Create worker pool
-        pool_start = time.time()
         worker_pool = AsyncWorkerPool(max_workers=max_workers, logger=sync_context.logger)
-        sync_context.logger.debug(f"Worker pool created in {time.time() - pool_start:.2f}s")
 
-        # Create dedicated orchestrator instance
+        stream = AsyncSourceStream(
+            source_generator=sync_context.source.generate_entities(),
+            queue_size=10000,  # TODO: make this configurable
+            logger=sync_context.logger,
+        )
+
+        # Create dedicated orchestrator instance with all components
         orchestrator = SyncOrchestrator(
             entity_processor=entity_processor,
             worker_pool=worker_pool,
+            stream=stream,
             sync_context=sync_context,
         )
 
@@ -135,7 +141,7 @@ class SyncFactory:
         sync_job: schemas.SyncJob,
         dag: schemas.SyncDag,
         collection: schemas.Collection,
-        source_connection: schemas.SourceConnection,
+        connection: schemas.Connection,
         ctx: ApiContext,
         access_token: Optional[str] = None,
         force_full_sync: bool = False,
@@ -148,7 +154,7 @@ class SyncFactory:
             sync_job: The sync job
             dag: The DAG for the sync
             collection: The collection to sync to
-            source_connection: The source connection
+            connection: The connection (unused - we load source connection from DB)
             ctx: The API context
             access_token: Optional token to use instead of stored credentials
             force_full_sync: If True, forces a full sync with orphaned entity deletion
@@ -247,6 +253,19 @@ class SyncFactory:
 
         cursor = SyncCursor(sync_id=sync.id, cursor_data=cursor_data, cursor_field=cursor_field)
 
+        # Precompute destination keyword-index capability once
+        has_keyword_index = False
+        try:
+            import asyncio as _asyncio
+
+            if destinations:
+                has_keyword_index = any(
+                    await _asyncio.gather(*[dest.has_keyword_index() for dest in destinations])
+                )
+        except Exception as _e:
+            logger.warning(f"Failed to precompute keyword index capability on destinations: {_e}")
+            has_keyword_index = False
+
         # Create sync context
         sync_context = SyncContext(
             source=source,
@@ -258,7 +277,7 @@ class SyncFactory:
             sync_job=sync_job,
             dag=dag,
             collection=collection,
-            source_connection=source_connection,
+            connection=connection,  # Unused parameter
             progress=progress,
             entity_state_tracker=entity_state_tracker,
             cursor=cursor,
@@ -268,6 +287,7 @@ class SyncFactory:
             logger=logger,
             guard_rail=guard_rail,
             force_full_sync=force_full_sync,
+            has_keyword_index=has_keyword_index,
         )
 
         # Set cursor on source so it can access cursor data

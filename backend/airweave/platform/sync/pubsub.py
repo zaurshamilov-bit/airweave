@@ -1,7 +1,7 @@
 """Sync progress tracking and Redis pubsub integration."""
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from uuid import UUID
 
@@ -75,11 +75,26 @@ class SyncProgress:
         """Publish current progress."""
         await core_pubsub.publish("sync_job", self.job_id, self.stats.model_dump())
 
-    async def finalize(self, is_complete: bool = True) -> None:
-        """Publish final progress."""
+    async def finalize(self, status: SyncJobStatus) -> None:
+        """Publish final progress with the sync job status.
+
+        Args:
+            status: The final status of the sync job
+        """
         async with self._lock:  # Ensure finalize is also synchronized
-            self.stats.is_complete = is_complete
-            self.stats.is_failed = not is_complete
+            # Set the final status
+            self.stats.status = status
+
+            # Map status to logging details
+            status_map = {
+                SyncJobStatus.COMPLETED: ("✅", "Sync completed successfully", "info"),
+                SyncJobStatus.CANCELLED: ("🚫", "Sync cancelled", "info"),
+                SyncJobStatus.FAILED: ("❌", "Sync failed", "error"),
+            }
+
+            status_emoji, status_text, log_level = status_map.get(
+                status, ("❓", f"Sync ended with status: {status.value}", "warning")
+            )
 
             # Log final status
             total_ops = sum(
@@ -92,20 +107,19 @@ class SyncProgress:
                 ]
             )
 
-            if is_complete:
-                self.logger.info(
-                    f"✅ Sync completed successfully - Total: {total_ops} | "
-                    f"Inserted: {self.stats.inserted} | Updated: {self.stats.updated} | "
-                    f"Deleted: {self.stats.deleted} | Kept: {self.stats.kept} | "
-                    f"Skipped: {self.stats.skipped}"
-                )
+            message = (
+                f"{status_emoji} {status_text} - Total: {total_ops} | "
+                f"Inserted: {self.stats.inserted} | Updated: {self.stats.updated} | "
+                f"Deleted: {self.stats.deleted} | Kept: {self.stats.kept} | "
+                f"Skipped: {self.stats.skipped}"
+            )
+
+            if log_level == "error":
+                self.logger.error(message)
+            elif log_level == "warning":
+                self.logger.warning(message)
             else:
-                self.logger.error(
-                    f"❌ Sync failed - Progress before failure - Total: {total_ops} | "
-                    f"Inserted: {self.stats.inserted} | Updated: {self.stats.updated} | "
-                    f"Deleted: {self.stats.deleted} | Kept: {self.stats.kept} | "
-                    f"Skipped: {self.stats.skipped}"
-                )
+                self.logger.info(message)
 
             await self._publish()
 
@@ -132,13 +146,13 @@ class SyncProgress:
         # Calculate rate if possible
         rate_info = ""
         if hasattr(self, "_start_time"):
-            elapsed = asyncio.get_event_loop().time() - self._start_time
+            elapsed = asyncio.get_running_loop().time() - self._start_time
             if elapsed > 0:
                 rate = total_ops / elapsed
                 rate_info = f" | Rate: {rate:.1f} ops/sec"
         else:
             # Set start time on first status update
-            self._start_time = asyncio.get_event_loop().time()
+            self._start_time = asyncio.get_running_loop().time()
 
         # Log entity type breakdown if available
         entity_info = ""
@@ -206,7 +220,7 @@ class SyncEntityStateTracker:
 
         # Publishing control
         self._lock = asyncio.Lock()
-        self._last_published = datetime.utcnow()
+        self._last_published = datetime.now(timezone.utc)
         self._publish_interval = 0.5  # Publish every 500ms max
 
         # Track the total operations for debugging
@@ -278,7 +292,7 @@ class SyncEntityStateTracker:
             )
 
             # Check if we should publish based on time interval
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             if (now - self._last_published).total_seconds() >= self._publish_interval:
                 await self._publish_state()
                 self._last_published = now
@@ -332,12 +346,12 @@ class SyncEntityStateTracker:
         except Exception as e:
             self.logger.error(f"Failed to publish entity state: {e}")
 
-    async def finalize(self, is_complete: bool = True, error: Optional[str] = None) -> None:
-        """Publish final state with completion flag.
+    async def finalize(self, status: SyncJobStatus, error: Optional[str] = None) -> None:
+        """Publish final state with sync job status.
 
         Args:
-            is_complete: Whether the sync completed successfully
-            error: Error message if the sync failed
+            status: The final status of the sync job
+            error: Optional error message if the sync failed
         """
         async with self._lock:
             # Always publish final state
@@ -355,19 +369,22 @@ class SyncEntityStateTracker:
                     # Include entities without metadata using UUID as name
                     final_counts_named[str(def_id)] = count
 
-            # Send completion message with proper status
-            final_status = SyncJobStatus.COMPLETED if is_complete else SyncJobStatus.FAILED
+            # Determine completion flags based on status
+            is_complete = status == SyncJobStatus.COMPLETED
+            is_failed = status == SyncJobStatus.FAILED
+            # Use provided error, or default to "Sync failed" if status is FAILED but no error given
+            error_msg = error if error else ("Sync failed" if is_failed else None)
 
             completion_msg = SyncCompleteMessage(
                 job_id=self.job_id,
                 sync_id=self.sync_id,
                 is_complete=is_complete,
-                is_failed=not is_complete,
+                is_failed=is_failed,
                 final_counts=final_counts_named,
                 total_entities=sum(self.entity_counts.values()),
                 total_operations=self._total_operations,
-                final_status=final_status,
-                error=error,  # Include the error message
+                final_status=status,
+                error=error_msg,  # Include the error message
             )
 
             try:
@@ -375,8 +392,15 @@ class SyncEntityStateTracker:
                     "sync_job_state", self.job_id, completion_msg.model_dump_json()
                 )
 
+                # Log based on status
+                status_text = {
+                    SyncJobStatus.COMPLETED: "completed",
+                    SyncJobStatus.CANCELLED: "cancelled",
+                    SyncJobStatus.FAILED: "failed",
+                }.get(status, status.value)
+
                 self.logger.info(
-                    f"Sync finalized: {'completed' if is_complete else 'failed'}, "
+                    f"Sync finalized: {status_text}, "
                     f"{sum(self.entity_counts.values())} total entities, "
                     f"{self._total_operations} operations"
                 )

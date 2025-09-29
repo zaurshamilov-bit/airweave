@@ -27,8 +27,8 @@ class SyncProgressUpdate(BaseModel):
     entities_encountered: Dict[str, int] = Field(
         default_factory=dict, description="Count of entities by type name"
     )
-    is_complete: bool = False
-    is_failed: bool = False
+    # Status field to track the final state - None means still in progress
+    status: Optional[SyncJobStatus] = None
 
 
 class EntityStateUpdate(BaseModel):

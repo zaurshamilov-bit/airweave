@@ -385,7 +385,7 @@ const SemanticMcp = () => {
     const fetchSourceDetails = async (shortName: string) => {
         setIsLoadingDetails(true);
         try {
-            const response = await apiClient.get(`/sources/detail/${shortName}`);
+            const response = await apiClient.get(`/sources/${shortName}`);
             if (response.ok) {
                 const details = await response.json();
                 console.log('🔍 [SemanticMcp] Fetched source details:', details);

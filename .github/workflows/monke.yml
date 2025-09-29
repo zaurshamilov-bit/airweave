@@ -43,6 +43,13 @@ jobs:
       # These will be overridden by Key Vault if present
       DM_AUTH_PROVIDER: composio
 
+      # AI provider keys for backend runtime
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+
     steps:
       - uses: actions/checkout@v5
 
@@ -116,6 +123,9 @@ jobs:
                 # Core dependencies
                 - OPENAI_API_KEY=${OPENAI_API_KEY}
                 - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+                - COHERE_API_KEY=${COHERE_API_KEY}
+                - GROQ_API_KEY=${GROQ_API_KEY}
+                - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
                 # Azure Key Vault for SaaS credentials
                 - AZURE_KEY_VAULT_URL=${AZURE_KEY_VAULT_URL}
                 - DM_AUTH_PROVIDER=${DM_AUTH_PROVIDER}
@@ -126,6 +136,9 @@ jobs:
                 # Core dependencies
                 - OPENAI_API_KEY=${OPENAI_API_KEY}
                 - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+                - COHERE_API_KEY=${COHERE_API_KEY}
+                - GROQ_API_KEY=${GROQ_API_KEY}
+                - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
                 # Azure Key Vault for SaaS credentials
                 - AZURE_KEY_VAULT_URL=${AZURE_KEY_VAULT_URL}
                 - DM_AUTH_PROVIDER=${DM_AUTH_PROVIDER}
@@ -179,6 +192,9 @@ jobs:
           # Core dependencies (keep these as GitHub secrets)
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
 
           # Azure Key Vault for SaaS app credentials
           AZURE_KEY_VAULT_URL: ${{ secrets.AZURE_KEY_VAULT_URL }}

@@ -152,7 +152,7 @@ class RecencyBias(SearchOperation):
 
         return decay_config
 
-    async def execute(self, context: Dict[str, Any]) -> None:
+    async def execute(self, context: Dict[str, Any]) -> None:  # noqa: C901
         """Compute dynamic decay from collection timestamps and store in context."""
         config = context["config"]
         logger = context["logger"]
@@ -188,9 +188,22 @@ class RecencyBias(SearchOperation):
 
         from airweave.platform.destinations.qdrant import QdrantDestination
 
-        destination = await QdrantDestination.create(
-            collection_id=UUID(config.collection_id), logger=logger
-        )
+        # Recency is non-critical; if destination cannot be created, skip gracefully
+        try:
+            destination = await QdrantDestination.create(
+                collection_id=UUID(config.collection_id), logger=logger
+            )
+        except Exception as e:
+            logger.debug(f"[RecencyBias] Skipping recency due to destination error: {e}")
+            context["decay_config"] = None
+            if callable(emitter):
+                try:
+                    await emitter(
+                        "recency_skipped", {"reason": "destination_error"}, op_name=self.name
+                    )
+                except Exception:
+                    pass
+            return
 
         # Query oldest/newest using the chosen field
         chosen_field: Optional[str] = None
@@ -224,7 +237,7 @@ class RecencyBias(SearchOperation):
             if oldest and newest and newest > oldest:
                 chosen_field = field
                 t_min, t_max = oldest, newest
-                logger.info(
+                logger.debug(
                     ("[RecencyBias] Field='%s', filter_applied=%s, oldest=%s, newest=%s"),
                     chosen_field,
                     bool(qdrant_filter),
@@ -240,7 +253,7 @@ class RecencyBias(SearchOperation):
             chosen_field = None
 
         if not chosen_field:
-            logger.info("[RecencyBias] No usable datetime field found; skipping recency bias")
+            logger.debug("[RecencyBias] No usable datetime field found; skipping recency bias")
             context["decay_config"] = None
             # Inform clients of skip reason
             if callable(emitter):
@@ -253,7 +266,7 @@ class RecencyBias(SearchOperation):
         # Build DecayConfig and store in context
         decay_config = self._build_decay_config(chosen_field, t_min, t_max, recency_bias)
         context["decay_config"] = decay_config
-        logger.info(
+        logger.debug(
             f"[RecencyBias] Using datetime_field='{chosen_field}', span={(t_max - t_min)}, "
             f"target=newest ({t_max.isoformat()}), "
             f"scale={decay_config.scale_value:.0f}s (full span), weight={recency_bias}"

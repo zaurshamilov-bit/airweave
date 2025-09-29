@@ -1,8 +1,11 @@
 """Query expansion operation.
 
-This operation expands the user's query into multiple variations
-to improve recall. It can use different strategies including
-LLM-based expansion or simple synonym expansion.
+This operation expands the user's query into multiple variations to improve
+recall. As of this version, the operation no longer supports streaming
+structured outputs. Both streaming and non-streaming searches use the
+same non-streaming structured output path. In streaming mode, we still
+emit basic lifecycle events (expansion_start, expansion_done), but no
+incremental "delta" events.
 """
 
 from typing import Any, Dict, List, Optional
@@ -54,7 +57,7 @@ class QueryExpansion(SearchOperation):
             self._openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         return self._openai_client
 
-    async def execute(self, context: Dict[str, Any]) -> None:
+    async def execute(self, context: Dict[str, Any]) -> None:  # noqa: C901
         """Expand the query into multiple variations.
 
         Reads from context:
@@ -78,39 +81,55 @@ class QueryExpansion(SearchOperation):
         if isinstance(strategy, str):
             strategy = self._resolve_strategy(strategy)
 
-        logger.info(f"[QueryExpansion] Expanding query using strategy: {strategy}")
+        logger.debug(f"[QueryExpansion] Expanding query using strategy: {strategy}")
+
+        # If in streaming mode, emit a basic start event (no deltas)
+        emitter = context.get("emit")
+        request_id = context.get("request_id")
+        if request_id and callable(emitter):
+            try:
+                model = "gpt-5-nano" if strategy == QueryExpansionStrategy.LLM else None
+                await emitter(
+                    "expansion_start",
+                    {"model": model, "strategy": ("llm" if model else "none")},
+                    op_name=self.name,
+                )
+            except Exception:
+                pass
 
         try:
-            request_id = context.get("request_id")
-            # Streaming path when request_id is available and LLM strategy is selected
-            if request_id and strategy == QueryExpansionStrategy.LLM and self.openai_client:
-                await self._stream_llm_expand(context)
-            else:
-                # Non-streaming or non-LLM path
-                expanded_queries = await self._expand(query, strategy)
+            # Single non-streaming path for both streaming and non-streaming searches
+            expanded_queries = await self._expand(query, strategy, logger)
 
-                # Limit the number of expansions
-                if len(expanded_queries) > self.max_expansions:
-                    expanded_queries = expanded_queries[: self.max_expansions]
-                    logger.info(
-                        f"[QueryExpansion] Limited expansions from {len(expanded_queries)} "
-                        f"to {self.max_expansions}"
-                    )
+            # Limit the number of expansions
+            if len(expanded_queries) > self.max_expansions:
+                expanded_queries = expanded_queries[: self.max_expansions]
+                logger.debug(f"[QueryExpansion] Limited expansions to {self.max_expansions}")
 
-                context["expanded_queries"] = expanded_queries
-                logger.info(
-                    f"[QueryExpansion] Expanded query '{query[:50]}...' "
-                    f"to {len(expanded_queries)} variations"
+            context["expanded_queries"] = expanded_queries
+            logger.debug(
+                (
+                    f"[QueryExpansion] Expanded query '{query[:50]}...' to "
+                    f"{len(expanded_queries)} variations"
                 )
+            )
 
-                if logger.isEnabledFor(10):  # DEBUG level
-                    logger.debug(f"[QueryExpansion] Variations: {expanded_queries}")
+            if logger.isEnabledFor(10):  # DEBUG level
+                logger.debug(f"[QueryExpansion] Variations: {expanded_queries}")
+
+            # In streaming mode, emit a done event with the final alternatives
+            if request_id and callable(emitter):
+                try:
+                    await emitter(
+                        "expansion_done", {"alternatives": expanded_queries}, op_name=self.name
+                    )
+                except Exception:
+                    pass
 
         except Exception as e:
             logger.error(f"[QueryExpansion] Failed: {e}", exc_info=True)
             # Propagate error so executor can fail the search
-            emitter = context.get("emit")
-            if callable(emitter):
+            if request_id and callable(emitter):
                 try:
                     await emitter(
                         "error", {"operation": self.name, "message": str(e)}, op_name=self.name
@@ -144,25 +163,25 @@ class QueryExpansion(SearchOperation):
 
         return requested
 
-    async def _expand(self, query: str, strategy: QueryExpansionStrategy) -> List[str]:
+    async def _expand(self, query: str, strategy: QueryExpansionStrategy, logger) -> List[str]:
         """Main expansion entry point.
 
         Args:
             query: The query to expand
             strategy: The strategy to use
-
+            logger: The logger to use
         Returns:
             List of queries with original first
         """
         if strategy == QueryExpansionStrategy.NO_EXPANSION:
             return [query]
         elif strategy == QueryExpansionStrategy.LLM:
-            return await self._llm_expand(query)
+            return await self._llm_expand(query, logger)
 
         # Fallback
         return [query]
 
-    async def _llm_expand(self, query: str) -> List[str]:
+    async def _llm_expand(self, query: str, logger) -> List[str]:
         """Use LLM to generate semantically similar search queries.
 
         Prompts GPT to create alternative phrasings that could retrieve relevant
@@ -170,6 +189,7 @@ class QueryExpansion(SearchOperation):
 
         Args:
             query: The query to expand
+            logger: The logger to use
 
         Returns:
             List of queries with the original query as the first item
@@ -178,202 +198,54 @@ class QueryExpansion(SearchOperation):
             return [query]
 
         try:
-            # Generate alternatives using OpenAI with the same prompts used for streaming
+            # Generate alternatives using OpenAI (non-streaming structured output)
             system_message = self._get_expansion_system_prompt()
             user_message = self._get_expansion_user_prompt(query)
 
-            # Use structured outputs with the parse method
-            completion = await self.openai_client.beta.chat.completions.parse(
+            completion = await self.openai_client.responses.parse(
                 model="gpt-5-nano",
-                messages=[
+                input=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message},
                 ],
-                max_tokens=2000,
-                response_format=QueryExpansions,
+                max_output_tokens=2000,
+                text_format=QueryExpansions,
             )
 
-            parsed_result = completion.choices[0].message.parsed
+            parsed_result = completion.output_parsed
+            if not parsed_result:
+                raise Exception("Structured parse result is None")
+            logger.debug(f"[QueryExpansion] Structured parse result: {parsed_result}")
             alternatives = parsed_result.alternatives if parsed_result else []
 
-            # Process and validate the alternatives
             valid_alternatives = self._validate_alternatives(alternatives, query)
-
-            # Build final result with original query first
             return self._build_expansion_result(query, valid_alternatives)
 
-        except Exception:
-            # Log error but don't fail the search
-            return [query]
-
-    async def _stream_llm_expand(self, context: Dict[str, Any]) -> None:  # noqa: C901
-        """Stream LLM-based expansions and publish deltas.
-
-        Emits events:
-            - expansion_start { model, strategy }
-            - expansion_delta { alternatives_snapshot: string[] }
-            - expansion_done { alternatives: string[] }
-        """
-        query = context["query"]
-        logger = context["logger"]
-
-        model = "gpt-5-nano"
-        emitter = context.get("emit")
-        if callable(emitter):
-            await emitter(
-                "expansion_start",
-                {"model": model, "strategy": "llm"},
-                op_name=self.name,
-            )
-
-        try:
-            from pydantic import BaseModel, Field
-
-            class Step(BaseModel):
-                text: str = Field(description="Concise reasoning step")
-
-            class ExpansionResult(BaseModel):
-                # IMPORTANT: steps first to stream early
-                steps: List[Step] = Field(default_factory=list)
-                alternatives: List[str] = Field(default_factory=list)
-
-            async with (
-                self.openai_client.beta.chat.completions.stream(  # type: ignore
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": self._get_expansion_system_prompt()},
-                        {
-                            "role": "user",
-                            "content": (
-                                self._get_expansion_user_prompt(query)
-                                + "\n\nStream reasoning as a list of 'steps' FIRST, "
-                                "then propose 'alternatives'."
-                            ),
-                        },
-                    ],
-                    response_format=ExpansionResult,
-                ) as stream
-            ):
-                snapshot_alts: List[str] = []
-                last_emitted_alts: List[str] = []
-                last_steps_len = 0
-
-                async for event in stream:  # type: ignore
-                    if getattr(event, "type", "") == "content.delta":
-                        parsed = getattr(event, "parsed", None)
-                        if parsed:
-                            # Normalize
-                            try:
-                                if isinstance(parsed, dict):
-                                    parsed = ExpansionResult.model_validate(parsed)
-                            except Exception:
-                                continue
-
-                            # Reasoning incremental streaming via steps FIRST
-                            try:
-                                if isinstance(parsed.steps, list):
-                                    for i in range(last_steps_len, len(parsed.steps)):
-                                        step = parsed.steps[i]
-                                        text = getattr(step, "text", None) or str(step)
-                                        if (
-                                            isinstance(text, str)
-                                            and text.strip()
-                                            and callable(emitter)
-                                        ):
-                                            await emitter(
-                                                "expansion_reason_delta",
-                                                {"text": text},
-                                                op_name=self.name,
-                                            )
-                                    last_steps_len = len(parsed.steps)
-                            except Exception:
-                                pass
-
-                            # Then alternatives snapshot (dedupe emissions)
-                            try:
-                                if parsed.alternatives:
-                                    snapshot_alts = list(dict.fromkeys(parsed.alternatives))
-                                    if (
-                                        callable(emitter)
-                                        and snapshot_alts
-                                        and snapshot_alts != last_emitted_alts
-                                    ):
-                                        await emitter(
-                                            "expansion_delta",
-                                            {"alternatives_snapshot": snapshot_alts},
-                                            op_name=self.name,
-                                        )
-                                        last_emitted_alts = snapshot_alts[:]
-                            except Exception:
-                                pass
-
-                # Final completion: always include original query first
-                final_alts = ([query] + snapshot_alts) if snapshot_alts else [query]
-                if len(final_alts) > self.max_expansions:
-                    final_alts = final_alts[: self.max_expansions]
-                context["expanded_queries"] = final_alts
-                if callable(emitter):
-                    await emitter("expansion_done", {"alternatives": final_alts}, op_name=self.name)
         except Exception as e:
-            logger.warning(f"[QueryExpansion] Streaming failed: {e}")
-            # Propagate to fail the search per policy
-            raise
-
-    async def _call_openai_for_expansion(self, query: str) -> list:
-        """Call OpenAI API to generate query alternatives.
-
-        Args:
-            query: The original search query
-
-        Returns:
-            List of alternative queries from OpenAI
-        """
-        system_message = self._get_expansion_system_prompt()
-        user_message = self._get_expansion_user_prompt(query)
-
-        try:
-            # Use structured outputs with the parse method
-            completion = await self.openai_client.beta.chat.completions.parse(
-                model="gpt-5-nano",
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_message},
-                ],
-                max_tokens=2000,
-                response_format=QueryExpansions,  # Use Pydantic model for structured output
-            )
-
-            # Extract parsed result
-            parsed_result = completion.choices[0].message.parsed
-            if parsed_result:
-                return parsed_result.alternatives
-
-            return []
-
-        except Exception:
-            return []
+            logger.debug(f"[QueryExpansion] Structured parse failed: {e}")
+            # On failure, fall back to original query only
+            return [query]
 
     def _get_expansion_system_prompt(self) -> str:
         """Get the system prompt for query expansion."""
         return (
-            "You are a search query expansion assistant focused on finding entities. "
-            "Generate up to N alternative queries that improve recall while "
-            "preserving the user's intent.\n\n"
-            "Core behaviors:\n"
-            "- Mix (A) literal/normalized expansions that spell out constraints, and "
-            "(B) semantic paraphrases.\n"
-            "- For FIND/LIST/SHOW queries, include at least one literal, "
-            "constraint-explicit alternative.\n"
+            "You are a search query expansion assistant. Your job is to create "
+            "high-quality alternative phrasings that improve recall for a hybrid "
+            "keyword + vector search, while preserving the user's intent.\n\n"
+            "Core behaviors (optimize recall without changing meaning):\n"
+            "- Produce diverse paraphrases that surface different vocabulary and "
+            "phrasing.\n"
+            "- Include at least one keyword-forward variant (good for BM25).\n"
+            "- Include a normalized/literal variant that spells out implicit "
+            "constraints (e.g., role/company/location/education if present).\n"
             "- Expand common abbreviations and acronyms to their full forms.\n"
-            "- Replace vague qualifiers with specific examples when helpful (e.g., "
-            "'major companies' → 'companies like Microsoft, Apple, Google, Amazon').\n"
-            "- Do not add constraints not implied by the query. Keep alternatives natural "
-            "and non-duplicative.\n\n"
-            "Streaming requirements:\n"
-            "- Output a 'steps' array of concise reasoning strings FIRST to explain how you "
-            "derive alternatives.\n"
-            "- Then fill 'alternatives' with diverse phrasings that maintain the original intent.\n"
-            "- Keep steps short and incremental so they can be streamed as they are produced."
+            "- Swap common synonyms and morphological variants "
+            "(manage→management, bill→billing).\n"
+            "- Recast questions as statements or list intents when appropriate "
+            "(e.g., 'find', 'list', 'show').\n"
+            "- Do not introduce constraints that are not implied by the query.\n"
+            "- Avoid duplicates and near-duplicates (punctuation-only or trivial "
+            "reorderings).\n\n"
         )
 
     def _get_expansion_user_prompt(self, query: str) -> str:
@@ -381,14 +253,15 @@ class QueryExpansion(SearchOperation):
         return (
             f"Original query: {query}\n\n"
             f"Instructions:\n"
-            f"- Generate up to {self.max_expansions} alternatives.\n"
-            f"- Include at least one literal/normalized alternative that spells out "
-            f"role/company/location/education constraints if present.\n"
+            f"- Generate up to {self.max_expansions} alternatives that preserve "
+            f"intent and increase recall.\n"
+            f"- Favor lexical diversity: use synonyms, category names, and "
+            f"different grammatical forms.\n"
+            f"- Include one keyword-heavy form and one normalized/literal form "
+            f"if applicable.\n"
             f"- Expand abbreviations (e.g., 'eng'→'engineering', 'SF'→'San Francisco').\n"
-            f"- When helpful, replace vague qualifiers with concrete categories (e.g., "
-            f"'good school'→'top universities such as Harvard, Yale, Stanford, MIT, "
-            f"Cambridge, Oxford').\n"
-            f"- Avoid duplicates and keep the wording retrieval-friendly."
+            f"- Avoid adding new constraints; avoid duplicates and trivial "
+            f"rephrasings.\n"
         )
 
     def _validate_alternatives(self, alternatives: list, original_query: str) -> List[str]:

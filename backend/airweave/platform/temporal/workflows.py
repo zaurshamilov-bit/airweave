@@ -2,51 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ActivityError, CancelledError
-
-from airweave.platform.utils.error_utils import get_error_message
 
 
 @workflow.defn
 class RunSourceConnectionWorkflow:
     """Workflow for running a source connection sync."""
-
-    async def _update_job_status(
-        self,
-        sync_job_id: str,
-        status: str,
-        ctx_dict: Dict[str, Any],
-        error_message: Optional[str] = None,
-    ) -> None:
-        """Helper method to update sync job status."""
-        from airweave.platform.temporal.activities import update_sync_job_status_activity
-
-        try:
-            await workflow.execute_activity(
-                update_sync_job_status_activity,
-                args=[
-                    sync_job_id,
-                    status,
-                    ctx_dict,
-                    error_message,
-                    workflow.now().replace(tzinfo=None).isoformat(),
-                ],
-                start_to_close_timeout=timedelta(seconds=30),
-                retry_policy=RetryPolicy(
-                    maximum_attempts=3,
-                    initial_interval=timedelta(seconds=1),
-                ),
-            )
-            workflow.logger.info(
-                f"Successfully updated sync job {sync_job_id} status to {status.upper()}"
-            )
-        except Exception as e:
-            workflow.logger.error(f"Failed to update sync job status: {e}")
 
     async def _create_sync_job_if_needed(
         self,
@@ -62,10 +28,6 @@ class RunSourceConnectionWorkflow:
         if sync_job_dict is None:
             sync_id = sync_dict.get("id")
             try:
-                workflow.logger.info(
-                    f"Creating new sync job for scheduled run of sync {sync_id} "
-                    f"(force_full_sync={force_full_sync})"
-                )
                 # For forced full sync (daily cleanup), use longer timeout to allow waiting
                 timeout = (
                     timedelta(hours=1, minutes=5) if force_full_sync else timedelta(seconds=30)
@@ -77,12 +39,8 @@ class RunSourceConnectionWorkflow:
                     start_to_close_timeout=timeout,
                     heartbeat_timeout=timedelta(minutes=1) if force_full_sync else None,
                     retry_policy=RetryPolicy(
-                        maximum_attempts=1,  # Don't retry if job already exists
-                        initial_interval=timedelta(seconds=1),
+                        maximum_attempts=1,  # NO RETRIES - fail fast
                     ),
-                )
-                workflow.logger.info(
-                    f"Created sync job {sync_job_dict.get('id')} for sync {sync_id}"
                 )
             except Exception as e:
                 # If we can't create a sync job (e.g., one is already running), skip this run
@@ -97,7 +55,7 @@ class RunSourceConnectionWorkflow:
         sync_job_dict: Optional[Dict[str, Any]],  # Made optional for scheduled runs
         sync_dag_dict: Dict[str, Any],
         collection_dict: Dict[str, Any],
-        source_connection_dict: Dict[str, Any],
+        connection_dict: Dict[str, Any],  # Connection schema, NOT SourceConnection
         ctx_dict: Dict[str, Any],
         access_token: Optional[str] = None,
         force_full_sync: bool = False,  # Force full sync with deletion
@@ -109,8 +67,8 @@ class RunSourceConnectionWorkflow:
             sync_job_dict: The sync job as dict (optional for scheduled runs)
             sync_dag_dict: The sync DAG as dict
             collection_dict: The collection as dict
-            source_connection_dict: The source connection as dict
-            ctx_dict: The authentication context as dict
+            connection_dict: The connection as dict (Connection schema, NOT SourceConnection)
+            ctx_dict: The API context as dict
             access_token: Optional access token
             force_full_sync: If True, forces a full sync with orphaned entity deletion
         """
@@ -123,11 +81,7 @@ class RunSourceConnectionWorkflow:
         if sync_job_dict is None:
             return  # Exit gracefully if we couldn't create a job
 
-        sync_job_id = sync_job_dict.get("id")
-        error_message = None
-
         try:
-            # Execute the sync activity
             await workflow.execute_activity(
                 run_sync_activity,
                 args=[
@@ -135,65 +89,45 @@ class RunSourceConnectionWorkflow:
                     sync_job_dict,
                     sync_dag_dict,
                     collection_dict,
-                    source_connection_dict,
+                    connection_dict,
                     ctx_dict,
                     access_token,
                     force_full_sync,
                 ],
                 start_to_close_timeout=timedelta(days=7),
-                heartbeat_timeout=timedelta(minutes=10),  # Fail if no heartbeat for 10 minutes
+                heartbeat_timeout=timedelta(
+                    seconds=30
+                ),  # quicker cancel delivery on next RPC heartbeat
+                cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
                 retry_policy=RetryPolicy(
-                    initial_interval=timedelta(seconds=1),
-                    maximum_interval=timedelta(minutes=5),
-                    maximum_attempts=1,
+                    maximum_attempts=1,  # NO RETRIES - fail fast
                 ),
             )
 
-        except CancelledError:
-            # Handle workflow cancellation (e.g., from kill command)
-            error_message = "Workflow was cancelled"
-            workflow.logger.error(f"Sync job {sync_job_id} was cancelled")
+        except asyncio.CancelledError as e:
+            # # only treat true cancellations specially
+            # if not is_cancelled_exception(e):
+            #     raise
 
-            # Update sync job status to CANCELLED
-            await self._update_job_status(sync_job_id, "cancelled", ctx_dict, error_message)
+            # ensure DB gets updated even though the workflow was cancelled
+            from airweave.platform.temporal.activities import mark_sync_job_cancelled_activity
 
-            # Re-raise the original error
-            raise
-
-        except ActivityError as e:
-            # Check if the cause is a CancelledError - handle as cancellation
-            if hasattr(e, "cause") and isinstance(e.cause, CancelledError):
-                error_message = "Workflow was cancelled"
-                workflow.logger.error(f"Sync job {sync_job_id} was cancelled (via ActivityError)")
-
-                # Update sync job status to CANCELLED
-                await self._update_job_status(sync_job_id, "cancelled", ctx_dict, error_message)
-
-                # Re-raise the original error
+            reason = f"{type(e).__name__}: {e}"
+            try:
+                await asyncio.shield(
+                    workflow.execute_activity(
+                        mark_sync_job_cancelled_activity,
+                        args=[
+                            str(sync_job_dict["id"]),
+                            ctx_dict,
+                            reason,
+                            workflow.now().replace(tzinfo=None).isoformat(),
+                        ],
+                        start_to_close_timeout=timedelta(seconds=30),
+                        # fire-and-forget semantics on the server side
+                        cancellation_type=workflow.ActivityCancellationType.ABANDON,
+                    )
+                )
+            finally:
+                # keep Workflow result as CANCELED
                 raise
-            else:
-                # Handle other ActivityErrors as failures
-                # Extract the real error message
-                if hasattr(e, "cause") and e.cause:
-                    error_message = get_error_message(e.cause)
-                else:
-                    error_message = get_error_message(e)
-
-                workflow.logger.error(f"Sync job {sync_job_id} failed: {error_message}")
-
-                # Update sync job with the real error
-                await self._update_job_status(sync_job_id, "failed", ctx_dict, error_message)
-
-                # Re-raise the original error
-                raise
-
-        except Exception as e:
-            # Handle any other errors (generic exceptions)
-            error_message = get_error_message(e)
-            workflow.logger.error(f"Sync job {sync_job_id} failed: {error_message}")
-
-            # Update sync job status to FAILED
-            await self._update_job_status(sync_job_id, "failed", ctx_dict, error_message)
-
-            # Re-raise the original error
-            raise

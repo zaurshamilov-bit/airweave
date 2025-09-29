@@ -3,8 +3,8 @@
 # Dictionary of endpoints to include in the SDK, structured by path and methods
 INCLUDED_ENDPOINTS = {
     # Sources
-    "/sources/list/": {"get": True},
-    "/sources/detail/{short_name}/": {"get": True},
+    "/sources/": {"get": True},
+    "/sources/{short_name}/": {"get": True},
     # Collections
     "/collections/": {"get": True, "post": True},
     "/collections/{readable_id}/": {"get": True, "put": True, "delete": True},

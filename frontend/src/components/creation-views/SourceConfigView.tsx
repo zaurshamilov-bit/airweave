@@ -75,6 +75,17 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
   const { authProviderConnections, fetchAuthProviderConnections } = useAuthProvidersStore();
 
+  // Sources that are temporarily blocked from using auth providers
+  const SOURCES_BLOCKED_FROM_AUTH_PROVIDERS = [
+    "confluence",
+    "jira",
+    "bitbucket",
+    "github",
+    "ctti",
+    "monday",
+    "postgresql"
+  ];
+
   const [isCreating, setIsCreating] = useState(false);
   const [sourceDetails, setSourceDetails] = useState<SourceDetails | null>(null);
   const [authFields, setAuthFields] = useState<Record<string, string>>({});
@@ -163,8 +174,10 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       methods.push('oauth2');
     }
 
-    // Add external provider if any are connected and source supports it
-    if (authProviderConnections.length > 0 && sourceDetails.auth_methods.includes('auth_provider')) {
+    // Add external provider if any are connected and source supports it and is not blocked
+    if (authProviderConnections.length > 0 &&
+      sourceDetails.auth_methods.includes('auth_provider') &&
+      !SOURCES_BLOCKED_FROM_AUTH_PROVIDERS.includes(sourceDetails.short_name)) {
       methods.push('external_provider');
     }
 
@@ -182,7 +195,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       if (!selectedSource) return;
 
       try {
-        const response = await apiClient.get(`/sources/detail/${selectedSource}`);
+        const response = await apiClient.get(`/sources/${selectedSource}`);
         if (response.ok) {
           const source = await response.json();
           setSourceDetails(source);

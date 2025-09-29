@@ -1,6 +1,6 @@
 import { SyncProgressUpdate } from '@/stores/syncStateStore';
 
-export type DerivedSyncStatus = 'completed' | 'failed' | 'cancelled' | 'in_progress' | 'pending';
+export type DerivedSyncStatus = 'completed' | 'failed' | 'cancelled' | 'in_progress' | 'cancelling' | 'pending';
 
 /**
  * Derive the sync status from live progress and database status
@@ -29,8 +29,14 @@ export function deriveSyncStatus(
         case 'failed':
         case 'cancelled':
         case 'in_progress':
-        case 'pending':
             return status as DerivedSyncStatus;
+        case 'running':
+            return 'in_progress';
+        case 'cancelling':
+            return 'cancelling';
+        case 'created':
+        case 'pending':
+            return 'pending';
         default:
             return 'pending';
     }
@@ -47,6 +53,7 @@ export function getSyncStatusColorClass(status: DerivedSyncStatus): string {
         case 'cancelled':
             return 'bg-red-500';
         case 'in_progress':
+        case 'cancelling':
             return 'bg-blue-500 animate-pulse';
         case 'pending':
             return 'bg-amber-500';
@@ -62,6 +69,8 @@ export function getSyncStatusDisplayText(status: DerivedSyncStatus): string {
     switch (status) {
         case 'in_progress':
             return 'Running';
+        case 'cancelling':
+            return 'Cancelling';
         case 'cancelled':
             return 'Cancelled';
         case 'completed':

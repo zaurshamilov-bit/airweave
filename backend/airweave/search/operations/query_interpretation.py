@@ -44,10 +44,10 @@ class QueryInterpretation(SearchOperation):
 
     @property
     def optional(self) -> bool:
-        """This operation is optional - search continues if it fails."""
-        return True
+        """Fail-fast: interpretation is required when enabled in config."""
+        return False
 
-    async def execute(self, context: Dict[str, Any]) -> None:
+    async def execute(self, context: Dict[str, Any]) -> None:  # noqa: C901
         """Extract filters from the query using LLM.
 
         Reads from context:
@@ -67,20 +67,27 @@ class QueryInterpretation(SearchOperation):
         db = context.get("db")
         collection_id = context["config"].collection_id
 
-        if not openai_api_key:
-            logger.debug(f"[{self.name}] No OpenAI API key, skipping filter extraction")
-            return
+        # Emit basic start event in streaming mode (no deltas)
+        request_id = context.get("request_id")
+        if request_id:
+            emitter = context.get("emit")
+            if callable(emitter):
+                try:
+                    await emitter("interpretation_start", {"model": self.model}, op_name=self.name)
+                except Exception:
+                    pass
 
-        logger.info(f"[{self.name}] Analyzing query for filters: {query[:100]}...")
+        if not openai_api_key:
+            # If interpretation op is present, absence of key is a configuration error
+            raise RuntimeError("QueryInterpretation requires OPENAI_API_KEY but none is configured")
+
+        logger.debug(f"[{self.name}] Analyzing query for filters: {query[:100]}...")
         expanded_queries = context.get("expanded_queries")
         if expanded_queries and isinstance(expanded_queries, list):
-            try:
-                count = len(expanded_queries)
-                logger.info(
-                    f"[{self.name}] Using {count} phrasings for interpretation (orig + expansions)"
-                )
-            except Exception:
-                pass
+            count = len(expanded_queries)
+            logger.debug(
+                f"[{self.name}] Using {count} phrasings for interpretation (orig + expansions)"
+            )
 
         # Discover available fields from the collection's entities
         available_fields = await self._discover_available_fields(
@@ -92,32 +99,18 @@ class QueryInterpretation(SearchOperation):
             filter_models = self._create_filter_models()
             ExtractedFilters = filter_models["ExtractedFilters"]
 
-            # Create OpenAI client and get extraction (streaming if request_id present)
-            request_id = context.get("request_id")
-            if request_id:
-                await self._stream_llm_extraction(
-                    openai_api_key,
-                    query,
-                    expanded_queries,
-                    available_fields,
-                    ExtractedFilters,
-                    logger,
-                    request_id,
-                    context,
-                )
-                return
-            else:
-                extracted = await self._get_llm_extraction(
-                    openai_api_key,
-                    query,
-                    expanded_queries,
-                    available_fields,
-                    ExtractedFilters,
-                    logger,
-                )
+            extracted = await self._get_llm_extraction(
+                openai_api_key,
+                query,
+                expanded_queries,
+                available_fields,
+                ExtractedFilters,
+                logger,
+            )
 
             if not extracted:
-                return
+                # Treat as hard failure: Responses API returned no structured object
+                raise RuntimeError("Interpretation produced no structured output")
 
             # Check confidence threshold
             if not self._check_confidence(extracted, logger):
@@ -143,169 +136,46 @@ class QueryInterpretation(SearchOperation):
                 extracted, available_fields, logger
             )
 
+            if not validated_conditions:
+                # Nothing actionable to apply
+                if request_id:
+                    emitter = context.get("emit")
+                    if callable(emitter):
+                        try:
+                            await emitter(
+                                "interpretation_skipped",
+                                {
+                                    "reason": "no_valid_filters",
+                                    "confidence": getattr(extracted, "confidence", None),
+                                    "threshold": self.confidence_threshold,
+                                },
+                                op_name=self.name,
+                            )
+                        except Exception:
+                            pass
+                return
+
             # Apply filters if valid
             self._apply_filters(validated_conditions, extracted, context, logger)
+            # Emit filter_applied at the end in streaming mode
+            if request_id:
+                emitter = context.get("emit")
+                if callable(emitter):
+                    try:
+                        await emitter(
+                            "filter_applied", {"filter": context.get("filter")}, op_name=self.name
+                        )
+                    except Exception:
+                        pass
 
         except Exception as e:
             # Fail-fast policy: interpretation errors abort the search
             logger.error(f"[{self.name}] Failed: {e}")
             raise
 
-    async def _stream_llm_extraction(  # noqa: C901 - function complexity acceptable given streaming flow
-        self,
-        openai_api_key: str,
-        query: str,
-        expanded_queries: Any,
-        available_fields: Dict,
-        ExtractedFilters: Any,
-        logger: Any,
-        request_id: str,
-        context: Dict,
-    ) -> None:
-        """Stream LLM extraction and publish deltas + final application."""
-        from openai import AsyncOpenAI
-
-        emitter = context.get("emit")
-        if callable(emitter):
-            await emitter("interpretation_start", {"model": self.model}, op_name=self.name)
-
-        client = AsyncOpenAI(api_key=openai_api_key)
-        try:
-            async with client.beta.chat.completions.stream(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": self._build_system_prompt(available_fields)},
-                    {
-                        "role": "user",
-                        "content": self._build_user_prompt_for_extraction(query, expanded_queries),
-                    },
-                ],
-                response_format=ExtractedFilters,
-            ) as stream:
-                # Inform clients which strategy/model is used
-                if callable(emitter):
-                    try:
-                        await emitter(
-                            "interpretation_start",
-                            {"model": self.model, "strategy": "llm"},
-                            op_name=self.name,
-                        )
-                    except Exception:
-                        pass
-                snapshot = None
-                last_snapshot_dump: Optional[Dict[str, Any]] = None
-                # Track incremental emission for steps-based reasoning (or legacy reasoning list)
-                last_steps_len: int = 0
-                last_reason_len: int = 0
-                async for event in stream:
-                    if getattr(event, "type", "") == "content.delta":
-                        parsed = getattr(event, "parsed", None)
-                        if parsed:
-                            # Normalize dict to Pydantic model
-                            try:
-                                if isinstance(parsed, dict):
-                                    parsed = ExtractedFilters.model_validate(parsed)
-                            except Exception:
-                                continue
-
-                            snapshot = parsed
-
-                            # Reasoning token streaming (list-based incremental) FIRST
-                            try:
-                                steps_list = getattr(parsed, "steps", None)
-                                if isinstance(steps_list, list):
-                                    for i in range(last_steps_len, len(steps_list)):
-                                        step_obj = steps_list[i]
-
-                                        step_text = (
-                                            getattr(step_obj, "text", None)
-                                            or getattr(step_obj, "explanation", None)
-                                            or (str(step_obj) if step_obj is not None else None)
-                                        )
-                                        if (
-                                            isinstance(step_text, str)
-                                            and step_text.strip()
-                                            and callable(emitter)
-                                        ):
-                                            await emitter(
-                                                "interpretation_reason_delta",
-                                                {"text": step_text},
-                                                op_name=self.name,
-                                            )
-                                    last_steps_len = len(steps_list)
-                                else:
-                                    reasoning_list = getattr(parsed, "reasoning", None)
-                                    if isinstance(reasoning_list, list):
-                                        for i in range(last_reason_len, len(reasoning_list)):
-                                            item = reasoning_list[i]
-                                            if (
-                                                isinstance(item, str)
-                                                and item.strip()
-                                                and callable(emitter)
-                                            ):
-                                                await emitter(
-                                                    "interpretation_reason_delta",
-                                                    {"text": item},
-                                                    op_name=self.name,
-                                                )
-                                        last_reason_len = len(reasoning_list)
-                            except Exception:
-                                pass
-
-                            # Then structural snapshot without steps/reasoning
-                            try:
-                                current_dump = parsed.model_dump()
-                            except Exception:
-                                current_dump = None
-                            # Remove reasoning
-                            if isinstance(current_dump, dict):
-                                current_dump = {**current_dump}
-                                current_dump.pop("steps", None)
-                                current_dump.pop("reasoning", None)
-                            if (
-                                callable(emitter)
-                                and current_dump is not None
-                                and current_dump != last_snapshot_dump
-                            ):
-                                try:
-                                    await emitter(
-                                        "interpretation_delta",
-                                        {"parsed_snapshot": current_dump},
-                                        op_name=self.name,
-                                    )
-                                    last_snapshot_dump = current_dump
-                                except Exception:
-                                    pass
-                # Done; apply if confident
-                if snapshot and self._check_confidence(snapshot, logger):
-                    validated_conditions = self._process_extracted_filters(
-                        snapshot, available_fields, logger
-                    )
-                    self._apply_filters(validated_conditions, snapshot, context, logger)
-                    if callable(emitter):
-                        try:
-                            await emitter(
-                                "filter_applied",
-                                {"filter": context.get("filter")},
-                                op_name=self.name,
-                            )
-                        except Exception:
-                            pass
-        except Exception as e:
-            logger.warning(f"[{self.name}] Streaming extraction failed: {e}")
-            # Propagate to fail the search per policy
-            raise
-
     def _create_filter_models(self) -> Dict[str, Any]:
-        """Create Pydantic models for filter extraction."""
+        """Create Pydantic models for filter extraction (non-streaming)."""
         from pydantic import BaseModel, Field
-
-        class Step(BaseModel):
-            """Single reasoning step for streaming."""
-
-            text: str = Field(description="Concise reasoning step text")
-
-            model_config = {"extra": "forbid"}
 
         class MatchValue(BaseModel):
             value: str | int | float | bool
@@ -342,13 +212,8 @@ class QueryInterpretation(SearchOperation):
             model_config = {"extra": "forbid"}
 
         class ExtractedFilters(BaseModel):
-            """Filters extracted from natural language query."""
+            """Filters extracted from natural language query (non-streaming)."""
 
-            # IMPORTANT: Put steps first so the model streams them before other fields
-            steps: List[Step] = Field(
-                default_factory=list,
-                description="Incremental reasoning steps to stream early",
-            )
             filters: List[FilterCondition] = Field(
                 default_factory=list, description="List of Qdrant filter conditions"
             )
@@ -362,7 +227,6 @@ class QueryInterpretation(SearchOperation):
             model_config = {"extra": "forbid"}
 
         return {
-            "Step": Step,
             "MatchValue": MatchValue,
             "MatchAny": MatchAny,
             "RangeObject": RangeObject,
@@ -387,53 +251,47 @@ class QueryInterpretation(SearchOperation):
 
         # Create prompt with available fields and explicit source list
         system_prompt = self._build_system_prompt(available_fields)
-        if logger.isEnabledFor(10):  # DEBUG
-            logger.debug(f"[{self.name}] Prepared system prompt (chars={len(system_prompt)})")
         user_prompt = self._build_user_prompt_for_extraction(query, expanded_queries)
 
-        # Get extraction from LLM
-        response = await client.beta.chat.completions.parse(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format=ExtractedFilters,
-        )
+        try:
+            resp = await client.responses.parse(
+                model=self.model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                text_format=ExtractedFilters,
+            )
+            extracted = getattr(resp, "output_parsed", None)
+            if not extracted:
+                logger.debug(f"[{self.name}] Responses.parse returned no parsed object")
+                return None
 
-        if response.choices[0].message.parsed:
-            extracted = response.choices[0].message.parsed
-            if logger.isEnabledFor(10):
-                try:
-                    logger.debug(
-                        f"[{self.name}] Raw structured extraction: {extracted.model_dump()}"
-                    )
-                except Exception:
-                    pass
-            # Log a concise summary without relying on optional fields
+            logger.debug(f"\n\n[{self.name}] Raw structured extraction: {extracted}\n\n")
+
+            # Concise summary for logs
             try:
-                first_step = None
-                if hasattr(extracted, "steps") and extracted.steps:
-                    # Pydantic model with Step objects having 'text'
-                    step_obj = extracted.steps[0]
-                    first_step = getattr(step_obj, "text", None) or str(step_obj)
-                summary_hint = first_step or getattr(extracted, "refined_query", "")
+                summary_hint = getattr(extracted, "refined_query", "")
                 if isinstance(summary_hint, str):
                     summary_hint = summary_hint[:100]
             except Exception:
                 summary_hint = ""
 
-            logger.info(
+            logger.debug(
                 f"[{self.name}] Extracted filters with confidence "
                 f"{extracted.confidence:.2f}: {summary_hint}"
             )
+
             return extracted
-        return None
+        except Exception as e:
+            # Hard failure of interpretation step – raise to fail the operation
+            logger.error(f"[{self.name}] Responses.parse failed: {e}")
+            raise
 
     def _check_confidence(self, extracted: Any, logger: Any) -> bool:
         """Check if extraction confidence meets threshold."""
         if extracted.confidence < self.confidence_threshold:
-            logger.info(
+            logger.debug(
                 f"[{self.name}] Confidence {extracted.confidence:.2f} below threshold "
                 f"{self.confidence_threshold}, not applying filters"
             )
@@ -473,8 +331,7 @@ class QueryInterpretation(SearchOperation):
                     pass
             raw_conditions.append(cond_dict)
 
-        if logger.isEnabledFor(10):
-            logger.debug(f"[{self.name}] Raw extracted conditions: {raw_conditions}")
+        logger.debug(f"[{self.name}] Raw extracted conditions: {raw_conditions}")
 
         return raw_conditions
 
@@ -510,8 +367,7 @@ class QueryInterpretation(SearchOperation):
 
             validated_conditions.append(fc)
 
-        if logger.isEnabledFor(10):
-            logger.debug(f"[{self.name}] Validated conditions: {validated_conditions}")
+        logger.debug(f"[{self.name}] Validated conditions: {validated_conditions}")
 
         return validated_conditions
 
@@ -598,14 +454,13 @@ class QueryInterpretation(SearchOperation):
         if qdrant_filter:
             context["filter"] = qdrant_filter
             context["query"] = extracted.refined_query
-            logger.info(
+            logger.debug(
                 f"[{self.name}] Applied {len(extracted.filters)} filter conditions, "
                 f"refined query: '{extracted.refined_query[:50]}...'"
             )
-            if logger.isEnabledFor(10):
-                logger.debug(f"[{self.name}] Final Qdrant filter: {qdrant_filter}")
+            logger.debug(f"[{self.name}] Final Qdrant filter: {qdrant_filter}")
         else:
-            logger.info(f"[{self.name}] No filters to apply despite extraction")
+            logger.debug(f"[{self.name}] No filters to apply despite extraction")
 
     async def _discover_available_fields(
         self, db: Any, collection_id: str, logger: Any, ctx: Any | None = None
@@ -624,32 +479,29 @@ class QueryInterpretation(SearchOperation):
         # Initialize with common fields
         available_fields = self._get_common_fields()
 
+        # Get source connections for this collection (raises on service/DB error)
+        source_connections = await self._get_source_connections(db, collection_id, logger, ctx)
+
+        # Process each source connection
+        await self._process_source_connections(db, source_connections, available_fields, logger)
+
+        # Augment with PostgreSQL field catalog if present
         try:
-            # Get source connections for this collection
-            source_connections = await self._get_source_connections(db, collection_id, logger, ctx)
-
-            # Process each source connection
-            await self._process_source_connections(db, source_connections, available_fields, logger)
-
-            # Augment with PostgreSQL field catalog if present
-            try:
-                await self._augment_with_pg_catalog(
-                    db=db,
-                    source_connections=source_connections,
-                    available_fields=available_fields,
-                    logger=logger,
-                    ctx=ctx,
-                )
-            except Exception as e:
-                logger.debug(f"[{self.name}] Failed to augment with PG catalog: {e}")
-
-            logger.debug(
-                f"[{self.name}] Discovered fields for {len(available_fields)} sources: "
-                f"{available_fields}"
+            await self._augment_with_pg_catalog(
+                db=db,
+                source_connections=source_connections,
+                available_fields=available_fields,
+                logger=logger,
+                ctx=ctx,
             )
-
         except Exception as e:
-            logger.warning(f"[{self.name}] Could not discover fields: {e}")
+            # Non-fatal: PG catalog is optional enrichment
+            logger.debug(f"[{self.name}] Failed to augment with PG catalog: {e}")
+
+        logger.debug(
+            f"[{self.name}] Discovered fields for {len(available_fields)} sources: "
+            f"{available_fields}"
+        )
 
         return available_fields
 
@@ -790,14 +642,13 @@ class QueryInterpretation(SearchOperation):
         source_connections = []
         if ctx is not None:
             try:
-                # First try with the given identifier as readable_id
-                source_connections = (
-                    await source_connection_service.get_source_connections_by_collection(
-                        db=db, collection=collection_id, ctx=ctx
-                    )
+                # Prefer service.list as it is widely available and supports readable_collection_id
+                source_connections = await source_connection_service.list(
+                    db=db, ctx=ctx, readable_collection_id=collection_id, limit=1000
                 )
             except Exception as e:
                 logger.debug(f"[{self.name}] First attempt to list source connections failed: {e}")
+                raise
 
             # If still empty, try resolving readable_id from UUID
             if not source_connections:
@@ -816,8 +667,8 @@ class QueryInterpretation(SearchOperation):
 
             collection_obj = await crud.collection.get(db, id=UUID(collection_id), ctx=ctx)
             if collection_obj and hasattr(collection_obj, "readable_id"):
-                source_connections = await service.get_source_connections_by_collection(
-                    db=db, collection=collection_obj.readable_id, ctx=ctx
+                source_connections = await service.list(
+                    db=db, ctx=ctx, readable_collection_id=collection_obj.readable_id, limit=1000
                 )
                 logger.debug(
                     f"[{self.name}] Resolved collection "
@@ -1064,13 +915,6 @@ class QueryInterpretation(SearchOperation):
             "IMPORTANT: Only suggest filters for fields that actually exist in the available "
             "fields list above. Remember that the system will automatically handle the nested "
             "path mapping for fields like source_name, sync_id, entity_type, etc.\n\n"
-            "Streaming requirements:\n"
-            "- Use a 'steps' array of concise strings describing your reasoning, "
-            "and OUTPUT IT FIRST.\n"
-            "- Continuously append to 'steps' so clients can stream intermediate reasoning.\n"
-            "- Only after emitting one or more steps, proceed to fill 'filters', then 'confidence',"
-            "then 'refined_query'.\n"
-            "- Keep steps concise and do not repeat the full context in every step."
         )
 
     def _map_to_qdrant_path(self, key: str) -> str:

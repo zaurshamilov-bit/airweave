@@ -37,17 +37,17 @@ class SearchServiceV2:
         # We import the operation classes here (runtime, not at type-check time) and then
         # rebuild the model so that string forward refs like "QueryInterpretation" resolve.
         try:
-            from airweave.search.operations.completion import CompletionGeneration  # noqa: F401
+            from airweave.search.operations import (
+                CompletionGeneration,  # noqa: F401
+                LLMReranking,  # noqa: F401
+                QueryExpansion,  # noqa: F401
+                QueryInterpretation,  # noqa: F401
+            )
             from airweave.search.operations.embedding import Embedding  # noqa: F401
             from airweave.search.operations.qdrant_filter import (
                 QdrantFilterOperation,  # noqa: F401
             )
-            from airweave.search.operations.query_expansion import QueryExpansion  # noqa: F401
-            from airweave.search.operations.query_interpretation import (
-                QueryInterpretation,  # noqa: F401
-            )
             from airweave.search.operations.recency_bias import RecencyBias  # noqa: F401
-            from airweave.search.operations.reranking import LLMReranking  # noqa: F401
             from airweave.search.operations.vector_search import VectorSearch  # noqa: F401
 
             # Rebuild the model to resolve forward references now that classes are imported
@@ -89,7 +89,7 @@ class SearchServiceV2:
         """
         start_time = time.monotonic()
 
-        ctx.logger.info(
+        ctx.logger.debug(
             f"[SearchServiceV2] Starting search for collection '{readable_id}', "
             f"query: '{search_request.query[:50]}...'"
         )
@@ -113,7 +113,7 @@ class SearchServiceV2:
                 config.completion is not None,
             ]
         )
-        ctx.logger.info(
+        ctx.logger.debug(
             f"[SearchServiceV2] Executing search pipeline with {enabled_count} operations"
         )
         context = await self.executor.execute(config, db, ctx, request_id=request_id)
@@ -124,7 +124,7 @@ class SearchServiceV2:
         # Calculate search duration
         duration_ms = (time.monotonic() - start_time) * 1000
 
-        ctx.logger.info(
+        ctx.logger.debug(
             f"[SearchServiceV2] Search completed with status: {response.status}, "
             f"results: {len(response.results)}, duration: {duration_ms:.2f}ms"
         )

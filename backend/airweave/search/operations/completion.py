@@ -9,73 +9,50 @@ from typing import Any, Dict, List, Optional
 from airweave.search.operations.base import SearchOperation
 
 # Default prompt for completion generation
-CONTEXT_PROMPT = """You are an AI assistant that synthesizes an accurate, helpful answer from
-retrieved context. Your job is to:
-1) Read the provided context snippets
-2) Weigh their relevance using the provided similarity Score (higher = more relevant)
-3) Compose a clear, well-structured answer that cites only the sources you actually used
+CONTEXT_PROMPT = """You are Airweave's search answering assistant.
 
-Important retrieval note:
-- The context is produced by a hybrid keyword + vector (semantic) search.
-- High similarity means "related", but it does NOT guarantee that an item satisfies
-  the user's constraints. You must verify constraints explicitly using evidence in
-  the snippet's fields/content.
+Your job:
+1) Answer the user's question directly using ONLY the provided context snippets
+2) Prefer concise, well-structured answers; no meta commentary
+3) Cite sources inline using [[entity_id]] immediately after each claim derived from a snippet
 
-When the user asks to FIND/LIST/SHOW entities with constraints:
-- Recognize find/list intent. Prefer list-mode when the query includes terms like
-  "find", "list", "show", "who are", "which people", or specifies role/company/location
-  constraints.
-- If the intent is ambiguous but the query specifies entity attributes (role, company, location,
-  skills, etc.), default to list-mode and apply strict constraint checking.
-- Return as many matching items as possible from the provided context; do not summarize to a few.
-- Apply strict, conservative constraint checking (AND semantics for all constraints):
-  - Accept an item only if evidence for each constraint is explicit and unambiguous in the snippet
-    (e.g., role/title, employer type, and location are clearly stated).
-  - Exclude false positives and loose associations.
-  - If evidence is missing or ambiguous for any constraint, exclude the item rather than guessing.
-- Output format for such queries:
-  - Bullet list with one line per matching item.
-  - Include a minimal identifying label (e.g., name/title) and a short justification citing the
-    decisive evidence (role/company/location, etc.). Add an inline source reference [[entity_id]].
-  - Do not cap the number of items; list all matches present in the provided context.
-  - Start with a line like: "Matches found: N" where N is the number of items you list.
+Retrieval notes:
+- Context comes from hybrid keyword + vector (semantic) search.
+- Higher similarity Score means "more related", but you must verify constraints using explicit
+  evidence in the snippet fields/content.
+- Do not rely on outside knowledge.
 
-For general explanatory/text questions (summaries, how-tos, overviews):
-- Synthesize a concise, direct answer using the most relevant snippets.
+Default behavior (QA-first):
+- Treat the query as a question to answer. Synthesize the best answer from relevant snippets.
+- If only part of the answer is present, provide a partial answer and clearly note missing pieces.
+- If snippets disagree, prefer higher-Score evidence and note conflicts briefly.
 
-IMPORTANT: When you use information from the context, you MUST reference the source using
-the format [[entity_id]] immediately after the information. These references will be rendered
-as clickable links in the interface. Only reference sources you actually used in your answer.
-If you're not sure or didn't use a source, don't reference it.
+When the user explicitly asks to FIND/LIST/SHOW items with constraints:
+- Switch to list mode.
+- Use AND semantics across constraints when evidence is explicit.
+- If an item is likely relevant but missing some constraints, include it as "Partial:" and name the
+  missing/uncertain fields.
+- Output:
+  - Start with "Matches found: N (Partial: M)"
+  - One bullet per item labeled "Match:" or "Partial:", minimal identifier + brief justification
+    + [[entity_id]]
 
-DO NOT include "Answer" or any similar header at the beginning of your response. Start directly
-with the content of your answer.
+Citations:
+- Add [[entity_id]] immediately after each sentence or clause that uses information from a snippet.
+- Only cite sources you actually used.
 
-Always format your responses in proper markdown:
-- For tables, use proper markdown table syntax:
-  | Column 1 | Column 2 |
-  |----------|----------|
-  | Value 1  | Value 2  |
-- Use headers sparingly for complex information (## for sections, ### for subsections)
-- Format code with ```language blocks
-- Use **bold** for emphasis and *italic* for subtle emphasis
-- Use bullet points (- or •) or numbered lists (1. 2. 3.) for lists
-- Source references using [[entity_id]] format inline with the text
+Formatting:
+- Start directly with the answer (no headers like "Answer:").
+- Use proper markdown: short paragraphs, bullet lists or tables when helpful; code in fenced blocks.
+
+Refusal policy:
+- If at least some snippets are relevant, answer with what is known and note gaps.
+- Only reply with 'I don't have enough information to answer that question based on the available
+  data.' when NONE of the snippets contain relevant facts for the request.
 
 Here's the context with entity IDs:
 {context}
-
-Remember to:
-1. Start your response directly with the answer, no introductory headers
-2. Be concise and direct
-3. Use proper markdown table syntax when presenting tabular data
-4. Include source references [[entity_id]] inline where you use the information
-5. Prefer higher-Score results when sources conflict
-6. If listing sources at the end, use a "Sources:" section with bullet points
-
-If the provided context doesn't contain information to answer the query directly,
-respond with 'I don't have enough information to answer that question based on the
-available data.'"""
+"""
 
 
 class CompletionGeneration(SearchOperation):
@@ -143,11 +120,11 @@ class CompletionGeneration(SearchOperation):
         logger = context["logger"]
         openai_api_key = context.get("openai_api_key")
 
-        logger.info(f"[CompletionGeneration] Started at {time.time() - start_time:.2f}s")
+        logger.debug(f"[CompletionGeneration] Started at {time.time() - start_time:.2f}s")
 
         if not results:
             context["completion"] = "No results found for your query."
-            logger.info("[CompletionGeneration] No results to generate completion from")
+            logger.debug("[CompletionGeneration] No results to generate completion from")
             return
 
         if not openai_api_key:
@@ -161,7 +138,7 @@ class CompletionGeneration(SearchOperation):
             config.completion_model if hasattr(config, "completion_model") else self.default_model
         )
 
-        logger.info(
+        logger.debug(
             f"[CompletionGeneration] Generating completion from {len(results_for_context)} results "
             f"using model {model}"
         )
@@ -170,7 +147,7 @@ class CompletionGeneration(SearchOperation):
             # Initialize OpenAI client
             client_init_time = time.time()
             client = AsyncOpenAI(api_key=openai_api_key)
-            logger.info(
+            logger.debug(
                 f"[CompletionGeneration] Client initialized in "
                 f"{(time.time() - client_init_time) * 1000:.2f}ms"
             )
@@ -180,7 +157,7 @@ class CompletionGeneration(SearchOperation):
             formatted_context = self._format_results(results_for_context)
             format_time = (time.time() - format_start) * 1000
 
-            logger.info(
+            logger.debug(
                 f"[CompletionGeneration] Formatted {len(results_for_context)} results "
                 f"in {format_time:.2f}ms. "
                 f"Context length: {len(formatted_context)} chars"
@@ -195,12 +172,12 @@ class CompletionGeneration(SearchOperation):
             # Calculate approximate token count (rough estimate)
             total_chars = len(formatted_context) + len(CONTEXT_PROMPT) + len(query)
             estimated_tokens = total_chars / 4  # Rough estimate: 1 token ≈ 4 chars
-            logger.info(f"[CompletionGeneration] Estimated input tokens: ~{estimated_tokens:.0f}")
+            logger.debug(f"[CompletionGeneration] Estimated input tokens: ~{estimated_tokens:.0f}")
 
             # Streaming or non-streaming completion
             request_id: Optional[str] = context.get("request_id")
             api_start = time.time()
-            logger.info(f"[CompletionGeneration] Calling OpenAI API with model {model}...")
+            logger.debug(f"[CompletionGeneration] Calling OpenAI API with model {model}...")
 
             if request_id:
                 emitter = context.get("emit")
@@ -239,13 +216,13 @@ class CompletionGeneration(SearchOperation):
                 if callable(emitter):
                     await emitter("completion_done", {"text": final_text}, op_name=self.name)
                 api_time = (time.time() - api_start) * 1000
-                logger.info(
+                logger.debug(
                     f"[CompletionGeneration] OpenAI streaming completed in {api_time:.2f}ms"
                 )
             else:
                 # Use Chat Completions (same pattern as llm_judge) for non-streaming
                 try:
-                    logger.info(
+                    logger.debug(
                         f"[CompletionGeneration] input: {model} {messages} {self.max_tokens}"
                     )
                     chat_response = await client.chat.completions.create(
@@ -255,7 +232,7 @@ class CompletionGeneration(SearchOperation):
                     )
 
                     api_time = (time.time() - api_start) * 1000
-                    logger.info(
+                    logger.debug(
                         f"[CompletionGeneration] Chat API call completed in {api_time:.2f}ms"
                     )
 
@@ -270,7 +247,7 @@ class CompletionGeneration(SearchOperation):
                     if text and isinstance(text, str) and text.strip():
                         context["completion"] = text
                         total_time = (time.time() - start_time) * 1000
-                        logger.info(
+                        logger.debug(
                             f"[CompletionGeneration] Successfully generated completion. "
                             f"Total time: {total_time:.2f}ms (API: {api_time:.2f}ms, "
                             f"formatting: {format_time:.2f}ms)"

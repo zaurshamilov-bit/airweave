@@ -41,19 +41,19 @@ class DropboxSource(BaseSource):
 
     @classmethod
     async def create(
-        cls, credentials: str, config: Optional[Dict[str, Any]] = None
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
     ) -> "DropboxSource":
         """Create a new Dropbox source with credentials and config.
 
         Args:
-            credentials: The OAuth access token for Dropbox API access
+            access_token: The OAuth access token for Dropbox API access
             config: Optional configuration parameters, like exclude_path
 
         Returns:
             A configured DropboxSource instance
         """
         instance = cls()
-        instance.access_token = credentials
+        instance.access_token = access_token
 
         # Store config values as instance attributes
         if config:

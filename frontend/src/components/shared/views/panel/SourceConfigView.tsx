@@ -61,7 +61,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ context }) =
         const fetchSourceDetails = async () => {
             setLoading(true);
             try {
-                const response = await apiClient.get(`/sources/detail/${sourceShortName}`);
+                const response = await apiClient.get(`/sources/${sourceShortName}`);
                 if (response.ok) {
                     const data = await response.json();
                     setSourceDetails(data);

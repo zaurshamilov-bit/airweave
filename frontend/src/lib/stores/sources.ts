@@ -62,7 +62,7 @@ export const useSourcesStore = create<SourcesState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const response = await apiClient.get('/sources/list');
+      const response = await apiClient.get('/sources/');
 
       if (response.ok) {
         const data = await response.json();
@@ -113,7 +113,7 @@ export const useSourcesStore = create<SourcesState>((set, get) => ({
     }));
 
     try {
-      const response = await apiClient.get(`/sources/detail/${shortName}`);
+      const response = await apiClient.get(`/sources/${shortName}`);
 
       if (response.ok) {
         const data = await response.json();

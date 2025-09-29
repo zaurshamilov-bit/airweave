@@ -18,82 +18,7 @@ router = TrailingSlashRouter()
 
 
 @router.get(
-    "/detail/{short_name}",
-    response_model=schemas.Source,
-    responses=create_single_source_response(
-        "github", "Source details with authentication and configuration schemas"
-    ),
-)
-async def read(
-    *,
-    db: AsyncSession = Depends(deps.get_db),
-    short_name: str = Path(
-        ...,
-        description="Technical identifier of the source type (e.g., 'github', 'stripe', 'slack')",
-    ),
-    ctx: ApiContext = Depends(deps.get_context),
-) -> schemas.Source:
-    """Get detailed information about a specific data source connector."""
-    try:
-        source = await crud.source.get_by_short_name(db, short_name)
-        if not source:
-            raise HTTPException(status_code=404, detail=f"Source not found: {short_name}")
-
-        # Config class is always required
-        if not source.config_class:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Source {short_name} does not have a configuration class",
-            )
-
-        # Auth fields - only for sources with auth_config_class (DIRECT auth)
-        auth_fields = Fields(fields=[])
-        if source.auth_config_class:
-            try:
-                auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
-                auth_fields = Fields.from_config_class(auth_config_class)
-            except Exception as e:
-                ctx.logger.error(f"Failed to get auth config for {short_name}: {str(e)}")
-                raise HTTPException(
-                    status_code=500, detail=f"Invalid auth configuration for source {short_name}"
-                ) from e
-
-        # Get config fields
-        try:
-            config_class = resource_locator.get_config(source.config_class)
-            config_fields = Fields.from_config_class(config_class)
-        except Exception as e:
-            ctx.logger.error(f"Failed to get config for {short_name}: {str(e)}")
-            raise HTTPException(
-                status_code=500, detail=f"Invalid configuration for source {short_name}"
-            ) from e
-
-        # Create a dictionary with all required fields including auth_fields and config_fields
-        source_dict = {
-            **{key: getattr(source, key) for key in source.__dict__ if not key.startswith("_")},
-            "auth_fields": auth_fields,
-            "config_fields": config_fields,
-        }
-
-        # Validate in one step with all fields present
-        source_model = schemas.Source.model_validate(source_dict)
-        return source_model
-
-    except NotFoundException as e:
-        raise HTTPException(status_code=404, detail=f"Source not found: {short_name}") from e
-
-    except HTTPException:
-        # Re-raise HTTP exceptions as is
-        raise
-    except Exception as e:
-        ctx.logger.exception(f"Error retrieving source {short_name}: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to retrieve source details for {short_name}"
-        ) from e
-
-
-@router.get(
-    "/list",
+    "/",
     response_model=List[schemas.Source],
     responses=create_source_list_response(
         ["github"], "List of all available data source connectors"
@@ -176,3 +101,78 @@ async def list(
 
     ctx.logger.info(f"Returning {len(result_sources)} valid sources")
     return result_sources
+
+
+@router.get(
+    "/{short_name}",
+    response_model=schemas.Source,
+    responses=create_single_source_response(
+        "github", "Source details with authentication and configuration schemas"
+    ),
+)
+async def read(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    short_name: str = Path(
+        ...,
+        description="Technical identifier of the source type (e.g., 'github', 'stripe', 'slack')",
+    ),
+    ctx: ApiContext = Depends(deps.get_context),
+) -> schemas.Source:
+    """Get detailed information about a specific data source connector."""
+    try:
+        source = await crud.source.get_by_short_name(db, short_name)
+        if not source:
+            raise HTTPException(status_code=404, detail=f"Source not found: {short_name}")
+
+        # Config class is always required
+        if not source.config_class:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Source {short_name} does not have a configuration class",
+            )
+
+        # Auth fields - only for sources with auth_config_class (DIRECT auth)
+        auth_fields = Fields(fields=[])
+        if source.auth_config_class:
+            try:
+                auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
+                auth_fields = Fields.from_config_class(auth_config_class)
+            except Exception as e:
+                ctx.logger.error(f"Failed to get auth config for {short_name}: {str(e)}")
+                raise HTTPException(
+                    status_code=500, detail=f"Invalid auth configuration for source {short_name}"
+                ) from e
+
+        # Get config fields
+        try:
+            config_class = resource_locator.get_config(source.config_class)
+            config_fields = Fields.from_config_class(config_class)
+        except Exception as e:
+            ctx.logger.error(f"Failed to get config for {short_name}: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Invalid configuration for source {short_name}"
+            ) from e
+
+        # Create a dictionary with all required fields including auth_fields and config_fields
+        source_dict = {
+            **{key: getattr(source, key) for key in source.__dict__ if not key.startswith("_")},
+            "auth_fields": auth_fields,
+            "config_fields": config_fields,
+        }
+
+        # Validate in one step with all fields present
+        source_model = schemas.Source.model_validate(source_dict)
+        return source_model
+
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=f"Source not found: {short_name}") from e
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as is
+        raise
+    except Exception as e:
+        ctx.logger.exception(f"Error retrieving source {short_name}: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve source details for {short_name}"
+        ) from e

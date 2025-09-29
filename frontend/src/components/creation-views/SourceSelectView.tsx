@@ -83,7 +83,7 @@ export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadabl
   const loadSources = async () => {
     try {
       // Use the correct endpoint path without /api/v1 prefix
-      const response = await apiClient.get('/sources/list');
+      const response = await apiClient.get('/sources/');
       if (response.ok) {
         const data = await response.json();
         setSources(data);

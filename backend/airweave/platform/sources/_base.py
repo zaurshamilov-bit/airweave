@@ -2,6 +2,7 @@
 
 import base64  # for JWT payload peek
 import json  # for JWT payload peek
+import re  # for URL cleaning
 import time  # for exp checks
 from abc import abstractmethod
 from contextlib import asynccontextmanager
@@ -281,23 +282,30 @@ class BaseSource:
             self.logger.warning(f"No download URL for file {file_entity.name}")
             return None
 
+        # Check if this is a pre-signed URL (e.g., S3)
+        is_presigned_url = "X-Amz-Algorithm" in url
+
         # Get access token (from parameter, token manager, or instance)
         token = access_token or await self.get_access_token()
 
-        # Validate we have an access token for authentication
-        if not token:
+        # Validate we have an access token for authentication (unless it's a pre-signed URL)
+        if not token and not is_presigned_url:
             self.logger.error(f"No access token provided for file {file_entity.name}")
             raise ValueError(f"No access token available for processing file {file_entity.name}")
 
-        self.logger.debug(f"Processing file entity: {file_entity.name}")
+        self.logger.debug(
+            f"Processing file entity: {file_entity.name} "
+            f"(pre-signed: {is_presigned_url}, has_token: {bool(token)})"
+        )
 
         try:
             # Stream file using our HTTP client (which might be a proxy)
             async def stream_with_client():
                 async with self.http_client(timeout=httpx.Timeout(180.0, read=540.0)) as client:
                     request_headers = headers or {}
-                    # Only add auth header if not using proxy
-                    if token and not hasattr(client, "_config"):  # Proxy client has _config
+                    # Only add auth header if not using proxy AND not a pre-signed URL
+                    # Pre-signed URLs (S3) include auth in URL params and reject Auth headers
+                    if token and not hasattr(client, "_config") and not is_presigned_url:
                         request_headers["Authorization"] = f"Bearer {token}"
 
                     # Use stream context manager for proper streaming
@@ -384,6 +392,50 @@ class BaseSource:
     async def validate(self) -> bool:
         """Validate that this source is reachable and credentials are usable."""
         raise NotImplementedError
+
+    def clean_content_for_embedding(self, content: str) -> str:
+        """Clean content for embedding by removing huge URLs and cleaning up formatting.
+
+        This is especially important for content from sources like Notion, Confluence,
+        and Google Docs which often contain:
+        - Massive pre-signed S3/GCS URLs for images
+        - Excessive query parameters in URLs
+        - Tracking parameters
+        - Redundant whitespace
+
+        Args:
+            content: Raw content that may contain large URLs
+
+        Returns:
+            Cleaned content suitable for embedding with shortened URLs
+        """
+        if not content:
+            return ""
+
+        # First, handle image markdown - these have ! prefix
+        # Match images with URLs that have query strings (S3/GCS pre-signed URLs)
+        pattern_images_query = r"!\[([^\]]*)\]\([^\?\)]+\?[^\)]+\)"
+        content = re.sub(pattern_images_query, r"[Image: \1]", content)
+
+        # Also handle images with very long URLs even without query params
+        pattern_images_long = r"!\[([^\]]*)\]\([^\)]{200,}\)"
+        content = re.sub(pattern_images_long, r"[Image: \1]", content)
+
+        # Then handle regular links with excessive query parameters
+        pattern_links = r"\[([^\]]+)\]\(https?://[^\s\)]+\?[^\)]{100,}\)"
+        content = re.sub(pattern_links, r"[\1]", content)
+
+        # Also handle bare URLs that are extremely long (no markdown formatting)
+        pattern_bare = r"(https?://[^\s]+\?[^\s]{100,})"
+        content = re.sub(pattern_bare, "[link]", content)
+
+        # Remove multiple consecutive blank lines
+        content = re.sub(r"\n{3,}", "\n\n", content)
+
+        # Trim whitespace
+        content = content.strip()
+
+        return content
 
     async def _validate_oauth2(  # noqa: C901
         self,
