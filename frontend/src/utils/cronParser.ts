@@ -5,6 +5,8 @@
 export interface ParsedCron {
   description: string;
   shortDescription: string;
+  descriptionLocal: string;
+  shortDescriptionLocal: string;
   nextRun?: Date;
 }
 
@@ -27,12 +29,16 @@ export function parseCronExpression(cronExpression: string | undefined | null): 
     if (minute === '0') {
       return {
         description: 'Every hour',
-        shortDescription: 'Hourly'
+        shortDescription: 'Hourly',
+        descriptionLocal: 'Every hour',
+        shortDescriptionLocal: 'Hourly'
       };
     }
     return {
       description: `Every hour at ${minute} minutes`,
-      shortDescription: `Hourly :${minute.padStart(2, '0')}`
+      shortDescription: `Hourly :${minute.padStart(2, '0')}`,
+      descriptionLocal: `Every hour at ${minute} minutes`,
+      shortDescriptionLocal: `Hourly :${minute.padStart(2, '0')}`
     };
   }
 
@@ -42,12 +48,16 @@ export function parseCronExpression(cronExpression: string | undefined | null): 
     if (interval === '1') {
       return {
         description: 'Every hour',
-        shortDescription: 'Hourly'
+        shortDescription: 'Hourly',
+        descriptionLocal: 'Every hour',
+        shortDescriptionLocal: 'Hourly'
       };
     }
     return {
       description: `Every ${interval} hours`,
-      shortDescription: `Every ${interval}h`
+      shortDescription: `Every ${interval}h`,
+      descriptionLocal: `Every ${interval} hours`,
+      shortDescriptionLocal: `Every ${interval}h`
     };
   }
 
@@ -55,10 +65,13 @@ export function parseCronExpression(cronExpression: string | undefined | null): 
   if (minute !== '*' && hour !== '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
     const hourNum = parseInt(hour);
     const minuteNum = parseInt(minute);
-    const time = formatTime(hourNum, minuteNum);
+    const timeUTC = formatTime(hourNum, minuteNum);
+    const timeLocal = formatLocalTime(hourNum, minuteNum);
     return {
-      description: `Daily at ${time.full} UTC`,
-      shortDescription: `Daily ${time.short}`
+      description: `Daily at ${timeUTC.full} UTC`,
+      shortDescription: `Daily ${timeUTC.short}`,
+      descriptionLocal: `Daily at ${timeLocal.full}`,
+      shortDescriptionLocal: `Daily ${timeLocal.short}`
     };
   }
 
@@ -66,11 +79,14 @@ export function parseCronExpression(cronExpression: string | undefined | null): 
   if (minute !== '*' && hour !== '*' && dayOfMonth === '*' && month === '*' && dayOfWeek !== '*') {
     const hourNum = parseInt(hour);
     const minuteNum = parseInt(minute);
-    const time = formatTime(hourNum, minuteNum);
+    const timeUTC = formatTime(hourNum, minuteNum);
+    const timeLocal = formatLocalTime(hourNum, minuteNum);
     const dayName = getDayName(dayOfWeek);
     return {
-      description: `Every ${dayName} at ${time.full} UTC`,
-      shortDescription: `${dayName}s ${time.short}`
+      description: `Every ${dayName} at ${timeUTC.full} UTC`,
+      shortDescription: `${dayName}s ${timeUTC.short}`,
+      descriptionLocal: `Every ${dayName} at ${timeLocal.full}`,
+      shortDescriptionLocal: `${dayName}s ${timeLocal.short}`
     };
   }
 
@@ -78,14 +94,17 @@ export function parseCronExpression(cronExpression: string | undefined | null): 
   if (minute !== '*' && hour !== '*' && dayOfMonth !== '*' && month === '*' && dayOfWeek === '*') {
     const hourNum = parseInt(hour);
     const minuteNum = parseInt(minute);
-    const time = formatTime(hourNum, minuteNum);
+    const timeUTC = formatTime(hourNum, minuteNum);
+    const timeLocal = formatLocalTime(hourNum, minuteNum);
     const dayStr = dayOfMonth === '1' ? '1st' :
                    dayOfMonth === '2' ? '2nd' :
                    dayOfMonth === '3' ? '3rd' :
                    `${dayOfMonth}th`;
     return {
-      description: `Monthly on the ${dayStr} at ${time.full} UTC`,
-      shortDescription: `Monthly ${dayStr}`
+      description: `Monthly on the ${dayStr} at ${timeUTC.full} UTC`,
+      shortDescription: `Monthly ${dayStr}`,
+      descriptionLocal: `Monthly on the ${dayStr} at ${timeLocal.full}`,
+      shortDescriptionLocal: `Monthly ${dayStr}`
     };
   }
 
@@ -95,12 +114,16 @@ export function parseCronExpression(cronExpression: string | undefined | null): 
     if (interval === '1') {
       return {
         description: 'Every minute',
-        shortDescription: 'Every min'
+        shortDescription: 'Every min',
+        descriptionLocal: 'Every minute',
+        shortDescriptionLocal: 'Every min'
       };
     }
     return {
       description: `Every ${interval} minutes`,
-      shortDescription: `Every ${interval}m`
+      shortDescription: `Every ${interval}m`,
+      descriptionLocal: `Every ${interval} minutes`,
+      shortDescriptionLocal: `Every ${interval}m`
     };
   }
 
@@ -109,14 +132,18 @@ export function parseCronExpression(cronExpression: string | undefined | null): 
     const minuteNum = parseInt(minute);
     return {
       description: `Every hour at ${minuteNum} minutes past`,
-      shortDescription: `Hourly :${minute.padStart(2, '0')}`
+      shortDescription: `Hourly :${minute.padStart(2, '0')}`,
+      descriptionLocal: `Every hour at ${minuteNum} minutes past`,
+      shortDescriptionLocal: `Hourly :${minute.padStart(2, '0')}`
     };
   }
 
   // Default: show the raw cron
   return {
     description: `Custom schedule: ${cronExpression}`,
-    shortDescription: 'Custom'
+    shortDescription: 'Custom',
+    descriptionLocal: `Custom schedule: ${cronExpression}`,
+    shortDescriptionLocal: 'Custom'
   };
 }
 
@@ -132,6 +159,21 @@ function formatTime(hour: number, minute: number): { full: string; short: string
     full: `${displayHour}:${minuteStr} ${period}`,
     short: `${displayHour}:${minuteStr}${period.toLowerCase()}`
   };
+}
+
+/**
+ * Convert UTC time to local time and format it
+ */
+function formatLocalTime(utcHour: number, utcMinute: number): { full: string; short: string } {
+  // Create a date in UTC for today
+  const utcDate = new Date();
+  utcDate.setUTCHours(utcHour, utcMinute, 0, 0);
+
+  // Get local hour and minute
+  const localHour = utcDate.getHours();
+  const localMinute = utcDate.getMinutes();
+
+  return formatTime(localHour, localMinute);
 }
 
 /**
