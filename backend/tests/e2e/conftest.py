@@ -114,25 +114,22 @@ async def composio_auth_provider(
         "auth_fields": {"api_key": config.TEST_COMPOSIO_API_KEY},
     }
 
+    # Check if connection already exists
     response = await module_api_client.get(f"/auth-providers/connections/{provider_readable_id}")
 
     if response.status_code == 200:
+        # Connection already exists, use it
         provider = response.json()
-        # Note: auth_fields are not returned in the connection response (credentials are encrypted)
-        # Check if the connection exists and matches our readable_id
-        if provider.get("readable_id") == provider_readable_id:
-            yield provider
-            return
+        yield provider
+    else:
+        # Create new connection
+        response = await module_api_client.post("/auth-providers/", json=auth_provider_payload)
 
-    response = await module_api_client.post("/auth-providers/", json=auth_provider_payload)
+        if response.status_code != 200:
+            pytest.fail(f"Failed to create Composio auth provider: {response.text}")
 
-    if response.status_code != 200:
-        pytest.fail(f"Failed to create Composio auth provider: {response.text}")
-
-    provider = response.json()
-
-    # Yield for test to use
-    yield provider
+        provider = response.json()
+        yield provider
 
 
 @pytest_asyncio.fixture(scope="function")
