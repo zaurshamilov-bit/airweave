@@ -755,17 +755,30 @@ class FileSystemMetadata(AirweaveSystemMetadata):
 class FileEntity(BaseEntity):
     """Base schema for file entities."""
 
-    file_id: str = Field(..., description="ID of the file in the source system")
-    name: str = Field(..., description="Name of the file")
-    mime_type: Optional[str] = Field(None, description="MIME type of the file")
-    size: Optional[int] = Field(None, description="Size of the file in bytes")
-    download_url: str = Field(..., description="URL to download the file")
+    file_id: str = Field(
+        ...,
+        description="ID of the file in the source system",
+        json_schema_extra={"embeddable": False},
+    )
+    name: str = Field(..., description="Name of the file", json_schema_extra={"embeddable": True})
+    mime_type: Optional[str] = Field(
+        None, description="MIME type of the file", json_schema_extra={"embeddable": True}
+    )
+    size: Optional[int] = Field(
+        None, description="Size of the file in bytes", json_schema_extra={"embeddable": False}
+    )
+    download_url: str = Field(
+        ..., description="URL to download the file", json_schema_extra={"embeddable": False}
+    )
     metadata: Optional[Dict[str, Any]] = Field(
-        default_factory=dict, description="Additional metadata about the file"
+        default_factory=dict,
+        description="Additional metadata about the file",
+        json_schema_extra={"embeddable": False},
     )
     file_type: Optional[str] = Field(
         None,
         description="Human-readable file type (e.g., google_doc, google_slides, pdf, etc.)",
+        json_schema_extra={"embeddable": True},
     )
 
     # Override to use FileSystemMetadata
