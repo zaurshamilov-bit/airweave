@@ -22,7 +22,7 @@ Follow this guide to get up and running with Airweave in just a few steps.
   </Step>
 
   <Step title="Set-up Airweave client" toc={true}>
-   Airweave provides SDKs for Python and Node.js. Install the package, then create an API key in the dashboard by selecting API Keys in the sidebar.
+   Airweave provides SDKs for Python and Node.js. Install the package.
 
     <CodeBlocks>
     ```bash title="Python"
@@ -34,7 +34,20 @@ Follow this guide to get up and running with Airweave in just a few steps.
     ```
     </CodeBlocks>
 
-   If you're running Airweave locally, set base_url=`"http://localhost:8001"`.
+    Now, create and copy your API key from your Airweave dashboard.
+
+    <video
+      src="./airweave_api_key.mp4"
+      controls
+      loop
+      autoplay
+      muted
+      playsinline
+      style={{ aspectRatio: '16 / 9', width: '100%' }}
+    >
+      Your browser does not support the video tag.
+    </video>
+   Initialize the Airweave client with your new API key. For local deployments, set base_url to `"http://localhost:8001"`.
 
     <CodeBlocks>
     ```Python title="Python"
