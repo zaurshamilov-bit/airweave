@@ -44,7 +44,7 @@ class QdrantFilterOperation(SearchOperation):
         emitter = context.get("emit")
 
         if self.filter_dict:
-            logger.info("[QdrantFilter] Applying user-provided Qdrant filter")
+            logger.debug("[QdrantFilter] Applying user-provided Qdrant filter")
 
             # Normalize keys so users can provide simple field names (e.g., source_name)
             try:

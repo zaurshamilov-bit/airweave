@@ -120,11 +120,11 @@ class CompletionGeneration(SearchOperation):
         logger = context["logger"]
         openai_api_key = context.get("openai_api_key")
 
-        logger.info(f"[CompletionGeneration] Started at {time.time() - start_time:.2f}s")
+        logger.debug(f"[CompletionGeneration] Started at {time.time() - start_time:.2f}s")
 
         if not results:
             context["completion"] = "No results found for your query."
-            logger.info("[CompletionGeneration] No results to generate completion from")
+            logger.debug("[CompletionGeneration] No results to generate completion from")
             return
 
         if not openai_api_key:
@@ -138,7 +138,7 @@ class CompletionGeneration(SearchOperation):
             config.completion_model if hasattr(config, "completion_model") else self.default_model
         )
 
-        logger.info(
+        logger.debug(
             f"[CompletionGeneration] Generating completion from {len(results_for_context)} results "
             f"using model {model}"
         )
@@ -147,7 +147,7 @@ class CompletionGeneration(SearchOperation):
             # Initialize OpenAI client
             client_init_time = time.time()
             client = AsyncOpenAI(api_key=openai_api_key)
-            logger.info(
+            logger.debug(
                 f"[CompletionGeneration] Client initialized in "
                 f"{(time.time() - client_init_time) * 1000:.2f}ms"
             )
@@ -157,7 +157,7 @@ class CompletionGeneration(SearchOperation):
             formatted_context = self._format_results(results_for_context)
             format_time = (time.time() - format_start) * 1000
 
-            logger.info(
+            logger.debug(
                 f"[CompletionGeneration] Formatted {len(results_for_context)} results "
                 f"in {format_time:.2f}ms. "
                 f"Context length: {len(formatted_context)} chars"
@@ -172,12 +172,12 @@ class CompletionGeneration(SearchOperation):
             # Calculate approximate token count (rough estimate)
             total_chars = len(formatted_context) + len(CONTEXT_PROMPT) + len(query)
             estimated_tokens = total_chars / 4  # Rough estimate: 1 token ≈ 4 chars
-            logger.info(f"[CompletionGeneration] Estimated input tokens: ~{estimated_tokens:.0f}")
+            logger.debug(f"[CompletionGeneration] Estimated input tokens: ~{estimated_tokens:.0f}")
 
             # Streaming or non-streaming completion
             request_id: Optional[str] = context.get("request_id")
             api_start = time.time()
-            logger.info(f"[CompletionGeneration] Calling OpenAI API with model {model}...")
+            logger.debug(f"[CompletionGeneration] Calling OpenAI API with model {model}...")
 
             if request_id:
                 emitter = context.get("emit")
@@ -216,13 +216,13 @@ class CompletionGeneration(SearchOperation):
                 if callable(emitter):
                     await emitter("completion_done", {"text": final_text}, op_name=self.name)
                 api_time = (time.time() - api_start) * 1000
-                logger.info(
+                logger.debug(
                     f"[CompletionGeneration] OpenAI streaming completed in {api_time:.2f}ms"
                 )
             else:
                 # Use Chat Completions (same pattern as llm_judge) for non-streaming
                 try:
-                    logger.info(
+                    logger.debug(
                         f"[CompletionGeneration] input: {model} {messages} {self.max_tokens}"
                     )
                     chat_response = await client.chat.completions.create(
@@ -232,7 +232,7 @@ class CompletionGeneration(SearchOperation):
                     )
 
                     api_time = (time.time() - api_start) * 1000
-                    logger.info(
+                    logger.debug(
                         f"[CompletionGeneration] Chat API call completed in {api_time:.2f}ms"
                     )
 
@@ -247,7 +247,7 @@ class CompletionGeneration(SearchOperation):
                     if text and isinstance(text, str) and text.strip():
                         context["completion"] = text
                         total_time = (time.time() - start_time) * 1000
-                        logger.info(
+                        logger.debug(
                             f"[CompletionGeneration] Successfully generated completion. "
                             f"Total time: {total_time:.2f}ms (API: {api_time:.2f}ms, "
                             f"formatting: {format_time:.2f}ms)"

@@ -89,7 +89,7 @@ class SearchServiceV2:
         """
         start_time = time.monotonic()
 
-        ctx.logger.info(
+        ctx.logger.debug(
             f"[SearchServiceV2] Starting search for collection '{readable_id}', "
             f"query: '{search_request.query[:50]}...'"
         )
@@ -113,7 +113,7 @@ class SearchServiceV2:
                 config.completion is not None,
             ]
         )
-        ctx.logger.info(
+        ctx.logger.debug(
             f"[SearchServiceV2] Executing search pipeline with {enabled_count} operations"
         )
         context = await self.executor.execute(config, db, ctx, request_id=request_id)
@@ -124,7 +124,7 @@ class SearchServiceV2:
         # Calculate search duration
         duration_ms = (time.monotonic() - start_time) * 1000
 
-        ctx.logger.info(
+        ctx.logger.debug(
             f"[SearchServiceV2] Search completed with status: {response.status}, "
             f"results: {len(response.results)}, duration: {duration_ms:.2f}ms"
         )

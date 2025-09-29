@@ -60,7 +60,7 @@ class QueryInterpretation(SearchOperation):
             self._groq_client = AsyncGroq()
         return self._groq_client
 
-    async def execute(self, context: Dict[str, Any]) -> None:
+    async def execute(self, context: Dict[str, Any]) -> None:  # noqa: C901
         """Extract filters from the query using LLM.
 
         Reads from context:
@@ -307,7 +307,7 @@ class QueryInterpretation(SearchOperation):
             except Exception:
                 summary_hint = ""
 
-            logger.info(
+            logger.debug(
                 f"[{self.name}] Extracted filters with confidence "
                 f"{getattr(extracted, 'confidence', 0.0):.2f}: {summary_hint}"
             )
@@ -321,7 +321,7 @@ class QueryInterpretation(SearchOperation):
     def _check_confidence(self, extracted: Any, logger: Any) -> bool:
         """Check if extraction confidence meets threshold."""
         if extracted.confidence < self.confidence_threshold:
-            logger.info(
+            logger.debug(
                 f"[{self.name}] Confidence {extracted.confidence:.2f} below threshold "
                 f"{self.confidence_threshold}, not applying filters"
             )
@@ -484,13 +484,13 @@ class QueryInterpretation(SearchOperation):
         if qdrant_filter:
             context["filter"] = qdrant_filter
             context["query"] = extracted.refined_query
-            logger.info(
+            logger.debug(
                 f"[{self.name}] Applied {len(extracted.filters)} filter conditions, "
                 f"refined query: '{extracted.refined_query[:50]}...'"
             )
             logger.debug(f"[{self.name}] Final Qdrant filter: {qdrant_filter}")
         else:
-            logger.info(f"[{self.name}] No filters to apply despite extraction")
+            logger.debug(f"[{self.name}] No filters to apply despite extraction")
 
     async def _discover_available_fields(
         self, db: Any, collection_id: str, logger: Any, ctx: Any | None = None

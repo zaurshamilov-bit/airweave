@@ -105,7 +105,7 @@ class VectorSearch(SearchOperation):
             except Exception:
                 pass
 
-        logger.info(
+        logger.debug(
             f"[VectorSearch] Searching with {len(embeddings)} embeddings, "
             f"search_method={search_method}, limit={limit}, offset={config.offset}, "
             f"score_threshold={config.score_threshold}, filter={bool(filter_dict)}, "
@@ -114,7 +114,7 @@ class VectorSearch(SearchOperation):
 
         # Extra transparency: log recency bias weight if available
         if decay_config is not None and hasattr(decay_config, "weight"):
-            logger.info(
+            logger.debug(
                 f"[VectorSearch] Recency bias weight={getattr(decay_config, 'weight', None)}; "
                 f"datetime_field={getattr(decay_config, 'datetime_field', None)}"
             )
@@ -230,7 +230,7 @@ class VectorSearch(SearchOperation):
 
         if sparse_embeddings:
             count_sparse = len(sparse_embeddings)
-            logger.info("[VectorSearch] HYBRID search with %s BM25 vectors", count_sparse)
+            logger.debug("[VectorSearch] HYBRID search with %s BM25 vectors", count_sparse)
             try:
                 non_zeros = [len(v.indices) for v in sparse_embeddings if hasattr(v, "indices")]
                 if non_zeros:
@@ -239,10 +239,10 @@ class VectorSearch(SearchOperation):
             except Exception:
                 pass
         else:
-            logger.info("[VectorSearch] Using NEURAL-only search (no sparse vectors)")
+            logger.debug("[VectorSearch] Using NEURAL-only search (no sparse vectors)")
 
         if decay_config:
-            logger.info(
+            logger.debug(
                 ("[VectorSearch] Time decay ENABLED: type=%s, field=%s, scale=%s %s, midpoint=%s"),
                 decay_config.decay_type,
                 decay_config.datetime_field,
@@ -251,7 +251,7 @@ class VectorSearch(SearchOperation):
                 decay_config.midpoint,
             )
         else:
-            logger.info("[VectorSearch] Time decay DISABLED")
+            logger.debug("[VectorSearch] Time decay DISABLED")
 
     def _log_search_results(self, merged_results, decay_config, logger) -> None:
         """Log search results with optional decay details."""
@@ -375,17 +375,17 @@ class VectorSearch(SearchOperation):
     ) -> None:
         logger.debug(f"[VectorSearch] Performing single vector search with method={search_method}")
         if sparse_embeddings and sparse_embeddings[0]:
-            logger.info("[VectorSearch] Using HYBRID search with BM25 sparse vector")
+            logger.debug("[VectorSearch] Using HYBRID search with BM25 sparse vector")
             try:
                 nz = len(getattr(sparse_embeddings[0], "indices", []) or [])
                 logger.debug(f"[VectorSearch] BM25 sparse non-zeros (query 0)={nz}")
             except Exception:
                 pass
         else:
-            logger.info("[VectorSearch] Using NEURAL-only search (no sparse vector)")
+            logger.debug("[VectorSearch] Using NEURAL-only search (no sparse vector)")
 
         if decay_config:
-            logger.info(
+            logger.debug(
                 ("[VectorSearch] Time decay ENABLED: type=%s, field=%s, scale=%s %s, midpoint=%s"),
                 decay_config.decay_type,
                 decay_config.datetime_field,
@@ -394,7 +394,7 @@ class VectorSearch(SearchOperation):
                 decay_config.midpoint,
             )
         else:
-            logger.info("[VectorSearch] Time decay DISABLED")
+            logger.debug("[VectorSearch] Time decay DISABLED")
 
         results = await destination.search(
             embeddings[0],
@@ -426,7 +426,7 @@ class VectorSearch(SearchOperation):
             except Exception:
                 pass
 
-        logger.info(f"[VectorSearch] Found {len(context['raw_results'])} results")
+        logger.debug(f"[VectorSearch] Found {len(context['raw_results'])} results")
         if context.get("raw_results") and logger.isEnabledFor(10):
             top_results = context["raw_results"][:5]
             for i, result in enumerate(top_results, 1):

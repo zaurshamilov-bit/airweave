@@ -2,10 +2,10 @@
 
 This operation expands the user's query into multiple variations to improve
 recall. As of this version, the operation no longer supports streaming
-structured outputs. Both streaming and non-streaming searches use the same
-non-streaming structured output path. In streaming mode, we still emit
-basic lifecycle events (expansion_start, expansion_done), but no incremental
-"delta" events.
+structured outputs. Both streaming and non-streaming searches use the
+same non-streaming structured output path. In streaming mode, we still
+emit basic lifecycle events (expansion_start, expansion_done), but no
+incremental "delta" events.
 """
 
 from typing import Any, Dict, List, Optional
@@ -57,7 +57,7 @@ class QueryExpansion(SearchOperation):
             self._openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         return self._openai_client
 
-    async def execute(self, context: Dict[str, Any]) -> None:
+    async def execute(self, context: Dict[str, Any]) -> None:  # noqa: C901
         """Expand the query into multiple variations.
 
         Reads from context:
@@ -81,7 +81,7 @@ class QueryExpansion(SearchOperation):
         if isinstance(strategy, str):
             strategy = self._resolve_strategy(strategy)
 
-        logger.info(f"[QueryExpansion] Expanding query using strategy: {strategy}")
+        logger.debug(f"[QueryExpansion] Expanding query using strategy: {strategy}")
 
         # If in streaming mode, emit a basic start event (no deltas)
         emitter = context.get("emit")
@@ -104,11 +104,14 @@ class QueryExpansion(SearchOperation):
             # Limit the number of expansions
             if len(expanded_queries) > self.max_expansions:
                 expanded_queries = expanded_queries[: self.max_expansions]
-                logger.info(f"[QueryExpansion] Limited expansions to {self.max_expansions}")
+                logger.debug(f"[QueryExpansion] Limited expansions to {self.max_expansions}")
 
             context["expanded_queries"] = expanded_queries
-            logger.info(
-                f"[QueryExpansion] Expanded query '{query[:50]}...' to {len(expanded_queries)} variations"
+            logger.debug(
+                (
+                    f"[QueryExpansion] Expanded query '{query[:50]}...' to "
+                    f"{len(expanded_queries)} variations"
+                )
             )
 
             if logger.isEnabledFor(10):  # DEBUG level
@@ -226,19 +229,23 @@ class QueryExpansion(SearchOperation):
     def _get_expansion_system_prompt(self) -> str:
         """Get the system prompt for query expansion."""
         return (
-            "You are a search query expansion assistant. Your job is to create high-quality "
-            "alternative phrasings that improve recall for a hybrid keyword + vector search, "
-            "while preserving the user's intent.\n\n"
+            "You are a search query expansion assistant. Your job is to create "
+            "high-quality alternative phrasings that improve recall for a hybrid "
+            "keyword + vector search, while preserving the user's intent.\n\n"
             "Core behaviors (optimize recall without changing meaning):\n"
-            "- Produce diverse paraphrases that surface different vocabulary and phrasing.\n"
+            "- Produce diverse paraphrases that surface different vocabulary and "
+            "phrasing.\n"
             "- Include at least one keyword-forward variant (good for BM25).\n"
-            "- Include a normalized/literal variant that spells out implicit constraints "
-            "  (e.g., role/company/location/education if present).\n"
+            "- Include a normalized/literal variant that spells out implicit "
+            "constraints (e.g., role/company/location/education if present).\n"
             "- Expand common abbreviations and acronyms to their full forms.\n"
-            "- Swap common synonyms and morphological variants (manage→management, bill→billing).\n"
-            "- Recast questions as statements or list intents when appropriate (e.g., 'find', 'list', 'show').\n"
+            "- Swap common synonyms and morphological variants "
+            "(manage→management, bill→billing).\n"
+            "- Recast questions as statements or list intents when appropriate "
+            "(e.g., 'find', 'list', 'show').\n"
             "- Do not introduce constraints that are not implied by the query.\n"
-            "- Avoid duplicates and near-duplicates (punctuation-only or trivial reorderings).\n\n"
+            "- Avoid duplicates and near-duplicates (punctuation-only or trivial "
+            "reorderings).\n\n"
         )
 
     def _get_expansion_user_prompt(self, query: str) -> str:
@@ -246,11 +253,15 @@ class QueryExpansion(SearchOperation):
         return (
             f"Original query: {query}\n\n"
             f"Instructions:\n"
-            f"- Generate up to {self.max_expansions} alternatives that preserve intent and increase recall.\n"
-            f"- Favor lexical diversity: use synonyms, category names, and different grammatical forms.\n"
-            f"- Include one keyword-heavy form and one normalized/literal form if applicable.\n"
+            f"- Generate up to {self.max_expansions} alternatives that preserve "
+            f"intent and increase recall.\n"
+            f"- Favor lexical diversity: use synonyms, category names, and "
+            f"different grammatical forms.\n"
+            f"- Include one keyword-heavy form and one normalized/literal form "
+            f"if applicable.\n"
             f"- Expand abbreviations (e.g., 'eng'→'engineering', 'SF'→'San Francisco').\n"
-            f"- Avoid adding new constraints; avoid duplicates and trivial rephrasings.\n"
+            f"- Avoid adding new constraints; avoid duplicates and trivial "
+            f"rephrasings.\n"
         )
 
     def _validate_alternatives(self, alternatives: list, original_query: str) -> List[str]:

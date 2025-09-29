@@ -70,7 +70,7 @@ class LLMReranking(SearchOperation):
 
         if not results:
             context["final_results"] = []
-            logger.info(f"[{self.name}] No results to rerank")
+            logger.debug(f"[{self.name}] No results to rerank")
             return
 
         if not cohere_api_key:
@@ -79,7 +79,7 @@ class LLMReranking(SearchOperation):
             context["final_results"] = results[: config.limit]
             raise RuntimeError("COHERE_API_KEY not configured; skipping reranking")
 
-        logger.info(f"[{self.name}] Reranking {len(results)} results using Cohere {self.model}")
+        logger.debug(f"[{self.name}] Reranking {len(results)} results using Cohere {self.model}")
 
         try:
             # Prepare candidate set
@@ -118,7 +118,7 @@ class LLMReranking(SearchOperation):
                 )
 
             # Call Cohere Async Rerank API
-            logger.info(f"\n\n{yaml_docs}\n\n")
+            logger.debug(f"\n\n{yaml_docs}\n\n")
             client = cohere.AsyncClientV2(api_key=cohere_api_key)
             response = await client.rerank(
                 model=self.model,
@@ -127,7 +127,7 @@ class LLMReranking(SearchOperation):
                 top_n=min(config.limit, len(yaml_docs)),
                 max_tokens_per_doc=self.max_tokens_per_doc,
             )
-            logger.info(f"\n\n{response}\n\n")
+            logger.debug(f"\n\n{response}\n\n")
 
             # Map reranked indices (relative to yaml_docs) back to original results indices
             rankings_list: List[Dict[str, Any]] = []
@@ -145,7 +145,7 @@ class LLMReranking(SearchOperation):
                 results=results, ranked_indices=ranked_original_indices, limit=config.limit
             )
 
-            logger.info(
+            logger.debug(
                 f"[{self.name}] Successfully reranked; returned "
                 f"{len(context['final_results'])} results"
             )

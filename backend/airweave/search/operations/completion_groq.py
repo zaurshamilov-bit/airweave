@@ -144,11 +144,11 @@ class CompletionGeneration(SearchOperation):
         logger = context["logger"]
         groq_api_key = getattr(settings, "GROQ_API_KEY", None)
 
-        logger.info(f"[CompletionGeneration] Started at {time.time() - start_time:.2f}s")
+        logger.debug(f"[CompletionGeneration] Started at {time.time() - start_time:.2f}s")
 
         if not results:
             context["completion"] = "No results found for your query."
-            logger.info("[CompletionGeneration] No results to generate completion from")
+            logger.debug("[CompletionGeneration] No results to generate completion from")
             return
 
         if not groq_api_key:
@@ -161,7 +161,7 @@ class CompletionGeneration(SearchOperation):
             config.completion_model if hasattr(config, "completion_model") else self.default_model
         )
 
-        logger.info(
+        logger.debug(
             f"[CompletionGeneration] Generating completion from {len(results_for_context)} results "
             f"using model {model}"
         )
@@ -170,7 +170,7 @@ class CompletionGeneration(SearchOperation):
             # Initialize Groq client (reads GROQ_API_KEY from environment)
             client_init_time = time.time()
             client = AsyncGroq()
-            logger.info(
+            logger.debug(
                 f"[CompletionGeneration] Groq client initialized in "
                 f"{(time.time() - client_init_time) * 1000:.2f}ms"
             )
@@ -184,7 +184,7 @@ class CompletionGeneration(SearchOperation):
 
             total_results = len(results_for_context)
             context_chars = len(formatted_context)
-            logger.info(
+            logger.debug(
                 f"[CompletionGeneration] Formatted {chosen_count}/{total_results} "
                 f"results in {format_time:.2f}ms. "
                 f"Context length: {context_chars} chars"
@@ -202,7 +202,7 @@ class CompletionGeneration(SearchOperation):
                 + self._estimate_tokens(query)
                 + self._estimate_tokens(formatted_context)
             )
-            logger.info(
+            logger.debug(
                 f"[CompletionGeneration] Estimated input tokens: ~{estimated_tokens:.0f} "
                 "(budget ≈120k)"
             )
@@ -210,7 +210,7 @@ class CompletionGeneration(SearchOperation):
             # Streaming or non-streaming completion
             request_id: Optional[str] = context.get("request_id")
             api_start = time.time()
-            logger.info(f"[CompletionGeneration] Calling Groq API with model {model}...")
+            logger.debug(f"[CompletionGeneration] Calling Groq API with model {model}...")
 
             if request_id:
                 emitter = context.get("emit")
@@ -247,11 +247,11 @@ class CompletionGeneration(SearchOperation):
                 if callable(emitter):
                     await emitter("completion_done", {"text": final_text}, op_name=self.name)
                 api_time = (time.time() - api_start) * 1000
-                logger.info(f"[CompletionGeneration] Groq streaming completed in {api_time:.2f}ms")
+                logger.debug(f"[CompletionGeneration] Groq streaming completed in {api_time:.2f}ms")
             else:
                 # Use Groq Chat Completions for non-streaming
                 try:
-                    logger.info(
+                    logger.debug(
                         f"[CompletionGeneration] input: {model} {messages} {self.max_tokens}"
                     )
                     chat_response = await client.chat.completions.create(
@@ -261,7 +261,7 @@ class CompletionGeneration(SearchOperation):
                     )
 
                     api_time = (time.time() - api_start) * 1000
-                    logger.info(
+                    logger.debug(
                         f"[CompletionGeneration] Groq Chat API call completed in {api_time:.2f}ms"
                     )
 
@@ -276,7 +276,7 @@ class CompletionGeneration(SearchOperation):
                     if text and isinstance(text, str) and text.strip():
                         context["completion"] = text
                         total_time = (time.time() - start_time) * 1000
-                        logger.info(
+                        logger.debug(
                             f"[CompletionGeneration] Successfully generated completion. "
                             f"Total time: {total_time:.2f}ms (API: {api_time:.2f}ms, "
                             f"formatting: {format_time:.2f}ms)"
@@ -285,11 +285,11 @@ class CompletionGeneration(SearchOperation):
                         context["completion"] = (
                             "Unable to generate completion from the search results."
                         )
-                        logger.warning(
+                        logger.debug(
                             "[CompletionGeneration] Chat Completions returned empty content"
                         )
                         try:
-                            logger.warning(f"[CompletionGeneration] Response: {chat_response}")
+                            logger.debug(f"[CompletionGeneration] Response: {chat_response}")
                         except Exception:
                             pass
                 except Exception as resp_err:

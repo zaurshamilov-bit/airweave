@@ -735,14 +735,14 @@ class TestTemporalSchedules:
         seconds_until_next_minute = 60 - now.second
 
         # Choose target minute based on current second
-        if seconds_until_next_minute > 20:
+        if seconds_until_next_minute > 30:
             # Next minute is far enough away, use it
             target_minute = (now.minute + 1) % 60
-            wait_seconds = seconds_until_next_minute + 20
+            wait_seconds = seconds_until_next_minute + 30
         else:
             # Too close to next minute, use the one after
             target_minute = (now.minute + 2) % 60
-            wait_seconds = seconds_until_next_minute + 80
+            wait_seconds = seconds_until_next_minute + 90
 
         # If we're wrapping around to next hour, skip test
         if target_minute < now.minute:

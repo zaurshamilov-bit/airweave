@@ -61,14 +61,14 @@ class LLMReranking(SearchOperation):
 
         if not results:
             context["final_results"] = []
-            logger.info(f"[{self.name}] No results to rerank")
+            logger.debug(f"[{self.name}] No results to rerank")
             return
 
         if not openai_api_key:
             # Fail-fast policy: reranking enabled but no key configured
             raise RuntimeError("LLMReranking requires OPENAI_API_KEY but none is configured")
 
-        logger.info(f"[{self.name}] Reranking {len(results)} results using LLM")
+        logger.debug(f"[{self.name}] Reranking {len(results)} results using LLM")
 
         try:
             # Prepare candidate set for the LLM
@@ -100,7 +100,7 @@ class LLMReranking(SearchOperation):
 
             # Log number of results included in the prompt
             try:
-                logger.info(
+                logger.debug(
                     f"\n\n[{self.name}] Prompt includes {len(chosen)} candidate(s) "
                     f"out of {len(results_for_llm)} retrieved\n\n"
                 )
@@ -128,7 +128,7 @@ class LLMReranking(SearchOperation):
                 reranked=reranked,
                 limit=config.limit,
             )
-            logger.info(
+            logger.debug(
                 f"[{self.name}] Successfully reranked to {len(context['final_results'])} results"
             )
 
@@ -253,7 +253,7 @@ class LLMReranking(SearchOperation):
         try:
             total_chars = len(system_prompt) + len(user_prompt)
             estimated_tokens = total_chars / 4
-            logger.info(
+            logger.debug(
                 f"\n\n[{self.name}] Estimated input tokens: ~{estimated_tokens:.0f} "
                 f"(system={len(system_prompt)}, user={len(user_prompt)}, "
                 f"candidates={chosen_count})\n\n"

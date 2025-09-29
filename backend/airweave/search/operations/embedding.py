@@ -46,7 +46,7 @@ class Embedding(SearchOperation):
         # We check at runtime if query_expansion actually ran
         return ["query_expansion"]
 
-    async def execute(self, context: Dict[str, Any]) -> None:
+    async def execute(self, context: Dict[str, Any]) -> None:  # noqa: C901
         """Generate embeddings for queries.
 
         Reads from context:
@@ -69,7 +69,7 @@ class Embedding(SearchOperation):
         openai_api_key = context.get("openai_api_key")
         emitter = context.get("emit")
 
-        logger.info(
+        logger.debug(
             f"[Embedding] Generating embeddings for {len(queries)} queries "
             f"with search_method={self.search_method}"
         )
@@ -93,18 +93,18 @@ class Embedding(SearchOperation):
                         "Embedding model 'openai' selected but OPENAI_API_KEY is not configured"
                     )
                 embedder = OpenAIText2Vec(api_key=openai_api_key, logger=logger)
-                logger.info("[Embedding] Using OpenAI embedding model")
+                logger.debug("[Embedding] Using OpenAI embedding model")
             elif self.model == "local":
                 embedder = LocalText2Vec(logger=logger)
-                logger.info("[Embedding] Using local embedding model")
+                logger.debug("[Embedding] Using local embedding model")
             elif self.model == "auto":
                 # Auto-select based on API key availability
                 if openai_api_key:
                     embedder = OpenAIText2Vec(api_key=openai_api_key, logger=logger)
-                    logger.info("[Embedding] Auto-selected OpenAI embedding model")
+                    logger.debug("[Embedding] Auto-selected OpenAI embedding model")
                 else:
                     embedder = LocalText2Vec(logger=logger)
-                    logger.info("[Embedding] Auto-selected local embedding model (no OpenAI key)")
+                    logger.debug("[Embedding] Auto-selected local embedding model (no OpenAI key)")
             else:
                 # Unknown model is a configuration error
                 raise RuntimeError(f"Unknown embedding model '{self.model}'")
@@ -116,26 +116,28 @@ class Embedding(SearchOperation):
                     context["embeddings"] = [embedding]
                 else:
                     context["embeddings"] = await embedder.embed_many(queries)
-                logger.info(f"[Embedding] Generated {len(context['embeddings'])} neural embeddings")
+                logger.debug(
+                    f"[Embedding] Generated {len(context['embeddings'])} neural embeddings"
+                )
             except Exception as e:
                 logger.error(f"[Embedding] Neural embedding generation failed: {e}", exc_info=True)
                 raise
         else:
             # For keyword-only search, create dummy neural embeddings
             context["embeddings"] = [[0.0] * 384] * len(queries)
-            logger.info("[Embedding] Skipping neural embeddings for keyword-only search")
+            logger.debug("[Embedding] Skipping neural embeddings for keyword-only search")
 
         # Generate sparse BM25 embeddings if needed (fail-fast on error when required)
         if self.search_method in ["hybrid", "keyword"]:
             bm25_embedder = BM25Text2Vec(logger=logger)
-            logger.info("[Embedding] Generating BM25 sparse embeddings")
+            logger.debug("[Embedding] Generating BM25 sparse embeddings")
             try:
                 if len(queries) == 1:
                     sparse_embedding = await bm25_embedder.embed(queries[0])
                     context["sparse_embeddings"] = [sparse_embedding]
                 else:
                     context["sparse_embeddings"] = await bm25_embedder.embed_many(queries)
-                logger.info(
+                logger.debug(
                     f"[Embedding] Generated {len(context['sparse_embeddings'])} sparse embeddings"
                 )
             except Exception as e:
@@ -143,7 +145,7 @@ class Embedding(SearchOperation):
                 raise
         else:
             context["sparse_embeddings"] = None
-            logger.info("[Embedding] Skipping sparse embeddings for neural-only search")
+            logger.debug("[Embedding] Skipping sparse embeddings for neural-only search")
 
         # Emit done event with summary stats
         if callable(emitter):
