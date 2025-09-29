@@ -56,6 +56,7 @@ Schema for a Notion database.
 | title | str | The title of the database |
 | description | str | The description of the database |
 | properties | Dict[str, Any] | Database properties schema |
+| properties_text | Optional[str] | Human-readable schema description |
 | parent_id | str | The ID of the parent |
 | parent_type | str | The type of the parent (workspace, page_id, etc.) |
 | icon | Optional[Dict[str, Any]] | The icon of the database |
@@ -78,7 +79,8 @@ Schema for a Notion page with aggregated content.
 | parent_type | str | The type of the parent (workspace, page_id, database_id, etc.) |
 | title | str | The title of the page |
 | content | Optional[str] | Full aggregated content |
-| properties | Dict[str, Any] | Page properties |
+| properties | Dict[str, Any] | Formatted page properties for search |
+| properties_text | Optional[str] | Human-readable properties text |
 | property_entities | List[Any] | Structured property entities |
 | files | List[Any] | Files referenced in the page |
 | icon | Optional[Dict[str, Any]] | The icon of the page |
