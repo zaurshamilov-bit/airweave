@@ -17,7 +17,10 @@ class NotionDatabaseEntity(ChunkEntity):
         default="", description="The description of the database", embeddable=True
     )
     properties: Dict[str, Any] = AirweaveField(
-        default_factory=dict, description="Database properties schema", embeddable=True
+        default_factory=dict, description="Database properties schema", embeddable=False
+    )
+    properties_text: Optional[str] = AirweaveField(
+        default=None, description="Human-readable schema description", embeddable=True
     )
     parent_id: str = AirweaveField(description="The ID of the parent")
     parent_type: str = AirweaveField(
@@ -35,6 +38,46 @@ class NotionDatabaseEntity(ChunkEntity):
         None, description="When the database was last edited", is_updated_at=True
     )
 
+    def model_post_init(self, __context) -> None:
+        """Post-init hook to generate properties_text from schema."""
+        super().model_post_init(__context)
+
+        # Generate human-readable schema text if not already set
+        if self.properties and not self.properties_text:
+            self.properties_text = self._generate_schema_text()
+
+    def _generate_schema_text(self) -> str:
+        """Generate human-readable text from database schema for embedding.
+
+        Creates a clean representation of the database structure.
+        """
+        if not self.properties:
+            return ""
+
+        text_parts = []
+
+        for prop_name, prop_info in self.properties.items():
+            if isinstance(prop_info, dict):
+                prop_type = prop_info.get("type", "unknown")
+
+                # Build property description
+                desc_parts = [f"{prop_name} ({prop_type})"]
+
+                # Add options if available
+                if "options" in prop_info and prop_info["options"]:
+                    options_str = ", ".join(prop_info["options"][:5])  # Limit to first 5
+                    if len(prop_info["options"]) > 5:
+                        options_str += f" +{len(prop_info['options']) - 5} more"
+                    desc_parts.append(f"options: {options_str}")
+
+                # Add format for numbers
+                if "format" in prop_info:
+                    desc_parts.append(f"format: {prop_info['format']}")
+
+                text_parts.append(" ".join(desc_parts))
+
+        return " | ".join(text_parts) if text_parts else ""
+
 
 class NotionPageEntity(ChunkEntity):
     """Schema for a Notion page with aggregated content."""
@@ -49,10 +92,13 @@ class NotionPageEntity(ChunkEntity):
         default=None, description="Full aggregated content", embeddable=True
     )
     properties: Dict[str, Any] = AirweaveField(
-        default_factory=dict, description="Page properties", embeddable=True
+        default_factory=dict, description="Formatted page properties for search", embeddable=False
+    )
+    properties_text: Optional[str] = AirweaveField(
+        default=None, description="Human-readable properties text", embeddable=True
     )
     property_entities: List[Any] = AirweaveField(
-        default_factory=list, description="Structured property entities", embeddable=True
+        default_factory=list, description="Structured property entities", embeddable=False
     )
     files: List[Any] = AirweaveField(
         default_factory=list, description="Files referenced in the page"
@@ -72,6 +118,57 @@ class NotionPageEntity(ChunkEntity):
     )
 
     # Lazy mechanics removed; eager-only entity
+
+    def model_post_init(self, __context) -> None:
+        """Post-init hook to generate properties_text from properties dict."""
+        super().model_post_init(__context)
+
+        # Generate human-readable properties text if not already set
+        if self.properties and not self.properties_text:
+            self.properties_text = self._generate_properties_text()
+
+    def _generate_properties_text(self) -> str:
+        """Generate human-readable text from properties for embedding.
+
+        Creates a clean, searchable representation of property values.
+        """
+        if not self.properties:
+            return ""
+
+        text_parts = []
+
+        # Process properties in a logical order
+        priority_keys = [
+            "Product Name",
+            "Name",
+            "Title",
+            "Status",
+            "Priority",
+            "Launch Status",
+            "Owner",
+            "Team",
+            "Description",
+        ]
+
+        # First add priority properties
+        for key in priority_keys:
+            if key in self.properties:
+                value = self.properties[key]
+                if value and str(value).strip():
+                    # Skip if it's the same as the page title
+                    if key in ["Product Name", "Name", "Title"] and value == self.title:
+                        continue
+                    text_parts.append(f"{key}: {value}")
+
+        # Then add remaining properties
+        for key, value in self.properties.items():
+            if key not in priority_keys and not key.endswith("_options"):
+                if value and str(value).strip():
+                    # Format the key nicely
+                    formatted_key = key.replace("_", " ").title()
+                    text_parts.append(f"{formatted_key}: {value}")
+
+        return " | ".join(text_parts) if text_parts else ""
 
 
 class NotionPropertyEntity(ChunkEntity):

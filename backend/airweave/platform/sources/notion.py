@@ -23,7 +23,6 @@ from airweave.platform.entities.notion import (
     NotionPageEntity,
     NotionPropertyEntity,
 )
-from airweave.platform.file_handling.file_manager import file_manager
 from airweave.platform.sources._base import BaseSource
 from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 
@@ -505,13 +504,21 @@ class NotionSource(BaseSource):
 
         # Extract properties if this is a database page
         property_entities = []
+        formatted_properties = {}  # New: formatted properties dict
         if database_id and database_schema:
             property_entities = await self._extract_page_properties(
                 page, database_id, database_schema
             )
+            # Create formatted properties dict for better searchability
+            formatted_properties = self._create_formatted_properties_dict(
+                page.get("properties", {}), database_schema.get("properties", {})
+            )
 
         # Create the comprehensive page entity
         parent = page.get("parent", {})
+
+        # Generate human-readable properties text
+        properties_text = self._generate_properties_text_for_page(formatted_properties, title)
 
         page_entity = NotionPageEntity(
             entity_id=page_id,
@@ -521,7 +528,8 @@ class NotionSource(BaseSource):
             parent_type=parent.get("type", "workspace"),
             title=title,
             content=content_result["content"],
-            properties=page.get("properties", {}),
+            properties=formatted_properties,  # Use formatted properties instead of raw
+            properties_text=properties_text,  # Add formatted text for embedding
             property_entities=property_entities,
             files=[],  # Don't include files in page entity - they'll be yielded separately
             icon=page.get("icon"),
@@ -577,8 +585,11 @@ class NotionSource(BaseSource):
         # Join all content with appropriate spacing
         full_content = "\n\n".join(filter(None, content_parts))
 
+        # Clean up content for embedding (remove huge URLs, etc.)
+        cleaned_content = self.clean_content_for_embedding(full_content)
+
         return {
-            "content": full_content,
+            "content": cleaned_content,
             "files": files,
             "blocks_count": blocks_count,
             "max_depth": max_depth,
@@ -698,9 +709,14 @@ class NotionSource(BaseSource):
         if block_type in ["embed", "bookmark"]:
             url = block_content.get("url", "")
             caption = self._extract_rich_text_plain(block_content.get("caption", []))
-            content = f"[{block_type.title()}]({url})"
+            # For embeddable text, don't include the full URL if it's very long
+            # Just indicate it's an embed/bookmark
+            if len(url) > 200 or "?" in url and len(url.split("?", 1)[1]) > 100:
+                content = f"[{block_type.title()}]"
+            else:
+                content = f"[{block_type.title()}]({url})"
             if caption:
-                content += f"\n*{caption}*"
+                content += f" - {caption}"
             return content
         elif block_type == "equation":
             expression = block_content.get("expression", "")
@@ -756,13 +772,18 @@ class NotionSource(BaseSource):
         files = [file_entity]
         caption = self._extract_rich_text_plain(block_content.get("caption", []))
 
+        # For embedding text, use simplified representation without full URLs
+        # The actual URL is preserved in the file entity
         if block_type == "image":
-            content = f"![{file_entity.name}]({file_entity.url})"
+            # Just use the filename or a generic placeholder for images
+            display_name = file_entity.name if file_entity.name != "Untitled File" else "Image"
+            content = f"[Image: {display_name}]"
         else:
-            content = f"[{file_entity.name}]({file_entity.url})"
+            # For other files, just show the filename
+            content = f"[File: {file_entity.name}]"
 
         if caption:
-            content += f"\n*{caption}*"
+            content += f" - {caption}"
 
         return content, files
 
@@ -880,13 +901,20 @@ class NotionSource(BaseSource):
 
         parent = database.get("parent", {})
 
+        # Format database schema properties for better searchability
+        formatted_schema = self._format_database_schema(database.get("properties", {}))
+
+        # Generate human-readable schema text
+        properties_text = self._generate_schema_text_for_database(formatted_schema)
+
         return NotionDatabaseEntity(
             entity_id=database_id,
             breadcrumbs=[],
             database_id=database_id,
             title=title or "Untitled Database",
             description=description,
-            properties=database.get("properties", {}),
+            properties=formatted_schema,  # Use formatted schema
+            properties_text=properties_text,  # Add formatted text for embedding
             parent_id=parent.get("page_id", ""),
             parent_type=parent.get("type", "workspace"),
             icon=database.get("icon"),
@@ -897,6 +925,67 @@ class NotionSource(BaseSource):
             created_time=self._parse_datetime(database.get("created_time")),
             last_edited_time=self._parse_datetime(database.get("last_edited_time")),
         )
+
+    def _format_database_schema(self, properties: dict) -> Dict[str, Any]:
+        """Format database schema properties for better searchability.
+
+        Creates a simplified schema dict with property names and types,
+        plus key metadata like select options.
+        """
+        formatted = {}
+
+        for prop_name, prop_config in properties.items():
+            prop_type = prop_config.get("type", "")
+
+            # Store basic info
+            prop_info = {"type": prop_type, "name": prop_config.get("name", prop_name)}
+
+            # Add options for select/status/multi_select
+            if prop_type in ["select", "status"]:
+                options = prop_config.get(prop_type, {}).get("options", [])
+                prop_info["options"] = [opt.get("name", "") for opt in options if opt.get("name")]
+            elif prop_type == "multi_select":
+                options = prop_config.get("multi_select", {}).get("options", [])
+                prop_info["options"] = [opt.get("name", "") for opt in options if opt.get("name")]
+            elif prop_type == "number":
+                format_type = prop_config.get("number", {}).get("format", "number")
+                prop_info["format"] = format_type  # e.g., "percent", "dollar", etc.
+
+            formatted[prop_name] = prop_info
+
+        return formatted
+
+    def _generate_schema_text_for_database(self, schema: Dict[str, Any]) -> str:
+        """Generate human-readable text from database schema for embedding.
+
+        Creates a clean representation of the database structure.
+        """
+        if not schema:
+            return ""
+
+        text_parts = []
+
+        for prop_name, prop_info in schema.items():
+            if isinstance(prop_info, dict):
+                prop_type = prop_info.get("type", "unknown")
+
+                # Build property description
+                desc_parts = [f"{prop_name} ({prop_type})"]
+
+                # Add options if available
+                if "options" in prop_info and prop_info["options"]:
+                    options_str = ", ".join(prop_info["options"][:5])  # Limit to first 5
+                    if len(prop_info["options"]) > 5:
+                        options_str += f" +{len(prop_info['options']) - 5} more"
+                    desc_parts.append(f"options: {options_str}")
+
+                # Add format for numbers
+                if "format" in prop_info:
+                    desc_parts.append(f"format: {prop_info['format']}")
+
+                text_parts.append(" ".join(desc_parts))
+
+        return " | ".join(text_parts) if text_parts else ""
 
     def _create_property_entity(
         self, prop_name: str, prop_value: dict, schema_prop: dict, page_id: str, database_id: str
@@ -1122,6 +1211,95 @@ class NotionSource(BaseSource):
             return f"{len(value.get('array', []))} item(s)"
         return ""
 
+    def _create_formatted_properties_dict(
+        self, page_properties: dict, database_schema: dict
+    ) -> Dict[str, Any]:
+        """Create a clean, formatted properties dictionary for better searchability.
+
+        Instead of storing raw Notion API responses, create a simplified dict with:
+        - Property names as keys
+        - Formatted human-readable values
+        - Essential metadata only (type, options for selects)
+        """
+        formatted = {}
+
+        for prop_name, prop_value in page_properties.items():
+            if not prop_value:
+                continue
+
+            prop_type = prop_value.get("type", "")
+
+            # Get the formatted value using existing formatting methods
+            formatted_value = self._format_property_value(prop_value, prop_type)
+
+            # Skip empty values
+            if not formatted_value:
+                continue
+
+            # Store clean formatted value
+            formatted[prop_name] = formatted_value
+
+            # For select/status properties, also store the options from schema for searchability
+            if prop_type in ["select", "status", "multi_select"] and prop_name in database_schema:
+                schema_prop = database_schema[prop_name]
+                if prop_type == "multi_select":
+                    options = schema_prop.get("multi_select", {}).get("options", [])
+                else:
+                    options = schema_prop.get(prop_type, {}).get("options", [])
+
+                if options:
+                    # Store available options as metadata
+                    formatted[f"{prop_name}_options"] = [
+                        opt.get("name", "") for opt in options if opt.get("name")
+                    ]
+
+        return formatted
+
+    def _generate_properties_text_for_page(
+        self, properties: Dict[str, Any], page_title: str
+    ) -> str:
+        """Generate human-readable text from properties for embedding.
+
+        Creates a clean, searchable representation of property values.
+        """
+        if not properties:
+            return ""
+
+        text_parts = []
+
+        # Process properties in a logical order
+        priority_keys = [
+            "Product Name",
+            "Name",
+            "Title",
+            "Status",
+            "Priority",
+            "Launch Status",
+            "Owner",
+            "Team",
+            "Description",
+        ]
+
+        # First add priority properties
+        for key in priority_keys:
+            if key in properties:
+                value = properties[key]
+                if value and str(value).strip():
+                    # Skip if it's the same as the page title
+                    if key in ["Product Name", "Name", "Title"] and value == page_title:
+                        continue
+                    text_parts.append(f"{key}: {value}")
+
+        # Then add remaining properties
+        for key, value in properties.items():
+            if key not in priority_keys and not key.endswith("_options"):
+                if value and str(value).strip():
+                    # Format the key nicely
+                    formatted_key = key.replace("_", " ").title()
+                    text_parts.append(f"{formatted_key}: {value}")
+
+        return " | ".join(text_parts) if text_parts else ""
+
     def _parse_datetime(self, datetime_str: Optional[str]) -> Optional[datetime]:
         """Parse datetime string to datetime object.
 
@@ -1334,19 +1512,11 @@ class NotionSource(BaseSource):
                     file_entity=file_entity, access_token=self.access_token, headers=headers
                 )
             else:  # file_type == "file"
-                # For Notion-hosted files, use the temporary URL directly
-                # Pre-signed URLs don't need authentication
-                try:
-                    # Try with access token first
-                    processed_entity = await self.process_file_entity(
-                        file_entity=file_entity, access_token=self.access_token
-                    )
-                except Exception:
-                    # If that fails, try the custom pre-signed file processing
-                    self.logger.info(
-                        f"Falling back to pre-signed URL processing for {file_entity.name}"
-                    )
-                    processed_entity = await self._process_presigned_file(file_entity)
+                # For Notion-hosted files with pre-signed URLs, base class handles correctly
+                # It will detect the pre-signed URL and not add Authorization header
+                processed_entity = await self.process_file_entity(
+                    file_entity=file_entity, access_token=self.access_token
+                )
 
             if processed_entity and not processed_entity.airweave_system_metadata.should_skip:
                 self.logger.info(
@@ -1363,39 +1533,6 @@ class NotionSource(BaseSource):
             return None
         except Exception as e:
             self.logger.error(f"Error processing file {file_entity.name}: {str(e)}")
-            return None
-
-    async def _process_presigned_file(
-        self, file_entity: NotionFileEntity
-    ) -> Optional[NotionFileEntity]:
-        """Process a file with a pre-signed URL that doesn't need authentication."""
-        self.logger.info(f"Processing pre-signed file entity: {file_entity.name}")
-
-        try:
-            # Create stream without access token for pre-signed URLs
-            # Note: stream_file_from_url is an async generator function, not a coroutine
-            file_stream = file_manager.stream_file_from_url(
-                file_entity.download_url, access_token=None, headers=None, logger=self.logger
-            )
-
-            # Process entity directly with the file manager
-            processed_entity = await file_manager.handle_file_entity(
-                stream=file_stream, entity=file_entity, logger=self.logger
-            )
-
-            # Skip if file was too large
-            if processed_entity.airweave_system_metadata.should_skip:
-                error_msg = "Unknown reason"
-                if processed_entity.metadata:
-                    error_msg = processed_entity.metadata.get("error", "Unknown reason")
-                self.logger.warning(f"Skipping file {processed_entity.name}: {error_msg}")
-
-            return processed_entity
-        except NotionSource.NotionAccessError as e:
-            self.logger.warning(f"Access issue processing pre-signed file {file_entity.name}: {e}")
-            return None
-        except Exception as e:
-            self.logger.error(f"Error processing pre-signed file {file_entity.name}: {e}")
             return None
 
     # Removed lazy page entity creation and related helpers to simplify to eager-only generation
