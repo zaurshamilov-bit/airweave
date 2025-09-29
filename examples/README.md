@@ -17,9 +17,9 @@ A comprehensive Python script that walks through the complete Airweave quickstar
 ## Usage
 
 ### Prerequisites
-- Python 3.7+
+- Python 3.11+
 - Airweave SDK: `pip install airweave-sdk`
-- Valid Airweave API key
+- Valid Airweave API key (obtainable from Airweave dashboard)
 
 ### Running the Tutorial
 
@@ -64,7 +64,7 @@ After completing the tutorial:
 
 - [Full Documentation](https://docs.airweave.ai)
 - [API Reference](https://docs.airweave.ai/api-reference)
-- [Community Discord](https://discord.gg/484HY9Ehxt)
+- [Discord Server](https://discord.gg/484HY9Ehxt)
 - [GitHub Repository](https://github.com/airweave-ai/airweave)
 
 ## Support

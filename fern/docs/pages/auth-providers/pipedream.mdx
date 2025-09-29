@@ -16,7 +16,7 @@ Pipedream enables workflow automation with 2,000+ integrated apps. Airweave can 
 This integration involves two separate OAuth clients:
 
 1. **Pipedream OAuth client**: Allows Airweave to access Pipedream's API
-2. **Source app OAuth clients**: Custom OAuth clients you create for each source app (Notion, Slack, etc.)
+2. **Source app OAuth clients**: Custom OAuth clients you create for each source app (Notion, Google Drive, etc.)
 
 <Callout type="warning">
 **Important**: Pipedream only exposes credentials for accounts created with your own custom OAuth clients. Default Pipedream OAuth connections cannot be used with Airweave.
@@ -29,7 +29,7 @@ This integration involves two separate OAuth clients:
 - Pipedream OAuth client credentials (for Airweave to Pipedream authentication)
 
 ### For source app access:
-- Custom OAuth clients created in each source app (Notion, Slack, Google Drive, etc.)
+- Custom OAuth clients created in each source app (Notion, Google Drive, etc.)
 - Source app accounts connected to Pipedream using your custom OAuth clients
 - Not accounts connected using Pipedream's default OAuth implementations
 
@@ -62,7 +62,7 @@ This integration involves two separate OAuth clients:
   </Step>
 
   <Step title="Create custom OAuth clients for source apps" toc={true}>
-    For each source app you want to sync (Notion, Slack, etc.), you must create custom OAuth clients:
+    For each source app you want to sync (Notion, Google Drive, etc.), you must create custom OAuth clients:
 
 
 
@@ -72,13 +72,6 @@ This integration involves two separate OAuth clients:
 1. Go to [Notion Developers](https://developers.notion.com)
 2. Create a new integration
 3. Configure OAuth settings with your redirect URIs
-4. Save the `client_id` and `client_secret`
-  </Accordion>
-
-  <Accordion title="For Slack">
-1. Go to [Slack API](https://api.slack.com/apps)
-2. Create a new app
-3. Configure OAuth & Permissions
 4. Save the `client_id` and `client_secret`
   </Accordion>
 
@@ -96,7 +89,7 @@ Follow similar steps for Google Drive, GitHub, or other source integrations.
 
     <Step title="Connect source apps in Pipedream using custom OAuth" toc={true}>
     1. In Pipedream, go to your project's connections
-2. For each source app (Notion, Slack, etc.):
+2. For each source app (Notion, Google Drive, etc.):
    - Choose "Custom OAuth" option
    - Enter your custom OAuth client credentials from Step 3
    - Complete the OAuth flow to connect your account
@@ -284,7 +277,7 @@ This affects the connection between Airweave and Pipedream's API:
 
 ### `Failed to refresh token` (Source App Authentication)
 This affects the source app tokens retrieved from Pipedream:
-- Verify your source app OAuth client (e.g., Notion, Slack) is still active
+- Verify your source app OAuth client (e.g., Notion, Google Drive) is still active
 - Check if the source app tokens have been revoked
 - Ensure the source app OAuth client has required permissions
 
@@ -359,7 +352,7 @@ curl -X POST 'https://app.airweave.ai/source-connections' \
 
 1. **Dual OAuth setup required**: You need to create and manage two separate OAuth clients:
    - One for Pipedream API access (Airweave to Pipedream)
-   - One for each source app (Pipedream to Notion/Slack/etc.)
+   - One for each source app (Pipedream to Notion/Asana/etc.)
 
 2. **Custom OAuth clients only**:
    - Source app connections must use your own OAuth clients
