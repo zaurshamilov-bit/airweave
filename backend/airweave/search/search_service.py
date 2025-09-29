@@ -173,7 +173,7 @@ class SearchService:
         if len(merged) > max_results:
             merged = merged[:max_results]
 
-        ctx.logger.info(f"Merged {len(all_results)} results into {len(merged)} unique documents")
+        ctx.logger.debug(f"Merged {len(all_results)} results into {len(merged)} unique documents")
 
         return merged
 
@@ -417,13 +417,13 @@ class SearchService:
     ) -> BaseEmbeddingModel:
         """Get the appropriate embedding model based on configuration."""
         if settings.OPENAI_API_KEY:
-            ctx.logger.info(
+            ctx.logger.debug(
                 f"Using OpenAI embedding model for search in collection "
                 f"{readable_id} {collection_id}"
             )
             return OpenAIText2Vec(api_key=settings.OPENAI_API_KEY, logger=ctx.logger)
         else:
-            ctx.logger.info(
+            ctx.logger.debug(
                 f"Using local embedding model for search in collection "
                 f"{readable_id} {collection_id}"
             )
@@ -462,7 +462,7 @@ class SearchService:
         # Execute the expansion
         await query_expander.execute(temp_context)
         expanded_queries = temp_context.get("expanded_queries", [query])
-        ctx.logger.info(
+        ctx.logger.debug(
             f"Expanded query '{query}' to {len(expanded_queries)} variants "
             f"using {expansion_strategy.value} strategy"
         )

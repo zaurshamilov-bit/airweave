@@ -6,53 +6,79 @@ results using large language models.
 
 from typing import Any, Dict, List, Optional
 
+from groq import AsyncGroq
+
+from airweave.core.config import settings
 from airweave.search.operations.base import SearchOperation
 
 # Default prompt for completion generation
-CONTEXT_PROMPT = """You are Airweave's search answering assistant.
+CONTEXT_PROMPT = """You are an AI assistant that synthesizes an accurate, helpful answer from
+retrieved context. Your job is to:
+1) Read the provided context snippets
+2) Weigh their relevance using the provided similarity Score (higher = more relevant)
+3) Compose a clear, well-structured answer that cites only the sources you actually used
 
-Your job:
-1) Answer the user's question directly using ONLY the provided context snippets
-2) Prefer concise, well-structured answers; no meta commentary
-3) Cite sources inline using [[entity_id]] immediately after each claim derived from a snippet
+Important retrieval note:
+- The context is produced by a hybrid keyword + vector (semantic) search.
+- High similarity means "related", but it does NOT guarantee that an item satisfies
+  the user's constraints. You must verify constraints explicitly using evidence in
+  the snippet's fields/content.
 
-Retrieval notes:
-- Context comes from hybrid keyword + vector (semantic) search.
-- Higher similarity Score means "more related", but you must verify constraints using explicit
-  evidence in the snippet fields/content.
-- Do not rely on outside knowledge.
+When the user asks to FIND/LIST/SHOW entities with constraints:
+- Recognize find/list intent. Prefer list-mode when the query includes terms like
+  "find", "list", "show", "who are", "which people", or specifies role/company/location
+  constraints.
+- If the intent is ambiguous but the query specifies entity attributes (role, company, location,
+  skills, etc.), default to list-mode and apply strict constraint checking.
+- Return as many matching items as possible from the provided context; do not summarize to a few.
+- Apply strict, conservative constraint checking (AND semantics for all constraints):
+  - Accept an item only if evidence for each constraint is explicit and unambiguous in the snippet
+    (e.g., role/title, employer type, and location are clearly stated).
+  - Exclude false positives and loose associations.
+  - If evidence is missing or ambiguous for any constraint, exclude the item rather than guessing.
+- Output format for such queries:
+  - Bullet list with one line per matching item.
+  - Include a minimal identifying label (e.g., name/title) and a short justification citing the
+    decisive evidence (role/company/location, etc.). Add an inline source reference [[entity_id]].
+  - Do not cap the number of items; list all matches present in the provided context.
+  - Start with a line like: "Matches found: N" where N is the number of items you list.
 
-Default behavior (QA-first):
-- Treat the query as a question to answer. Synthesize the best answer from relevant snippets.
-- If only part of the answer is present, provide a partial answer and clearly note missing pieces.
-- If snippets disagree, prefer higher-Score evidence and note conflicts briefly.
+For general explanatory/text questions (summaries, how-tos, overviews):
+- Synthesize a concise, direct answer using the most relevant snippets.
 
-When the user explicitly asks to FIND/LIST/SHOW items with constraints:
-- Switch to list mode.
-- Use AND semantics across constraints when evidence is explicit.
-- If an item is likely relevant but missing some constraints, include it as "Partial:" and name the
-  missing/uncertain fields.
-- Output:
-  - Start with "Matches found: N (Partial: M)"
-  - One bullet per item labeled "Match:" or "Partial:", minimal identifier + brief justification
-    + [[entity_id]]
+IMPORTANT: When you use information from the context, you MUST reference the source using
+the format [[entity_id]] immediately after the information. These references will be rendered
+as clickable links in the interface. Only reference sources you actually used in your answer.
+If you're not sure or didn't use a source, don't reference it.
 
-Citations:
-- Add [[entity_id]] immediately after each sentence or clause that uses information from a snippet.
-- Only cite sources you actually used.
+DO NOT include "Answer" or any similar header at the beginning of your response. Start directly
+with the content of your answer.
 
-Formatting:
-- Start directly with the answer (no headers like "Answer:").
-- Use proper markdown: short paragraphs, bullet lists or tables when helpful; code in fenced blocks.
-
-Refusal policy:
-- If at least some snippets are relevant, answer with what is known and note gaps.
-- Only reply with 'I don't have enough information to answer that question based on the available
-  data.' when NONE of the snippets contain relevant facts for the request.
+Always format your responses in proper markdown:
+- For tables, use proper markdown table syntax:
+  | Column 1 | Column 2 |
+  |----------|----------|
+  | Value 1  | Value 2  |
+- Use headers sparingly for complex information (## for sections, ### for subsections)
+- Format code with ```language blocks
+- Use **bold** for emphasis and *italic* for subtle emphasis
+- Use bullet points (- or •) or numbered lists (1. 2. 3.) for lists
+- Source references using [[entity_id]] format inline with the text
 
 Here's the context with entity IDs:
 {context}
-"""
+
+Remember to:
+1. Start your response directly with the answer, no introductory headers
+2. Be concise and direct
+3. Use proper markdown table syntax when presenting tabular data
+4. Include source references [[entity_id]] inline where you use the information
+5. Prefer higher-Score results when sources conflict
+6. If listing sources at the end, use a "Sources:" section with bullet points
+
+If the provided context doesn't contain information to answer the query directly,
+respond with 'I don't have enough information to answer that question based on the
+available data.'"""
 
 
 class CompletionGeneration(SearchOperation):
@@ -68,7 +94,7 @@ class CompletionGeneration(SearchOperation):
 
     def __init__(
         self,
-        default_model: str = "gpt-5-nano",
+        default_model: str = "openai/gpt-oss-120b",
         max_results_context: int = 100,
         max_tokens: int = 10000,
     ):
@@ -109,8 +135,6 @@ class CompletionGeneration(SearchOperation):
         """
         import time
 
-        from openai import AsyncOpenAI
-
         start_time = time.time()
 
         # Get results - prefer final_results if reranking ran
@@ -118,7 +142,7 @@ class CompletionGeneration(SearchOperation):
         query = context["query"]
         config = context["config"]
         logger = context["logger"]
-        openai_api_key = context.get("openai_api_key")
+        groq_api_key = getattr(settings, "GROQ_API_KEY", None)
 
         logger.debug(f"[CompletionGeneration] Started at {time.time() - start_time:.2f}s")
 
@@ -127,10 +151,9 @@ class CompletionGeneration(SearchOperation):
             logger.debug("[CompletionGeneration] No results to generate completion from")
             return
 
-        if not openai_api_key:
-            context["completion"] = "OpenAI API key not configured. Cannot generate completion."
-            logger.warning("[CompletionGeneration] No OpenAI API key available")
-            return
+        if not groq_api_key:
+            # Fail-fast policy: completion requires GROQ_API_KEY
+            raise RuntimeError("CompletionGeneration requires GROQ_API_KEY but none is configured")
 
         # Limit results for context to avoid token limits
         results_for_context = results[: self.max_results_context]
@@ -144,23 +167,27 @@ class CompletionGeneration(SearchOperation):
         )
 
         try:
-            # Initialize OpenAI client
+            # Initialize Groq client (reads GROQ_API_KEY from environment)
             client_init_time = time.time()
-            client = AsyncOpenAI(api_key=openai_api_key)
+            client = AsyncGroq()
             logger.debug(
-                f"[CompletionGeneration] Client initialized in "
+                f"[CompletionGeneration] Groq client initialized in "
                 f"{(time.time() - client_init_time) * 1000:.2f}ms"
             )
 
-            # Format results for context
+            # Format results for context with large token budget (≈120k)
             format_start = time.time()
-            formatted_context = self._format_results(results_for_context)
+            formatted_context, chosen_count = self._format_results_with_budget(
+                results_for_context, query
+            )
             format_time = (time.time() - format_start) * 1000
 
+            total_results = len(results_for_context)
+            context_chars = len(formatted_context)
             logger.debug(
-                f"[CompletionGeneration] Formatted {len(results_for_context)} results "
-                f"in {format_time:.2f}ms. "
-                f"Context length: {len(formatted_context)} chars"
+                f"[CompletionGeneration] Formatted {chosen_count}/{total_results} "
+                f"results in {format_time:.2f}ms. "
+                f"Context length: {context_chars} chars"
             )
 
             # Prepare messages (shared for streaming and non-streaming)
@@ -170,14 +197,20 @@ class CompletionGeneration(SearchOperation):
             ]
 
             # Calculate approximate token count (rough estimate)
-            total_chars = len(formatted_context) + len(CONTEXT_PROMPT) + len(query)
-            estimated_tokens = total_chars / 4  # Rough estimate: 1 token ≈ 4 chars
-            logger.debug(f"[CompletionGeneration] Estimated input tokens: ~{estimated_tokens:.0f}")
+            estimated_tokens = (
+                self._estimate_tokens(CONTEXT_PROMPT)
+                + self._estimate_tokens(query)
+                + self._estimate_tokens(formatted_context)
+            )
+            logger.debug(
+                f"[CompletionGeneration] Estimated input tokens: ~{estimated_tokens:.0f} "
+                "(budget ≈120k)"
+            )
 
             # Streaming or non-streaming completion
             request_id: Optional[str] = context.get("request_id")
             api_start = time.time()
-            logger.debug(f"[CompletionGeneration] Calling OpenAI API with model {model}...")
+            logger.debug(f"[CompletionGeneration] Calling Groq API with model {model}...")
 
             if request_id:
                 emitter = context.get("emit")
@@ -190,8 +223,6 @@ class CompletionGeneration(SearchOperation):
                     messages=messages,
                     max_completion_tokens=self.max_tokens,
                     top_p=1,
-                    frequency_penalty=0,
-                    presence_penalty=0,
                     stream=True,
                 )
                 async for chunk in stream:  # type: ignore
@@ -216,11 +247,9 @@ class CompletionGeneration(SearchOperation):
                 if callable(emitter):
                     await emitter("completion_done", {"text": final_text}, op_name=self.name)
                 api_time = (time.time() - api_start) * 1000
-                logger.debug(
-                    f"[CompletionGeneration] OpenAI streaming completed in {api_time:.2f}ms"
-                )
+                logger.debug(f"[CompletionGeneration] Groq streaming completed in {api_time:.2f}ms")
             else:
-                # Use Chat Completions (same pattern as llm_judge) for non-streaming
+                # Use Groq Chat Completions for non-streaming
                 try:
                     logger.debug(
                         f"[CompletionGeneration] input: {model} {messages} {self.max_tokens}"
@@ -233,7 +262,7 @@ class CompletionGeneration(SearchOperation):
 
                     api_time = (time.time() - api_start) * 1000
                     logger.debug(
-                        f"[CompletionGeneration] Chat API call completed in {api_time:.2f}ms"
+                        f"[CompletionGeneration] Groq Chat API call completed in {api_time:.2f}ms"
                     )
 
                     text: Optional[str] = None
@@ -256,11 +285,11 @@ class CompletionGeneration(SearchOperation):
                         context["completion"] = (
                             "Unable to generate completion from the search results."
                         )
-                        logger.warning(
+                        logger.debug(
                             "[CompletionGeneration] Chat Completions returned empty content"
                         )
                         try:
-                            logger.warning(f"[CompletionGeneration] Response: {chat_response}")
+                            logger.debug(f"[CompletionGeneration] Response: {chat_response}")
                         except Exception:
                             pass
                 except Exception as resp_err:
@@ -296,6 +325,71 @@ class CompletionGeneration(SearchOperation):
             formatted_parts.append(formatted_part)
 
         return "\n\n---\n\n".join(formatted_parts)
+
+    def _format_results_with_budget(self, results: List[Dict], query: str) -> tuple[str, int]:
+        """Format results while respecting a large token budget (~120k).
+
+        This mirrors the budgeting approach used in reranking to avoid exceeding
+        the context window while still maximizing useful context sent to the LLM.
+
+        Args:
+            results: Search results to format
+            query: Original user query (counted toward token budget)
+
+        Returns:
+            A tuple of (formatted_context, chosen_count)
+        """
+        if not results:
+            return "No search results available.", 0
+
+        MAX_CONTEXT_TOKENS = 120_000
+        SAFETY_TOKENS = 2_000
+
+        separator = "\n\n---\n\n"
+
+        static_tokens = self._estimate_tokens(CONTEXT_PROMPT) + self._estimate_tokens(query)
+        running_tokens = static_tokens
+
+        chosen_parts: List[str] = []
+        chosen_count = 0
+
+        for i, result in enumerate(results, 1):
+            part = self._format_single_result(i, result)
+            need_tokens = self._estimate_tokens(part)
+            sep_tokens = self._estimate_tokens(separator) if i > 1 else 0
+            if running_tokens + need_tokens + sep_tokens + SAFETY_TOKENS <= MAX_CONTEXT_TOKENS:
+                if i > 1:
+                    chosen_parts.append(separator)
+                chosen_parts.append(part)
+                running_tokens += need_tokens + sep_tokens
+                chosen_count += 1
+            else:
+                break
+
+        if not chosen_parts:
+            # Always include at least the first result if available and fits with safety
+            first_part = self._format_single_result(1, results[0])
+            if (
+                static_tokens + self._estimate_tokens(first_part) + SAFETY_TOKENS
+                <= MAX_CONTEXT_TOKENS
+            ):
+                return first_part, 1
+            return "No search results available within token budget.", 0
+
+        return "".join(chosen_parts), chosen_count
+
+    def _estimate_tokens(self, text: str) -> int:
+        """Roughly estimate token count from text length.
+
+        Uses a 4 chars ≈ 1 token heuristic consistent with other modules.
+        """
+        try:
+            return int(len(text) / 4)
+        except Exception:
+            try:
+                return int(float(len(text)) / 4)
+            except Exception:
+                return len(text) // 4
 
     def _format_single_result(self, index: int, result: Dict) -> str:
         """Format a single search result.
@@ -344,31 +438,21 @@ class CompletionGeneration(SearchOperation):
 
     def _add_content_field(self, parts: List[str], payload: Dict):
         """Add content field to parts."""
-        # Include BOTH embeddable_text and md_content if they exist
-        content_added = False
-
-        # Add embeddable_text if it exists and is non-empty
+        # Prefer embeddable_text; otherwise fall back to md_content; otherwise to other fields.
+        # Avoid duplication when both exist.
         embeddable_text = payload.get("embeddable_text", "").strip()
         if embeddable_text:
-            # Never truncate - give LLM as much context as possible
             parts.append(f"**Embeddable Text:**\n{embeddable_text}")
-            content_added = True
+            return
 
-        # Add md_content if it exists and is non-empty
         md_content = payload.get("md_content", "").strip()
         if md_content:
-            # Never truncate - give LLM as much context as possible
             parts.append(f"**Content:**\n{md_content}")
-            content_added = True
+            return
 
-        # If neither embeddable_text nor md_content exist, fall back to other fields
-        if not content_added:
-            content = (
-                payload.get("content") or payload.get("text") or payload.get("description", "")
-            )
-            if content:
-                # Never truncate - give LLM as much context as possible
-                parts.append(f"**Content:**\n{content}")
+        content = payload.get("content") or payload.get("text") or payload.get("description", "")
+        if content:
+            parts.append(f"**Content:**\n{content}")
 
     def _add_metadata_field(self, parts: List[str], payload: Dict):
         """Add metadata field to parts."""

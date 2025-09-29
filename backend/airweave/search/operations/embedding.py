@@ -46,7 +46,7 @@ class Embedding(SearchOperation):
         # We check at runtime if query_expansion actually ran
         return ["query_expansion"]
 
-    async def execute(self, context: Dict[str, Any]) -> None:
+    async def execute(self, context: Dict[str, Any]) -> None:  # noqa: C901
         """Generate embeddings for queries.
 
         Reads from context:
@@ -69,7 +69,7 @@ class Embedding(SearchOperation):
         openai_api_key = context.get("openai_api_key")
         emitter = context.get("emit")
 
-        logger.info(
+        logger.debug(
             f"[Embedding] Generating embeddings for {len(queries)} queries "
             f"with search_method={self.search_method}"
         )
@@ -84,124 +84,110 @@ class Embedding(SearchOperation):
             except Exception:
                 pass
 
-        try:
-            # Generate neural embeddings if needed
-            if self.search_method in ["hybrid", "neural"]:
-                # Select embedding model based on configuration and available keys
-                if self.model == "openai" and openai_api_key:
-                    embedder = OpenAIText2Vec(api_key=openai_api_key, logger=logger)
-                    logger.info("[Embedding] Using OpenAI embedding model")
-                elif self.model == "local":
-                    embedder = LocalText2Vec(logger=logger)
-                    logger.info("[Embedding] Using local embedding model")
-                elif self.model == "auto":
-                    # Auto-select based on API key availability
-                    if openai_api_key:
-                        embedder = OpenAIText2Vec(api_key=openai_api_key, logger=logger)
-                        logger.info("[Embedding] Auto-selected OpenAI embedding model")
-                    else:
-                        embedder = LocalText2Vec(logger=logger)
-                        logger.info(
-                            "[Embedding] Auto-selected local embedding model (no OpenAI key)"
-                        )
-                else:
-                    # Default to local if model is unrecognized
-                    embedder = LocalText2Vec(logger=logger)
-                    logger.warning(
-                        f"[Embedding] Unknown model '{self.model}', using local embedding model"
+        # Generate neural embeddings if needed
+        if self.search_method in ["hybrid", "neural"]:
+            # Select embedding model based on configuration and available keys
+            if self.model == "openai":
+                if not openai_api_key:
+                    raise RuntimeError(
+                        "Embedding model 'openai' selected but OPENAI_API_KEY is not configured"
                     )
+                embedder = OpenAIText2Vec(api_key=openai_api_key, logger=logger)
+                logger.debug("[Embedding] Using OpenAI embedding model")
+            elif self.model == "local":
+                embedder = LocalText2Vec(logger=logger)
+                logger.debug("[Embedding] Using local embedding model")
+            elif self.model == "auto":
+                # Auto-select based on API key availability
+                if openai_api_key:
+                    embedder = OpenAIText2Vec(api_key=openai_api_key, logger=logger)
+                    logger.debug("[Embedding] Auto-selected OpenAI embedding model")
+                else:
+                    embedder = LocalText2Vec(logger=logger)
+                    logger.debug("[Embedding] Auto-selected local embedding model (no OpenAI key)")
+            else:
+                # Unknown model is a configuration error
+                raise RuntimeError(f"Unknown embedding model '{self.model}'")
 
-                # Generate neural embeddings
+            # Generate neural embeddings (fail-fast on error)
+            try:
                 if len(queries) == 1:
-                    # Single query - use embed method
                     embedding = await embedder.embed(queries[0])
                     context["embeddings"] = [embedding]
                 else:
-                    # Multiple queries - use embed_many for efficiency
                     context["embeddings"] = await embedder.embed_many(queries)
+                logger.debug(
+                    f"[Embedding] Generated {len(context['embeddings'])} neural embeddings"
+                )
+            except Exception as e:
+                logger.error(f"[Embedding] Neural embedding generation failed: {e}", exc_info=True)
+                raise
+        else:
+            # For keyword-only search, create dummy neural embeddings
+            context["embeddings"] = [[0.0] * 384] * len(queries)
+            logger.debug("[Embedding] Skipping neural embeddings for keyword-only search")
 
-                logger.info(f"[Embedding] Generated {len(context['embeddings'])} neural embeddings")
-            else:
-                # For keyword-only search, create dummy neural embeddings
-                context["embeddings"] = [[0.0] * 384] * len(queries)
-                logger.info("[Embedding] Skipping neural embeddings for keyword-only search")
-
-            # Generate sparse BM25 embeddings if needed
-            if self.search_method in ["hybrid", "keyword"]:
-                bm25_embedder = BM25Text2Vec(logger=logger)
-                logger.info("[Embedding] Generating BM25 sparse embeddings")
-
+        # Generate sparse BM25 embeddings if needed (fail-fast on error when required)
+        if self.search_method in ["hybrid", "keyword"]:
+            bm25_embedder = BM25Text2Vec(logger=logger)
+            logger.debug("[Embedding] Generating BM25 sparse embeddings")
+            try:
                 if len(queries) == 1:
                     sparse_embedding = await bm25_embedder.embed(queries[0])
                     context["sparse_embeddings"] = [sparse_embedding]
                 else:
                     context["sparse_embeddings"] = await bm25_embedder.embed_many(queries)
-
-                logger.info(
+                logger.debug(
                     f"[Embedding] Generated {len(context['sparse_embeddings'])} sparse embeddings"
                 )
-            else:
-                context["sparse_embeddings"] = None
-                logger.info("[Embedding] Skipping sparse embeddings for neural-only search")
+            except Exception as e:
+                logger.error(f"[Embedding] Sparse embedding generation failed: {e}", exc_info=True)
+                raise
+        else:
+            context["sparse_embeddings"] = None
+            logger.debug("[Embedding] Skipping sparse embeddings for neural-only search")
 
-            # Emit done event with summary stats
-            if callable(emitter):
+        # Emit done event with summary stats
+        if callable(emitter):
+            try:
+                using_llm = (
+                    openai_api_key
+                    and self.search_method in ["hybrid", "neural"]
+                    and self.model in ["openai", "auto"]
+                )
+                using_local = (
+                    self.search_method in ["hybrid", "neural"]
+                    and self.model in ["local", "auto"]
+                    and not openai_api_key
+                )
+                model_used = "openai" if using_llm else ("local" if using_local else "none")
+
+                dim = len(context["embeddings"][0]) if context.get("embeddings") else None
+                avg_nz = None
                 try:
-                    using_llm = (
-                        openai_api_key
-                        and self.search_method in ["hybrid", "neural"]
-                        and self.model in ["openai", "auto"]
-                    )
-                    using_local = (
-                        self.search_method in ["hybrid", "neural"]
-                        and self.model in ["local", "auto"]
-                        and not openai_api_key
-                    )
-                    model_used = "openai" if using_llm else ("local" if using_local else "none")
-
-                    dim = len(context["embeddings"][0]) if context.get("embeddings") else None
-                    avg_nz = None
-                    try:
-                        if context.get("sparse_embeddings"):
-                            nz = [
-                                len(getattr(v, "indices", []) or [])
-                                for v in context["sparse_embeddings"]
-                            ]
-                            if nz:
-                                avg_nz = sum(nz) / len(nz)
-                    except Exception:
-                        pass
-                    await emitter(
-                        "embedding_done",
-                        {
-                            "neural_count": len(context.get("embeddings", [])) or 0,
-                            "dim": dim,
-                            "model": model_used,
-                            "sparse_count": (
-                                len(context.get("sparse_embeddings", []) or [])
-                                if context.get("sparse_embeddings")
-                                else 0
-                            ),
-                            "avg_nonzeros": avg_nz,
-                        },
-                        op_name=self.name,
-                    )
+                    if context.get("sparse_embeddings"):
+                        nz = [
+                            len(getattr(v, "indices", []) or [])
+                            for v in context["sparse_embeddings"]
+                        ]
+                        if nz:
+                            avg_nz = sum(nz) / len(nz)
                 except Exception:
                     pass
-
-        except Exception as e:
-            logger.error(f"[Embedding] Failed: {e}", exc_info=True)
-            # Create fallback embeddings to allow search to continue
-            # Use 384 dimensions (standard for sentence-transformers)
-            fallback_embedding = [0.0] * 384
-            context["embeddings"] = [fallback_embedding] * len(queries)
-            logger.warning(f"[Embedding] Using fallback zero embeddings for {len(queries)} queries")
-            if callable(emitter):
-                try:
-                    await emitter(
-                        "embedding_fallback",
-                        {"reason": str(e)[:200]},
-                        op_name=self.name,
-                    )
-                except Exception:
-                    pass
+                await emitter(
+                    "embedding_done",
+                    {
+                        "neural_count": len(context.get("embeddings", [])) or 0,
+                        "dim": dim,
+                        "model": model_used,
+                        "sparse_count": (
+                            len(context.get("sparse_embeddings", []) or [])
+                            if context.get("sparse_embeddings")
+                            else 0
+                        ),
+                        "avg_nonzeros": avg_nz,
+                    },
+                    op_name=self.name,
+                )
+            except Exception:
+                pass

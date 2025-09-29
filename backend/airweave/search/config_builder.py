@@ -75,10 +75,14 @@ class SearchConfigBuilder:
         Returns:
             SearchConfig with operations configured
         """
-        ctx.logger.info(
+        ctx.logger.debug(
             f"Building search config for query: '{search_request.query[:50]}...', "
             f"collection: {collection_id}"
         )
+
+        # Fail-fast: require non-empty query string
+        if not isinstance(search_request.query, str) or not search_request.query.strip():
+            raise ValueError("SearchRequest.query must be a non-empty string")
 
         # Apply defaults first
         search_method = search_request.search_method or DEFAULT_SEARCH_METHOD
@@ -102,7 +106,7 @@ class SearchConfigBuilder:
         if ops["completion"]:
             enabled_ops.append("completion")
 
-        ctx.logger.info(f"Enabled operations: {enabled_ops}")
+        ctx.logger.debug(f"Enabled operations: {enabled_ops}")
 
         # Apply defaults for all parameters using the constants
         # Use explicit None checks to handle 0 values correctly
@@ -231,9 +235,7 @@ class SearchConfigBuilder:
 
         if response_type == ResponseType.COMPLETION:
             ctx.logger.debug("Enabling completion generation")
-            ops["completion"] = CompletionGeneration(
-                default_model="gpt-5-nano", max_results_context=100
-            )
+            ops["completion"] = CompletionGeneration()
         else:
             ops["completion"] = None
 

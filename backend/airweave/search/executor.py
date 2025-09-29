@@ -77,7 +77,7 @@ class SearchExecutor:
 
         # Log configuration summary
         try:
-            ctx.logger.info(
+            ctx.logger.debug(
                 "[SearchExecutor] Config summary: "
                 f"limit={config.limit}, offset={config.offset}, "
                 f"score_threshold={config.score_threshold}, "
@@ -173,7 +173,7 @@ class SearchExecutor:
                         context["timings"][op.name] = op_time
                         executed.add(op.name)
 
-                        ctx.logger.info(
+                        ctx.logger.debug(
                             f"[SearchExecutor] Operation {op.name} completed in {op_time:.2f}ms"
                         )
 
@@ -226,7 +226,7 @@ class SearchExecutor:
 
             # Log execution summary
             total_time = (time.time() - start_time) * 1000
-            ctx.logger.info(
+            ctx.logger.debug(
                 f"[SearchExecutor] Search completed in {total_time:.2f}ms, "
                 f"executed {len(executed)}/{len(operations)} operations"
             )
