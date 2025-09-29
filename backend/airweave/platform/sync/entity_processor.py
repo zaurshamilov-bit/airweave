@@ -568,9 +568,9 @@ class EntityProcessor:
             if hasattr(row, "entity_definition_id") and row.entity_definition_id:
                 counts_by_def[row.entity_definition_id] += 1
 
-        for def_id, _cnt in counts_by_def.items():
+        for def_id, count in counts_by_def.items():
             await sync_context.entity_state_tracker.update_entity_count(
-                entity_definition_id=def_id, action="delete"
+                entity_definition_id=def_id, action="delete", delta=count
             )
 
     # ------------------------------------------------------------------------------------
@@ -832,9 +832,9 @@ class EntityProcessor:
             row = existing_map.get(p.entity_id)
             if row and hasattr(row, "entity_definition_id"):
                 counts_by_def[row.entity_definition_id] += 1
-        for def_id, _cnt in counts_by_def.items():
+        for def_id, count in counts_by_def.items():
             await sync_context.entity_state_tracker.update_entity_count(
-                entity_definition_id=def_id, action="update"
+                entity_definition_id=def_id, action="update", delta=count
             )
 
     async def _batch_update_destinations(
@@ -883,9 +883,9 @@ class EntityProcessor:
             for row in del_map.values():
                 if hasattr(row, "entity_definition_id") and row.entity_definition_id:
                     counts_by_def[row.entity_definition_id] += 1
-            for def_id, _cnt in counts_by_def.items():
+            for def_id, count in counts_by_def.items():
                 await sync_context.entity_state_tracker.update_entity_count(
-                    entity_definition_id=def_id, action="delete"
+                    entity_definition_id=def_id, action="delete", delta=count
                 )
 
     async def _update_progress_and_guard_rails(
@@ -912,10 +912,11 @@ class EntityProcessor:
             if def_id:
                 counts_by_def[def_id] += 1
                 sample_name_by_def.setdefault(def_id, type(p).__name__)
-        for def_id, _cnt in counts_by_def.items():
+        for def_id, count in counts_by_def.items():
             await sync_context.entity_state_tracker.update_entity_count(
                 entity_definition_id=def_id,
                 action="insert",
+                delta=count,  # Pass the actual count, not default 1
                 entity_name=sample_name_by_def.get(def_id),
                 entity_type=sample_name_by_def.get(def_id),
             )
