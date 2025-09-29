@@ -116,7 +116,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
 }) => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [sourceConnection, setSourceConnection] = useState<SourceConnection | null>(sourceConnectionData || null);
-  const [lastRanDisplay, setLastRanDisplay] = useState<string>('Never');
+  const [lastRanDisplay, setLastRanDisplay] = useState<string | null>(null);
   const [isRefreshingAuth, setIsRefreshingAuth] = useState(false);
 
   // Track if we initiated a cancellation (for timeout handling)
@@ -144,7 +144,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
 
   // Format time ago display
   const formatTimeAgo = useCallback((dateStr: string | undefined) => {
-    if (!dateStr) return 'Never';
+    if (!dateStr) return null;  // Return null instead of 'Never'
 
     // CRITICAL: Backend sends naive datetime strings WITHOUT timezone
     // These are actually UTC times but JavaScript interprets them as LOCAL time by default!
@@ -176,7 +176,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
 
   // Format exact timestamp for tooltip
   const formatExactTime = useCallback((dateStr: string | undefined) => {
-    if (!dateStr) return 'Never';
+    if (!dateStr) return null;
 
     // Backend sends naive datetime strings that are actually UTC
     // We need to interpret them as UTC, not local time
@@ -351,7 +351,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
     const updateLastRan = () => {
       // Don't show "Running now" - let the status badge handle that
       const startedAt = storeConnection?.last_sync_job?.started_at || sourceConnection?.last_sync_job?.started_at;
-      setLastRanDisplay(startedAt ? formatTimeAgo(startedAt) : 'Never');
+      setLastRanDisplay(formatTimeAgo(startedAt));
     };
 
     updateLastRan();
@@ -715,8 +715,8 @@ const SourceConnectionStateView: React.FC<Props> = ({
               </Tooltip>
             </TooltipProvider>
 
-            {/* Last Sync Card - Only show when not actively syncing */}
-            {!(isRunning || isPending || isCancellingStatus) && (
+            {/* Last Sync Card - Only show when not actively syncing AND there's sync history */}
+            {!(isRunning || isPending || isCancellingStatus) && lastRanDisplay && (
               <TooltipProvider delayDuration={100}>
                 <Tooltip>
                   <TooltipTrigger asChild>
