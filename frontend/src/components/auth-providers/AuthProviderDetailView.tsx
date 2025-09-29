@@ -3,7 +3,7 @@ import type { DialogViewProps } from "@/components/types/dialog";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
-import { Copy, Check, Trash, Pencil, AlertTriangle, AlertCircle, Loader2, Key, Link } from "lucide-react";
+import { Copy, Check, Trash, Pencil, AlertTriangle, AlertCircle, Loader2, Link } from "lucide-react";
 import { toast } from "sonner";
 import { getAuthProviderIconUrl } from "@/lib/utils/icons";
 import { format } from "date-fns";
@@ -836,6 +836,39 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                                 {formatDate(connectionDetails.modified_at)}
                             </div>
                         </div>
+
+                        {/* Client ID (if available for OAuth providers like Pipedream) */}
+                        {connectionDetails.masked_client_id && (
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                    Client ID
+                                </label>
+                                <div className={cn(
+                                    "w-full px-4 py-2.5 rounded-lg text-sm flex items-center justify-between group",
+                                    "border transition-colors",
+                                    isDark
+                                        ? "bg-gray-800 border-gray-700 text-white"
+                                        : "bg-white border-gray-200 text-gray-900"
+                                )}>
+                                    <span className="font-mono text-sm">{connectionDetails.masked_client_id}</span>
+                                    <button
+                                        onClick={() => handleCopy(connectionDetails.masked_client_id, "Client ID")}
+                                        className={cn(
+                                            "p-1 rounded transition-opacity opacity-0 group-hover:opacity-100",
+                                            isDark
+                                                ? "hover:bg-gray-700/50"
+                                                : "hover:bg-gray-200/50"
+                                        )}
+                                    >
+                                        {copiedField === "Client ID" ? (
+                                            <Check className="h-4 w-4 text-green-500" />
+                                        ) : (
+                                            <Copy className="h-4 w-4 text-gray-400" />
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
