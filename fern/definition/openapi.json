@@ -1591,6 +1591,18 @@
             "type": "string",
             "format": "date-time",
             "title": "Modified At"
+          },
+          "masked_client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Masked Client Id",
+            "description": "Masked client ID for OAuth providers (first 7 and last 4 characters visible)"
           }
         },
         "type": "object",
