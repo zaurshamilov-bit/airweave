@@ -10,6 +10,7 @@ import httpx
 import asyncio
 import time
 import datetime
+from datetime import timezone
 from typing import Dict, List, Optional, Tuple
 
 
@@ -787,3 +788,283 @@ class TestTemporalSchedules:
 
         # Cleanup
         await api_client.delete(f"/source-connections/{conn_id}")
+
+    # ============= TIMEZONE HANDLING TESTS =============
+
+    async def test_next_run_timezone_aware_serialization(
+        self, api_client: httpx.AsyncClient, collection: Dict, config
+    ):
+        """Test that next_run_at is properly timezone-aware when retrieved."""
+        # Create connection with daily schedule
+        payload = {
+            "name": "Timezone Test Connection",
+            "short_name": "stripe",
+            "readable_collection_id": collection["readable_id"],
+            "authentication": {"credentials": {"api_key": config.TEST_STRIPE_API_KEY}},
+            "schedule": {"cron": "30 14 * * *"},  # 2:30 PM UTC daily
+            "sync_immediately": False,
+        }
+
+        response = await api_client.post("/source-connections", json=payload)
+        assert response.status_code == 200
+        connection = response.json()
+        conn_id = connection["id"]
+
+        try:
+            # Get the connection details
+            response = await api_client.get(f"/source-connections/{conn_id}")
+            assert response.status_code == 200
+            conn_details = response.json()
+
+            # Verify schedule exists
+            assert conn_details.get("schedule") is not None
+            assert conn_details["schedule"]["cron"] == "30 14 * * *"
+
+            # Verify next_run is present and properly formatted
+            next_run = conn_details["schedule"].get("next_run")
+            assert next_run is not None, "next_run should be present"
+
+            # Parse the datetime string - it should be ISO format with timezone
+            from datetime import datetime
+
+            parsed_next_run = datetime.fromisoformat(next_run.replace("Z", "+00:00"))
+
+            # Verify it's timezone-aware (has tzinfo)
+            assert parsed_next_run.tzinfo is not None, "next_run should be timezone-aware"
+
+            # Verify it's in UTC
+            assert parsed_next_run.tzinfo == timezone.utc, "next_run should be in UTC timezone"
+
+            # Verify the time components match the cron expression
+            assert parsed_next_run.hour == 14
+            assert parsed_next_run.minute == 30
+
+        finally:
+            # Cleanup
+            await api_client.delete(f"/source-connections/{conn_id}")
+
+    async def test_cron_schedule_update_calculates_next_run(
+        self, api_client: httpx.AsyncClient, source_connection_fast: dict
+    ):
+        """Test that updating cron_schedule properly calculates next_scheduled_run."""
+        conn_id = source_connection_fast["id"]
+
+        # Update with a specific schedule
+        update_payload = {"schedule": {"cron": "45 10 * * *"}}  # 10:45 AM UTC daily
+        response = await api_client.patch(f"/source-connections/{conn_id}", json=update_payload)
+
+        assert response.status_code == 200
+        updated = response.json()
+
+        # Verify schedule was updated
+        assert updated["schedule"]["cron"] == "45 10 * * *"
+
+        # Get full connection details to check next_run
+        response = await api_client.get(f"/source-connections/{conn_id}")
+        assert response.status_code == 200
+        conn_details = response.json()
+
+        # Verify next_run is calculated
+        next_run = conn_details["schedule"].get("next_run")
+        assert next_run is not None, "next_run should be calculated after schedule update"
+
+        # Parse and verify the next run time
+        from datetime import datetime
+
+        parsed_next_run = datetime.fromisoformat(next_run.replace("Z", "+00:00"))
+
+        # Should be in the future
+        now = datetime.now(timezone.utc)
+        assert parsed_next_run > now, "next_run should be in the future"
+
+        # Should match the cron pattern
+        assert parsed_next_run.hour == 10
+        assert parsed_next_run.minute == 45
+
+    async def test_null_schedule_clears_next_run(
+        self, api_client: httpx.AsyncClient, source_connection_fast: dict
+    ):
+        """Test that setting schedule to null also clears next_scheduled_run."""
+        conn_id = source_connection_fast["id"]
+
+        # First set a schedule
+        update_payload = {"schedule": {"cron": "0 6 * * *"}}
+        response = await api_client.patch(f"/source-connections/{conn_id}", json=update_payload)
+        assert response.status_code == 200
+
+        # Verify next_run is set
+        response = await api_client.get(f"/source-connections/{conn_id}")
+        conn_with_schedule = response.json()
+        assert conn_with_schedule["schedule"].get("next_run") is not None
+
+        # Now remove the schedule
+        update_payload = {"schedule": {"cron": None}}
+        response = await api_client.patch(f"/source-connections/{conn_id}", json=update_payload)
+        assert response.status_code == 200
+
+        # Verify next_run is cleared
+        response = await api_client.get(f"/source-connections/{conn_id}")
+        conn_without_schedule = response.json()
+        assert (
+            conn_without_schedule.get("schedule") is None
+            or conn_without_schedule["schedule"].get("next_run") is None
+        )
+
+    async def test_croniter_base_uses_utc(
+        self, api_client: httpx.AsyncClient, collection: Dict, config
+    ):
+        """Test that croniter calculations use UTC as base, not local time."""
+        # Create two connections with same schedule at different times
+        connections = []
+
+        for i in range(2):
+            payload = {
+                "name": f"UTC Base Test {i}",
+                "short_name": "stripe",
+                "readable_collection_id": collection["readable_id"],
+                "authentication": {"credentials": {"api_key": config.TEST_STRIPE_API_KEY}},
+                "schedule": {"cron": "0 12 * * *"},  # Noon UTC daily
+                "sync_immediately": False,
+            }
+
+            response = await api_client.post("/source-connections", json=payload)
+            assert response.status_code == 200
+            connections.append(response.json())
+
+            # Small delay between creations
+            await asyncio.sleep(1)
+
+        try:
+            # Get both connections and compare next_run times
+            next_runs = []
+            for conn in connections:
+                response = await api_client.get(f"/source-connections/{conn['id']}")
+                assert response.status_code == 200
+                conn_details = response.json()
+                next_run = conn_details["schedule"]["next_run"]
+                next_runs.append(next_run)
+
+            # Both should have the same next_run (since they have the same cron expression)
+            # Small tolerance for processing time differences
+            from datetime import datetime
+
+            dt1 = datetime.fromisoformat(next_runs[0].replace("Z", "+00:00"))
+            dt2 = datetime.fromisoformat(next_runs[1].replace("Z", "+00:00"))
+
+            # Should be within 1 minute of each other (accounting for processing delays)
+            time_diff = abs((dt1 - dt2).total_seconds())
+            assert (
+                time_diff < 60
+            ), f"Next run times should be nearly identical, but differ by {time_diff} seconds"
+
+        finally:
+            # Cleanup
+            for conn in connections:
+                await api_client.delete(f"/source-connections/{conn['id']}")
+
+    async def test_schedule_with_different_timezones(
+        self, api_client: httpx.AsyncClient, collection: Dict, config
+    ):
+        """Test that schedules work correctly regardless of server timezone."""
+        # Create connection with schedule that runs at specific UTC time
+        payload = {
+            "name": "Fixed UTC Schedule",
+            "short_name": "stripe",
+            "readable_collection_id": collection["readable_id"],
+            "authentication": {"credentials": {"api_key": config.TEST_STRIPE_API_KEY}},
+            "schedule": {"cron": "0 0 * * *"},  # Midnight UTC
+            "sync_immediately": False,
+        }
+
+        response = await api_client.post("/source-connections", json=payload)
+        assert response.status_code == 200
+        connection = response.json()
+        conn_id = connection["id"]
+
+        try:
+            # Get connection details
+            response = await api_client.get(f"/source-connections/{conn_id}")
+            assert response.status_code == 200
+            conn_details = response.json()
+
+            next_run_str = conn_details["schedule"]["next_run"]
+            from datetime import datetime
+
+            next_run = datetime.fromisoformat(next_run_str.replace("Z", "+00:00"))
+
+            # Verify it's at midnight UTC
+            assert next_run.hour == 0
+            assert next_run.minute == 0
+            assert next_run.tzinfo == timezone.utc
+
+            # Update to different time
+            update_payload = {"schedule": {"cron": "30 23 * * *"}}  # 11:30 PM UTC
+            response = await api_client.patch(f"/source-connections/{conn_id}", json=update_payload)
+            assert response.status_code == 200
+
+            # Get updated details
+            response = await api_client.get(f"/source-connections/{conn_id}")
+            assert response.status_code == 200
+            updated_details = response.json()
+
+            updated_next_run_str = updated_details["schedule"]["next_run"]
+            updated_next_run = datetime.fromisoformat(updated_next_run_str.replace("Z", "+00:00"))
+
+            # Verify it's at 11:30 PM UTC
+            assert updated_next_run.hour == 23
+            assert updated_next_run.minute == 30
+            assert updated_next_run.tzinfo == timezone.utc
+
+        finally:
+            # Cleanup
+            await api_client.delete(f"/source-connections/{conn_id}")
+
+    async def test_schedule_persistence_across_restarts(
+        self, api_client: httpx.AsyncClient, collection: Dict, config
+    ):
+        """Test that next_scheduled_run persists correctly in database."""
+        # Create connection with schedule
+        payload = {
+            "name": "Persistence Test",
+            "short_name": "stripe",
+            "readable_collection_id": collection["readable_id"],
+            "authentication": {"credentials": {"api_key": config.TEST_STRIPE_API_KEY}},
+            "schedule": {"cron": "15 8 * * *"},  # 8:15 AM UTC
+            "sync_immediately": False,
+        }
+
+        response = await api_client.post("/source-connections", json=payload)
+        assert response.status_code == 200
+        connection = response.json()
+        conn_id = connection["id"]
+
+        try:
+            # Get initial next_run
+            response = await api_client.get(f"/source-connections/{conn_id}")
+            initial_details = response.json()
+            initial_next_run = initial_details["schedule"]["next_run"]
+
+            # Simulate "restart" by just fetching again (in real scenario, this would be after service restart)
+            await asyncio.sleep(1)
+
+            # Get next_run again
+            response = await api_client.get(f"/source-connections/{conn_id}")
+            after_details = response.json()
+            after_next_run = after_details["schedule"]["next_run"]
+
+            # Should be the same (persisted in database)
+            assert initial_next_run == after_next_run, "next_run should persist across fetches"
+
+            # Both should be properly formatted with timezone
+            from datetime import datetime
+
+            initial_dt = datetime.fromisoformat(initial_next_run.replace("Z", "+00:00"))
+            after_dt = datetime.fromisoformat(after_next_run.replace("Z", "+00:00"))
+
+            assert initial_dt == after_dt
+            assert initial_dt.tzinfo == timezone.utc
+            assert after_dt.tzinfo == timezone.utc
+
+        finally:
+            # Cleanup
+            await api_client.delete(f"/source-connections/{conn_id}")

@@ -665,12 +665,18 @@ const SourceConnectionStateView: React.FC<Props> = ({
                     <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">SCHEDULE</span>
                     <div className="flex items-center gap-1">
                       <Clock className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-xs font-medium text-foreground">
+                      <span
+                        className="text-xs font-medium text-foreground"
+                        title={(() => {
+                          const parsed = parseCronExpression(sourceConnection?.schedule?.cron);
+                          return parsed ? `${parsed.shortDescription} UTC` : 'Manual sync only';
+                        })()}
+                      >
                         {(() => {
                           const parsed = parseCronExpression(sourceConnection?.schedule?.cron);
                           if (parsed) {
                             const nextRunStr = formatTimeUntil(sourceConnection?.schedule?.next_run);
-                            return nextRunStr ? `${parsed.shortDescription} (${nextRunStr})` : parsed.shortDescription;
+                            return nextRunStr ? `${parsed.shortDescriptionLocal} (${nextRunStr})` : parsed.shortDescriptionLocal;
                           }
                           return 'Manual';
                         })()}
@@ -683,12 +689,20 @@ const SourceConnectionStateView: React.FC<Props> = ({
                     <p className="font-medium">
                       {(() => {
                         const parsed = parseCronExpression(sourceConnection?.schedule?.cron);
-                        return parsed ? parsed.description : 'Manual sync only';
+                        return parsed ? parsed.descriptionLocal : 'Manual sync only';
                       })()}
                     </p>
+                    {(() => {
+                      const parsed = parseCronExpression(sourceConnection?.schedule?.cron);
+                      return parsed && parsed.description !== parsed.descriptionLocal ? (
+                        <p className="text-muted-foreground text-[10px]">
+                          ({parsed.description})
+                        </p>
+                      ) : null;
+                    })()}
                     {sourceConnection?.schedule?.next_run && (
                       <p className="text-muted-foreground">
-                        Next run: {new Date(sourceConnection.schedule.next_run).toLocaleString()}
+                        Next run: {new Date(sourceConnection.schedule.next_run).toISOString().replace('T', ', ').replace('.000Z', '')} UTC
                       </p>
                     )}
                     {sourceConnection?.schedule?.cron && (
