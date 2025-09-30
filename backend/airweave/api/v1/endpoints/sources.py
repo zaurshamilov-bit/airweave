@@ -110,7 +110,7 @@ async def list(
         "github", "Source details with authentication and configuration schemas"
     ),
 )
-async def read(
+async def get(
     *,
     db: AsyncSession = Depends(deps.get_db),
     short_name: str = Path(
