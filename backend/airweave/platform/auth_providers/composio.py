@@ -37,6 +37,7 @@ class ComposioAuthProvider(BaseAuthProvider):
         "outlook_mail": "outlook",
         "outlook_calendar": "outlook",
         "onedrive": "one_drive",
+        "sharepoint": "one_drive",  # Use OneDrive integration (same Graph API)
         # Add more mappings as needed
     }
 
