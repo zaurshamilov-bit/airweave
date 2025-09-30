@@ -129,7 +129,7 @@ class SharePointSource(BaseSource):
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[SharePointUserEntity, None]:
         """Generate SharePointUserEntity objects for users in the organization."""
-        self.logger.info("Starting user entity generation")
+        self.logger.debug("Starting user entity generation")
         url = f"{self.GRAPH_BASE_URL}/users"
         params = {
             "$top": 100,
@@ -145,7 +145,7 @@ class SharePointSource(BaseSource):
                 self.logger.debug(f"Fetching users from: {url}")
                 data = await self._get_with_auth(client, url, params=params)
                 users = data.get("value", [])
-                self.logger.info(f"Retrieved {len(users)} users")
+                self.logger.debug(f"Retrieved {len(users)} users")
 
                 for user_data in users:
                     user_count += 1
@@ -174,7 +174,7 @@ class SharePointSource(BaseSource):
                     self.logger.debug("Following pagination to next page")
                     params = None  # params are included in the nextLink
 
-            self.logger.info(f"Completed user generation. Total users: {user_count}")
+            self.logger.debug(f"Completed user generation. Total users: {user_count}")
 
         except Exception as e:
             self.logger.error(f"Error generating user entities: {str(e)}")
@@ -184,7 +184,7 @@ class SharePointSource(BaseSource):
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[SharePointGroupEntity, None]:
         """Generate SharePointGroupEntity objects for groups in the organization."""
-        self.logger.info("Starting group entity generation")
+        self.logger.debug("Starting group entity generation")
         url = f"{self.GRAPH_BASE_URL}/groups"
         params = {
             "$top": 100,
@@ -200,7 +200,7 @@ class SharePointSource(BaseSource):
                 self.logger.debug(f"Fetching groups from: {url}")
                 data = await self._get_with_auth(client, url, params=params)
                 groups = data.get("value", [])
-                self.logger.info(f"Retrieved {len(groups)} groups")
+                self.logger.debug(f"Retrieved {len(groups)} groups")
 
                 for group_data in groups:
                     group_count += 1
@@ -243,7 +243,7 @@ class SharePointSource(BaseSource):
                     self.logger.debug("Following pagination to next page")
                     params = None  # params are included in the nextLink
 
-            self.logger.info(f"Completed group generation. Total groups: {group_count}")
+            self.logger.debug(f"Completed group generation. Total groups: {group_count}")
 
         except Exception as e:
             self.logger.error(f"Error generating group entities: {str(e)}")
@@ -253,7 +253,7 @@ class SharePointSource(BaseSource):
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[SharePointSiteEntity, None]:
         """Generate SharePointSiteEntity objects starting from the root site."""
-        self.logger.info("Starting site entity generation")
+        self.logger.debug("Starting site entity generation")
 
         try:
             # Get the root site
@@ -264,7 +264,7 @@ class SharePointSource(BaseSource):
             site_id = site_data.get("id")
             display_name = site_data.get("displayName", "Root Site")
 
-            self.logger.info(f"Processing root site: {display_name} (ID: {site_id})")
+            self.logger.debug(f"Processing root site: {display_name} (ID: {site_id})")
 
             # Parse timestamps
             created_datetime = self._parse_datetime(site_data.get("createdDateTime"))
@@ -305,7 +305,7 @@ class SharePointSource(BaseSource):
         self, client: httpx.AsyncClient, site_id: str, site_name: str
     ) -> AsyncGenerator[SharePointDriveEntity, None]:
         """Generate SharePointDriveEntity objects for drives in a site."""
-        self.logger.info(f"Starting drive entity generation for site: {site_name}")
+        self.logger.debug(f"Starting drive entity generation for site: {site_name}")
         url = f"{self.GRAPH_BASE_URL}/sites/{site_id}/drives"
         params = {"$top": 100}
         drive_count = 0
@@ -315,7 +315,7 @@ class SharePointSource(BaseSource):
                 self.logger.debug(f"Fetching drives from: {url}")
                 data = await self._get_with_auth(client, url, params=params)
                 drives = data.get("value", [])
-                self.logger.info(f"Retrieved {len(drives)} drives for site {site_name}")
+                self.logger.debug(f"Retrieved {len(drives)} drives for site {site_name}")
 
                 for drive_data in drives:
                     drive_count += 1
@@ -351,7 +351,7 @@ class SharePointSource(BaseSource):
                     self.logger.debug("Following pagination to next page")
                     params = None  # params are included in the nextLink
 
-            self.logger.info(
+            self.logger.debug(
                 f"Completed drive generation for site {site_name}. Total drives: {drive_count}"
             )
 
@@ -525,7 +525,7 @@ class SharePointSource(BaseSource):
         site_breadcrumb: Breadcrumb,
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate SharePointDriveItemEntity objects for files in the drive."""
-        self.logger.info(f"Starting file generation for drive: {drive_name}")
+        self.logger.debug(f"Starting file generation for drive: {drive_name}")
         file_count = 0
 
         # Create drive breadcrumb
@@ -560,7 +560,7 @@ class SharePointSource(BaseSource):
                     if processed_entity:
                         yield processed_entity
                         file_count += 1
-                        self.logger.info(f"Processed file {file_count}: {file_entity.name}")
+                        self.logger.debug(f"Processed file {file_count}: {file_entity.name}")
                 else:
                     self.logger.warning(f"No download URL available for {file_entity.name}")
 
@@ -569,7 +569,7 @@ class SharePointSource(BaseSource):
                 # Continue processing other items
                 continue
 
-        self.logger.info(f"Total files processed in drive {drive_name}: {file_count}")
+        self.logger.debug(f"Total files processed in drive {drive_name}: {file_count}")
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all SharePoint entities.
@@ -581,15 +581,15 @@ class SharePointSource(BaseSource):
           - SharePointDriveEntity for each drive in the site
           - SharePointDriveItemEntity for each file in each drive
         """
-        self.logger.info("===== STARTING SHAREPOINT ENTITY GENERATION =====")
+        self.logger.debug("===== STARTING SHAREPOINT ENTITY GENERATION =====")
         entity_count = 0
 
         try:
             async with self.http_client() as client:
-                self.logger.info("HTTP client created, starting entity generation")
+                self.logger.debug("HTTP client created, starting entity generation")
 
                 # 1) Generate user entities
-                self.logger.info("Generating user entities...")
+                self.logger.debug("Generating user entities...")
                 async for user_entity in self._generate_user_entities(client):
                     entity_count += 1
                     self.logger.debug(
@@ -598,7 +598,7 @@ class SharePointSource(BaseSource):
                     yield user_entity
 
                 # 2) Generate group entities
-                self.logger.info("Generating group entities...")
+                self.logger.debug("Generating group entities...")
                 async for group_entity in self._generate_group_entities(client):
                     entity_count += 1
                     self.logger.debug(
@@ -607,7 +607,7 @@ class SharePointSource(BaseSource):
                     yield group_entity
 
                 # 3) Generate site entities (start with root site)
-                self.logger.info("Generating site entities...")
+                self.logger.debug("Generating site entities...")
                 site_entity = None
                 async for site in self._generate_site_entities(client):
                     entity_count += 1
@@ -628,7 +628,7 @@ class SharePointSource(BaseSource):
                 site_breadcrumb = Breadcrumb(entity_id=site_id, name=site_name[:50], type="site")
 
                 # 4) Generate drive entities for the site
-                self.logger.info(f"Generating drive entities for site: {site_name}")
+                self.logger.debug(f"Generating drive entities for site: {site_name}")
                 async for drive_entity in self._generate_drive_entities(client, site_id, site_name):
                     entity_count += 1
                     self.logger.debug(
@@ -640,7 +640,7 @@ class SharePointSource(BaseSource):
                     drive_id = drive_entity.entity_id
                     drive_name = drive_entity.name or "Document Library"
 
-                    self.logger.info(
+                    self.logger.debug(
                         f"Starting to process files from drive: {drive_id} ({drive_name})"
                     )
 
@@ -659,7 +659,7 @@ class SharePointSource(BaseSource):
             self.logger.error(f"Error in entity generation: {str(e)}", exc_info=True)
             raise
         finally:
-            self.logger.info(
+            self.logger.debug(
                 f"===== SHAREPOINT ENTITY GENERATION COMPLETE: {entity_count} entities ====="
             )
 

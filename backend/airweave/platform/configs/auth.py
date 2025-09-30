@@ -358,6 +358,12 @@ class PostgreSQLAuthConfig(BaseDatabaseAuthConfig):
     """PostgreSQL authentication configuration."""
 
 
+class SharePointAuthConfig(OAuth2WithRefreshAuthConfig):
+    """SharePoint authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+
+
 class SlackAuthConfig(OAuth2AuthConfig):
     """Slack authentication credentials schema."""
 

@@ -238,6 +238,12 @@ class PostgreSQLConfig(SourceConfig):
     pass
 
 
+class SharePointConfig(SourceConfig):
+    """SharePoint configuration schema."""
+
+    pass
+
+
 class SlackConfig(SourceConfig):
     """Slack configuration schema."""
 
