@@ -262,7 +262,6 @@ async def _search_collection_async(
     Use Airweave's advanced search API endpoint with all extra features disabled.
     Always uses a limit of 1000 for comprehensive results.
     """
-    import os
 
     # Build the search request with all extra features disabled
     search_request = {
@@ -280,7 +279,6 @@ async def _search_collection_async(
         return data.get("results", [])
     except Exception:
         return []
-
 
     url = f"{api_url}/collections/{readable_id}/search"
 
@@ -422,14 +420,35 @@ class PartialDeleteStep(TestStep):
             f"{[self._display_name(e) for e in entities_to_delete]}"
         )
         self.logger.info(
-            f"💾 Keeping {len(entities_to_keep)} entities: "
+            f"💾 Initially keeping {len(entities_to_keep)} entities: "
             f"{[self._display_name(e) for e in entities_to_keep]}"
         )
 
         deleted_paths = await bongo.delete_specific_entities(entities_to_delete)
 
-        self.context.partially_deleted_entities = entities_to_delete
-        self.context.remaining_entities = entities_to_keep
+        # IMPORTANT: The bongo may have deleted more entities than requested
+        # (e.g., cascade deletions in ClickUp where deleting a task also deletes its children)
+        # We need to update our tracking based on what was actually deleted
+
+        # Build a set of deleted IDs for fast lookup
+        deleted_ids = set(deleted_paths)
+
+        # Find all entities that were actually deleted (including cascade deletions)
+        actually_deleted = [e for e in self.context.created_entities if e["id"] in deleted_ids]
+        actually_remaining = [
+            e for e in self.context.created_entities if e["id"] not in deleted_ids
+        ]
+
+        # Update context with actual results
+        self.context.partially_deleted_entities = actually_deleted
+        self.context.remaining_entities = actually_remaining
+
+        if len(actually_deleted) > len(entities_to_delete):
+            cascade_count = len(actually_deleted) - len(entities_to_delete)
+            self.logger.info(
+                f"📎 Note: {cascade_count} additional entities were cascade-deleted "
+                f"(total {len(actually_deleted)} deleted, {len(actually_remaining)} remaining)"
+            )
 
         self.logger.info(f"✅ Partial deletion completed: {len(deleted_paths)} entities deleted")
 
