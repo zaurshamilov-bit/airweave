@@ -96,9 +96,9 @@
         "tags": [
           "sources"
         ],
-        "summary": "Read",
+        "summary": "Get",
         "description": "Get detailed information about a specific data source connector.",
-        "operationId": "read_sources__short_name__get",
+        "operationId": "get_sources__short_name__get",
         "parameters": [
           {
             "name": "short_name",
