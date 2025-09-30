@@ -51,6 +51,8 @@ navigation:
       path: docs/pages/connectors/asana/main.mdx
     - page: Bitbucket
       path: docs/pages/connectors/bitbucket/main.mdx
+    - page: Clickup
+      path: docs/pages/connectors/clickup/main.mdx
     - page: Confluence
       path: docs/pages/connectors/confluence/main.mdx
     - page: Ctti
