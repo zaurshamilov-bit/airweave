@@ -92,8 +92,11 @@ class SourceBase(BaseModel):
         ),
     )
     supported_auth_providers: Optional[List[str]] = Field(
-        None,
-        description="List of auth provider short names that support this source (e.g., ['composio', 'pipedream'])",
+        default=None,
+        description=(
+            "List of auth provider short names that support this source "
+            "(e.g., ['composio', 'pipedream']). Computed dynamically for API responses."
+        ),
     )
 
     @field_serializer("output_entity_definition_ids")

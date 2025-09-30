@@ -822,6 +822,20 @@ class SourceConnectionService:
                 detail=f"Auth provider '{obj_in.authentication.provider_readable_id}' not found",
             )
 
+        # Validate that the source supports this auth provider
+        supported_providers = auth_provider_service.get_supported_providers_for_source(
+            obj_in.short_name
+        )
+        if auth_provider_conn.short_name not in supported_providers:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Source '{obj_in.short_name}' does not support "
+                    f"'{auth_provider_conn.short_name}' as an auth provider. "
+                    f"Supported providers: {supported_providers}"
+                ),
+            )
+
         # Validate provider config
         validated_auth_config = None
         if obj_in.authentication.provider_config:
