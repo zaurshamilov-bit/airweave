@@ -751,7 +751,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                               )}>
                                 Optional: Use your own OAuth app for enhanced control.{' '}
                                 <a
-                                  href="https://docs.airweave.ai/integrations/custom-oauth"
+                                  href="https://docs.airweave.ai/direct-oauth#byoc-bring-your-own-credentials"
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className={cn(
