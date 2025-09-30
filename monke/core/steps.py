@@ -262,6 +262,9 @@ async def _search_collection_async(
     Use Airweave's advanced search API endpoint with all extra features disabled.
     Always uses a limit of 1000 for comprehensive results.
     """
+    import os
+
+    # Build the search request with all extra features disabled
     search_request = {
         "query": query,
         "limit": 1000,  # Always use 1000 for comprehensive results
@@ -277,6 +280,20 @@ async def _search_collection_async(
         return data.get("results", [])
     except Exception:
         return []
+
+
+    url = f"{api_url}/collections/{readable_id}/search"
+
+    async with httpx.AsyncClient() as http_client:
+        try:
+            response = await http_client.post(url, json=search_request, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("results", [])
+            else:
+                return []
+        except Exception:
+            return []
 
 
 async def _token_present_in_collection(

@@ -5,11 +5,13 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave.api.context import ApiContext
 from airweave.core.exceptions import NotFoundException
 from airweave.crud._base_organization import CRUDBaseOrganization
+from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.entity import Entity
 from airweave.schemas.entity import EntityCreate, EntityUpdate
 
@@ -23,6 +25,74 @@ class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
         Initialize with track_user=False since Entity model doesn't have user tracking fields.
         """
         super().__init__(Entity, track_user=False)
+
+    async def create(
+        self,
+        db: AsyncSession,
+        *,
+        obj_in: EntityCreate,
+        ctx: ApiContext,
+        uow: Optional["UnitOfWork"] = None,
+        skip_validation: bool = False,
+    ) -> Entity:
+        """Create an entity with conflict resolution.
+
+        Uses INSERT ... ON CONFLICT DO UPDATE to handle duplicate (sync_id, entity_id) pairs.
+        This prevents deadlocks when multiple workers try to insert the same entity.
+
+        Args:
+            db: Database session
+            obj_in: Entity data to create
+            ctx: API context with organization info
+            uow: Optional unit of work for transaction control
+            skip_validation: Whether to skip validation
+
+        Returns:
+            The created or updated entity
+        """
+        if not skip_validation:
+            # Validate auth context has org access
+            await self._validate_organization_access(ctx, ctx.organization.id)
+
+        if not isinstance(obj_in, dict):
+            obj_in_dict = obj_in.model_dump(exclude_unset=True)
+        else:
+            obj_in_dict = obj_in
+
+        obj_in_dict["organization_id"] = ctx.organization.id
+
+        # Ensure we have timestamps
+        if "created_at" not in obj_in_dict:
+            obj_in_dict["created_at"] = datetime.now(timezone.utc).replace(tzinfo=None)
+        if "modified_at" not in obj_in_dict:
+            obj_in_dict["modified_at"] = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        # Use PostgreSQL's INSERT ... ON CONFLICT DO UPDATE
+        stmt = insert(Entity).values(**obj_in_dict)
+
+        # On conflict, update the existing row with the new data
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["sync_id", "entity_id"],  # The unique constraint columns
+            set_={
+                "sync_job_id": stmt.excluded.sync_job_id,
+                "entity_definition_id": stmt.excluded.entity_definition_id,
+                "hash": stmt.excluded.hash,
+                "modified_at": stmt.excluded.modified_at,
+            },
+        ).returning(Entity)
+
+        # Execute the upsert
+        result = await db.execute(stmt)
+        db_obj = result.scalar_one()
+
+        # Add to session for tracking
+        db.add(db_obj)
+
+        if not uow:
+            await db.commit()
+            await db.refresh(db_obj)
+
+        return db_obj
 
     async def get_by_entity_and_sync_id(
         self,
@@ -82,7 +152,10 @@ class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
         objs: list[EntityCreate],
         ctx: ApiContext,
     ) -> list[Entity]:
-        """Create many Entity rows in a single transaction.
+        """Create many Entity rows in a single transaction with conflict resolution.
+
+        Uses INSERT ... ON CONFLICT DO UPDATE to handle duplicate (sync_id, entity_id) pairs.
+        This prevents deadlocks when multiple workers try to insert the same entity.
 
         Ensures organization_id is set from the provided context.
         Caller controls commit via the session context.
@@ -105,16 +178,46 @@ class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
         if org_id is None:
             raise ValueError("ApiContext must contain valid organization information")
 
-        models_to_add: list[Entity] = []
+        # Prepare data for bulk upsert
+        values_list = []
         for o in objs:
             data = o.model_dump()
-            model = self.model(organization_id=org_id, **data)
-            models_to_add.append(model)
+            data["organization_id"] = org_id
+            # Ensure we have timestamps
+            if "created_at" not in data:
+                data["created_at"] = datetime.now(timezone.utc).replace(tzinfo=None)
+            if "modified_at" not in data:
+                data["modified_at"] = datetime.now(timezone.utc).replace(tzinfo=None)
+            values_list.append(data)
 
-        db.add_all(models_to_add)
-        # Ensure PKs and defaults are assigned by the DB before returning
+        # Use PostgreSQL's INSERT ... ON CONFLICT DO UPDATE
+        # This handles the unique constraint on (sync_id, entity_id) gracefully
+        stmt = insert(Entity).values(values_list)
+
+        # On conflict, update the existing row with the new data
+        # This ensures we always have the latest sync_job_id and hash
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["sync_id", "entity_id"],  # The unique constraint columns
+            set_={
+                "sync_job_id": stmt.excluded.sync_job_id,
+                "entity_definition_id": stmt.excluded.entity_definition_id,
+                "hash": stmt.excluded.hash,
+                "modified_at": stmt.excluded.modified_at,
+                # Keep the original organization_id to prevent cross-org updates
+                # organization_id is not updated on conflict
+            },
+        ).returning(Entity)
+
+        # Execute the upsert and get all affected rows
+        result = await db.execute(stmt)
+        entities = list(result.scalars().all())
+
+        # Ensure the session knows about these entities
+        for entity in entities:
+            db.add(entity)
+
         await db.flush()
-        return models_to_add
+        return entities
 
     async def bulk_update_hash(
         self,
