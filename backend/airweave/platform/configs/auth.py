@@ -183,7 +183,7 @@ class BitbucketAuthConfig(AuthConfig):
     username: Optional[str] = Field(
         default=None,
         title="Username",
-        description="Your Bitbucket username (deprecated when using API token)",
+        description="Your Bitbucket username (email when using API token)",
     )
     app_password: Optional[str] = Field(
         default=None,
