@@ -266,13 +266,30 @@ class SourceConnectionHelpers:
         access_token: str,
         config_fields: Optional[ConfigValues],
         ctx: ApiContext,
+        credentials: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Validate OAuth access token."""
+        """Validate OAuth access token.
+
+        Args:
+            db: Database session
+            source: Source model
+            access_token: OAuth access token (for backward compatibility)
+            config_fields: Optional config fields
+            ctx: API context
+            credentials: Full OAuth credentials dict (includes access_token, instance_url, etc.)
+        """
         try:
             source_cls = resource_locator.get_source(source)
-            source_instance = await source_cls.create(
-                access_token=access_token, config=config_fields
-            )
+
+            # If credentials dict is provided, use it (supports sources needing extra fields like Salesforce)
+            if credentials:
+                source_instance = await source_cls.create(credentials, config=config_fields)
+            else:
+                # Fall back to access_token only (for backward compatibility)
+                source_instance = await source_cls.create(
+                    access_token=access_token, config=config_fields
+                )
+
             source_instance.set_logger(ctx.logger)
 
             if hasattr(source_instance, "validate"):
@@ -1147,6 +1164,13 @@ class SourceConnectionHelpers:
 
         # Build OAuth credentials from token response
         auth_fields = token_response.model_dump()
+
+        # Capture extra fields (e.g., instance_url for Salesforce) from Pydantic v2
+        if hasattr(token_response, "__pydantic_extra__") and token_response.__pydantic_extra__:
+            for key, value in token_response.__pydantic_extra__.items():
+                if value is not None:
+                    auth_fields[key] = value
+
         if overrides.get("client_id"):
             auth_fields["client_id"] = overrides["client_id"]
         if overrides.get("client_secret"):

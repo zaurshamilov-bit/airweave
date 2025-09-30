@@ -615,8 +615,9 @@ class SyncFactory:
             try:
                 auth_config_class = resource_locator.get_auth_config(auth_config_class_name)
                 processed_credentials = auth_config_class.model_validate(raw_credentials)
-                msg = f"Converted credentials dict to {auth_config_class_name} object"
-                logger.info(f"{msg} for {short_name}")
+                logger.debug(
+                    f"Converted credentials dict to {auth_config_class_name} for {short_name}"
+                )
                 return processed_credentials
             except Exception as e:
                 logger.error(f"Failed to convert credentials to auth config object: {e}")
@@ -793,8 +794,14 @@ class SyncFactory:
                 connection_id,
                 decrypted_credential,
             )
-            # Just use the access token
-            return oauth2_response.access_token
+            # Update the access_token in the credentials while preserving other fields
+            # This is critical for sources like Salesforce that need instance_url
+            updated_credentials = decrypted_credential.copy()
+            updated_credentials["access_token"] = oauth2_response.access_token
+
+            # Return the updated credentials dict (NOT just the access token)
+            # This preserves fields like instance_url, client_id, etc.
+            return updated_credentials
 
         return source_credentials
 

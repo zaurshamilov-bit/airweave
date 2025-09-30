@@ -262,6 +262,12 @@ class StripeConfig(SourceConfig):
     pass
 
 
+class SalesforceConfig(SourceConfig):
+    """Salesforce configuration schema."""
+
+    pass
+
+
 class TodoistConfig(SourceConfig):
     """Todoist configuration schema."""
 

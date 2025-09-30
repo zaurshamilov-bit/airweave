@@ -293,6 +293,18 @@ class IntercomAuthConfig(OAuth2AuthConfig):
     # Inherits access_token from OAuth2AuthConfig
 
 
+class SalesforceAuthConfig(OAuth2WithRefreshAuthConfig):
+    """Salesforce authentication credentials schema."""
+
+    instance_url: str = Field(
+        ...,
+        title="Instance URL",
+        description="Salesforce instance URL (e.g., https://mycompany.my.salesforce.com)",
+    )
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+
+
 class JiraAuthConfig(OAuth2WithRefreshAuthConfig):
     """Jira authentication credentials schema."""
 

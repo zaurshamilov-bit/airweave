@@ -1339,13 +1339,22 @@ class SourceConnectionService:
             db, init_session.short_name, code, init_session.overrides, ctx
         )
 
-        # Validate token
+        # Validate token - pass full credentials dict for sources that need extra fields (like Salesforce)
+        credentials = token_response.model_dump()
+
+        # Capture extra fields (e.g., instance_url for Salesforce) from Pydantic v2
+        if hasattr(token_response, "__pydantic_extra__") and token_response.__pydantic_extra__:
+            for key, value in token_response.__pydantic_extra__.items():
+                if value is not None:
+                    credentials[key] = value
+
         await self._validate_oauth_token(
             db,
             await crud.source.get_by_short_name(db, short_name=init_session.short_name),
             token_response.access_token,
             None,
             ctx,
+            credentials=credentials,
         )
 
         # Complete the connection - also creates a sync if run_immediately is True
