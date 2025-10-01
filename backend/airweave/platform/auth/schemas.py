@@ -86,6 +86,10 @@ class OAuth2Settings(BaseAuthSettings):
         client_credential_location (str): The client credential location.
         additional_frontend_params (Optional[dict[str, str]]): Additional frontend parameters.
         scope (Optional[str]): The scope.
+        requires_pkce (bool): Whether this OAuth provider requires PKCE
+            (Proof Key for Code Exchange). PKCE is a security extension that
+            prevents authorization code interception. Set to True for providers
+            like Airtable that mandate PKCE.
 
     """
 
@@ -99,6 +103,7 @@ class OAuth2Settings(BaseAuthSettings):
     client_credential_location: str
     additional_frontend_params: Optional[dict[str, str]] = None
     scope: Optional[str] = None
+    requires_pkce: bool = False
 
     @model_validator(mode="after")
     def validate_oauth_fields(self):

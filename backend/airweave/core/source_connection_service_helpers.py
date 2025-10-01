@@ -917,6 +917,7 @@ class SourceConnectionHelpers:
         ctx: ApiContext,
         uow: Any,
         redirect_session_id: Optional[UUID] = None,
+        additional_overrides: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """Create connection init session for OAuth flow.
 
@@ -927,6 +928,17 @@ class SourceConnectionHelpers:
           4) Platform default (no client overrides)
 
         For BYOC, both client_id and client_secret are REQUIRED; otherwise 422.
+
+        Args:
+        ----
+            db: Database session
+            obj_in: Source connection creation request
+            state: OAuth state parameter for CSRF protection
+            ctx: API context
+            uow: Unit of work
+            redirect_session_id: Optional redirect session ID
+            additional_overrides: Additional data to store in overrides (e.g., PKCE code_verifier)
+
         """
         # Handle both new and legacy schemas
         source_type = getattr(obj_in, "source_type", None) or getattr(obj_in, "short_name", None)
@@ -1001,6 +1013,10 @@ class SourceConnectionHelpers:
             "oauth_redirect_uri": f"{core_settings.api_url}/source-connections/callback",
         }
 
+        # Merge additional overrides (e.g., PKCE code_verifier) if provided
+        if additional_overrides:
+            overrides.update(additional_overrides)
+
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
 
         return await connection_init_session.create(
@@ -1051,11 +1067,32 @@ class SourceConnectionHelpers:
         overrides: Dict[str, Any],
         ctx: ApiContext,
     ) -> Any:
-        """Exchange OAuth code for token."""
+        """Exchange OAuth code for token with PKCE support.
+
+        Retrieves the code_verifier from overrides if it was stored during
+        authorization (for PKCE-enabled providers like Airtable).
+
+        Args:
+        ----
+            db: Database session
+            short_name: Integration short name
+            code: Authorization code from OAuth provider
+            overrides: Session overrides containing client credentials and PKCE data
+            ctx: API context
+
+        Returns:
+        -------
+            OAuth2TokenResponse: Token response from the OAuth provider
+
+        """
         redirect_uri = (
             overrides.get("oauth_redirect_uri")
             or f"{core_settings.api_url}/source-connections/callback"
         )
+
+        # Retrieve PKCE code verifier if it was stored during authorization
+        code_verifier = overrides.get("code_verifier")
+
         return await oauth2_service.exchange_authorization_code_for_token_with_redirect(
             ctx=ctx,
             source_short_name=short_name,
@@ -1063,6 +1100,7 @@ class SourceConnectionHelpers:
             redirect_uri=redirect_uri,
             client_id=overrides.get("client_id"),
             client_secret=overrides.get("client_secret"),
+            code_verifier=code_verifier,
         )
 
     async def _regenerate_oauth_url(
@@ -1115,12 +1153,19 @@ class SourceConnectionHelpers:
             or f"{core_settings.api_url}/source-connections/callback"
         )
 
-        provider_auth_url = await oauth2_service.generate_auth_url_with_redirect(
+        provider_auth_url, code_verifier = await oauth2_service.generate_auth_url_with_redirect(
             oauth_settings,
             redirect_uri=api_callback,
             client_id=init_session.overrides.get("client_id"),
             state=state,
         )
+
+        # Store code_verifier in init_session if PKCE is being used
+        if code_verifier:
+            init_session.overrides["code_verifier"] = code_verifier
+            await crud.source_connection_init_session.update(
+                db=db, db_obj=init_session, obj_in={"overrides": init_session.overrides}, ctx=ctx
+            )
 
         # Create new proxy URL
         proxy_url, proxy_expiry, _ = await self.create_proxy_url(db, provider_auth_url, ctx)

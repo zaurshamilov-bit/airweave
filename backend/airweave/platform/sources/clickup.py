@@ -31,7 +31,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
         AuthenticationMethod.OAUTH_TOKEN,
         AuthenticationMethod.AUTH_PROVIDER,
     ],
-    oauth_type=OAuthType.ACCESS_ONLY,
+    oauth_type=OAuthType.WITH_REFRESH,
     auth_config_class="ClickUpAuthConfig",
     config_class="ClickUpConfig",
     labels=["Project Management"],
@@ -619,9 +619,11 @@ class ClickUpSource(BaseSource):
                                 task_breadcrumb = Breadcrumb(
                                     entity_id=task_entity.entity_id,
                                     name=task_entity.name,
-                                    type="task"
-                                    if isinstance(task_entity, ClickUpTaskEntity)
-                                    else "subtask",
+                                    type=(
+                                        "task"
+                                        if isinstance(task_entity, ClickUpTaskEntity)
+                                        else "subtask"
+                                    ),
                                 )
                                 task_breadcrumbs = [*list_breadcrumbs, task_breadcrumb]
 
@@ -680,9 +682,11 @@ class ClickUpSource(BaseSource):
                             task_breadcrumb = Breadcrumb(
                                 entity_id=task_entity.entity_id,
                                 name=task_entity.name,
-                                type="task"
-                                if isinstance(task_entity, ClickUpTaskEntity)
-                                else "subtask",
+                                type=(
+                                    "task"
+                                    if isinstance(task_entity, ClickUpTaskEntity)
+                                    else "subtask"
+                                ),
                             )
                             task_breadcrumbs = [*list_breadcrumbs, task_breadcrumb]
 

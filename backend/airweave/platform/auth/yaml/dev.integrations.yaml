@@ -1,4 +1,18 @@
 integrations:
+  airtable:
+    oauth_type: "with_refresh"
+    url: "https://airtable.com/oauth2/v1/authorize"
+    backend_url: "https://airtable.com/oauth2/v1/token"
+    grant_type: "authorization_code"
+    client_id: "84ab41c1-4f8c-4fc6-b1f9-b027a75f36a4"
+    client_secret: "c57b745550b977ca501a53cccc379ae90157ed5d59dbeafab197c26e5b621429"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "header"
+    scope: "schema.bases:read data.records:read data.recordComments:read"
+    requires_pkce: true
+    additional_frontend_params:
+      response_type: "code"
+
   asana:
     oauth_type: "with_refresh"
     url: "https://app.asana.com/-/oauth_authorize"
@@ -42,6 +56,17 @@ integrations:
       token_access_type: "offline"
 
   github:
+
+  gitlab:
+    oauth_type: "with_refresh"
+    url: "https://gitlab.com/oauth/authorize"
+    backend_url: "https://gitlab.com/oauth/token"
+    grant_type: "authorization_code"
+    client_id: "5533a975bf10d2e1eae5735906498995f3034a46d0315f783eb716ece148b0e7"
+    client_secret: "gloas-7b3b6362a226a1f0c59e16ba2e36007de0c8361124d2ce8685e5d2a791eb7096"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read_api read_user read_repository openid profile email"
 
   gmail:
     oauth_type: "with_refresh"
@@ -195,6 +220,21 @@ integrations:
     scope: "offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/MailboxFolder.Read https://graph.microsoft.com/Mail.Read"
     additional_frontend_params:
       response_mode: "query"
+
+  sharepoint:
+    oauth_type: "with_rotating_refresh"
+    url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+    backend_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+    grant_type: "authorization_code"
+    client_id: "02669594-1acf-495d-a846-f18a80126a11"
+    client_secret: "xna8Q~EYqiLH~x-u4oAVC0fEAe4Ts1d60RocUcGF"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "offline_access https://graph.microsoft.com/User.Read.All https://graph.microsoft.com/Group.Read.All https://graph.microsoft.com/Sites.Read.All https://graph.microsoft.com/Files.Read.All"
+    additional_frontend_params:
+      response_type: "code"
+      response_mode: "query"
+
 
   slack:
     oauth_type: "access_only"

@@ -1,7 +1,9 @@
 """The services for handling OAuth2 authentication and token exchange for integrations."""
 
 import base64
-from typing import Optional
+import hashlib
+import secrets
+from typing import Optional, Tuple
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -126,10 +128,27 @@ class OAuth2Service:
         redirect_uri: str,
         client_id: Optional[str] = None,
         state: Optional[str] = None,
-    ) -> str:
-        """Generate an OAuth2 authorization URL but force a specific redirect_uri and include state.
+    ) -> Tuple[str, Optional[str]]:
+        """Generate an OAuth2 authorization URL with PKCE support if required.
 
-        Useful for API-hosted callback flows.
+        For providers that require PKCE (e.g., Airtable), this method generates
+        a code_verifier and includes the corresponding code_challenge in the
+        authorization URL. The code_verifier must be stored and sent during
+        token exchange.
+
+        Args:
+        ----
+            oauth2_settings: The OAuth2 settings for the integration
+            redirect_uri: The redirect URI for the OAuth callback
+            client_id: Optional client ID to override the default
+            state: Optional state token for CSRF protection
+
+        Returns:
+        -------
+            Tuple[str, Optional[str]]: (authorization_url, code_verifier)
+                - authorization_url: The complete URL to redirect the user to
+                - code_verifier: The PKCE code verifier if PKCE is required, None otherwise
+
         """
         if not client_id:
             client_id = oauth2_settings.client_id
@@ -145,7 +164,15 @@ class OAuth2Service:
         if oauth2_settings.scope:
             params["scope"] = oauth2_settings.scope
 
-        return f"{oauth2_settings.url}?{urlencode(params)}"
+        # Generate PKCE parameters if required by the provider
+        code_verifier = None
+        if oauth2_settings.requires_pkce:
+            code_verifier, code_challenge = OAuth2Service._generate_pkce_challenge_pair()
+            params["code_challenge"] = code_challenge
+            params["code_challenge_method"] = "S256"
+
+        auth_url = f"{oauth2_settings.url}?{urlencode(params)}"
+        return auth_url, code_verifier
 
     @staticmethod
     async def exchange_authorization_code_for_token_with_redirect(
@@ -156,10 +183,28 @@ class OAuth2Service:
         redirect_uri: str,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
+        code_verifier: Optional[str] = None,
     ) -> OAuth2TokenResponse:
         """Exchange an OAuth2 code using an explicit redirect_uri.
 
-        Must match the one used in auth.
+        Args:
+        ----
+            ctx: The API context
+            source_short_name: The short name of the integration
+            code: The authorization code from the OAuth provider
+            redirect_uri: Must match the one used in authorization request
+            client_id: Optional client ID override
+            client_secret: Optional client secret override
+            code_verifier: PKCE code verifier (required if provider uses PKCE)
+
+        Returns:
+        -------
+            OAuth2TokenResponse: The response containing the access token and other details
+
+        Raises:
+        ------
+            HTTPException: If settings not found or token exchange fails
+
         """
         try:
             oauth2_settings = await integration_settings.get_by_short_name(source_short_name)
@@ -180,6 +225,7 @@ class OAuth2Service:
             client_id=client_id,
             client_secret=client_secret,
             integration_config=oauth2_settings,
+            code_verifier=code_verifier,
         )
 
     @staticmethod
@@ -505,6 +551,48 @@ class OAuth2Service:
         return base64_credentials
 
     @staticmethod
+    def _generate_pkce_challenge_pair() -> Tuple[str, str]:
+        """Generate PKCE code verifier and code challenge.
+
+        PKCE (Proof Key for Code Exchange) is an OAuth 2.0 security extension
+        that prevents authorization code interception attacks.
+
+        Process:
+        1. Generate a cryptographically random code_verifier (43-128 characters)
+        2. Compute code_challenge = BASE64URL(SHA256(code_verifier))
+        3. Send code_challenge in authorization request
+        4. Send code_verifier in token exchange request
+
+        The OAuth provider verifies that SHA256(code_verifier) == code_challenge,
+        ensuring the token exchange request comes from the same client that
+        initiated the authorization.
+
+        Returns:
+        -------
+            Tuple[str, str]: (code_verifier, code_challenge)
+                - code_verifier: Random string to be sent during token exchange
+                - code_challenge: SHA256 hash to be sent during authorization
+
+        References:
+        ----------
+            RFC 7636: https://tools.ietf.org/html/rfc7636
+            Airtable OAuth: https://airtable.com/developers/web/api/oauth-reference
+
+        """
+        # Generate cryptographically secure random verifier (43-128 characters)
+        # Using 64 bytes gives us ~86 base64 characters (well within spec)
+        code_verifier = secrets.token_urlsafe(64)
+
+        # Compute SHA256 hash of the verifier
+        verifier_bytes = code_verifier.encode("ascii")
+        sha256_hash = hashlib.sha256(verifier_bytes).digest()
+
+        # Base64 URL-encode the hash (without padding as per spec)
+        code_challenge = base64.urlsafe_b64encode(sha256_hash).decode("ascii").rstrip("=")
+
+        return code_verifier, code_challenge
+
+    @staticmethod
     def _get_redirect_url(integration_short_name: str) -> str:
         """Private method to generate the appropriate redirect URI based on environment.
 
@@ -534,25 +622,32 @@ class OAuth2Service:
         client_id: str,
         client_secret: str,
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
+        code_verifier: Optional[str] = None,
     ) -> OAuth2TokenResponse:
         """Core method to exchange an authorization code for tokens.
 
+        Supports both standard OAuth 2.0 and PKCE (Proof Key for Code Exchange).
+        When code_verifier is provided, it will be included in the token request
+        to complete the PKCE flow.
+
         Args:
         ----
-            logger: The logger to use.
+            logger: The logger to use
             code: The authorization code to exchange
             redirect_uri: The redirect URI used in the authorization request
             client_id: The OAuth2 client ID
             client_secret: The OAuth2 client secret
             integration_config: The integration configuration
+            code_verifier: PKCE code verifier (required for PKCE-enabled providers)
 
         Returns:
         -------
-            OAuth2TokenResponse: The response containing the access token and other token details.
+            OAuth2TokenResponse: The response containing the access token and other token details
 
         Raises:
         ------
             HTTPException: If the token exchange fails
+
         """
         headers = {
             "Content-Type": integration_config.content_type,
@@ -564,11 +659,17 @@ class OAuth2Service:
             "redirect_uri": redirect_uri,
         }
 
-        # ADD THIS DEBUG LOGGING HERE - BEFORE the credential handling
+        # Add PKCE code verifier if provided (completes PKCE flow)
+        if code_verifier:
+            payload["code_verifier"] = code_verifier
+            logger.debug("Including PKCE code_verifier in token exchange request")
+
+        # Log request details for debugging
         logger.info(f"DEBUG - Using redirect_uri: {redirect_uri}")
         logger.info(f"DEBUG - Using client_id: {client_id}")
         logger.info(f"DEBUG - Code length: {len(code)}")
         logger.info(f"DEBUG - Backend URL: {integration_config.backend_url}")
+        logger.info(f"DEBUG - PKCE enabled: {code_verifier is not None}")
 
         if integration_config.client_credential_location == "header":
             encoded_credentials = OAuth2Service._encode_client_credentials(client_id, client_secret)
