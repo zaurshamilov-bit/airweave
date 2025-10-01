@@ -114,7 +114,7 @@ class TeamsBongo(BaseBongo):
                     "team_id": self._team_id,
                 }
                 self._channels.append(channel_descriptor)
-                all_entities.append(channel_descriptor)
+                # Don't add channel to all_entities - it has no token to verify
 
                 self.logger.info(f"✅ Created test channel: {channel_name}")
 

@@ -677,7 +677,7 @@ class TeamsSource(BaseSource):
             True if token is valid, False otherwise
         """
         return await self._validate_oauth2(
-            ping_url=f"{self.GRAPH_BASE_URL}/me/joinedTeams?$top=1",
+            ping_url=f"{self.GRAPH_BASE_URL}/me/joinedTeams",
             headers={"Accept": "application/json"},
             timeout=10.0,
         )
