@@ -705,7 +705,7 @@ class TestTemporalSchedules:
         assert has_schedule, "Schedule should be created in Temporal"
 
         # Wait for at least one minute plus buffer for the schedule to trigger
-        await asyncio.sleep(80)  # 60s for one minute + 10s buffer
+        await asyncio.sleep(105)  # 60s for one minute + 45s margin
 
         # Check if sync job was created
         response = await api_client.get(f"/source-connections/{conn_id}/jobs")
@@ -739,15 +739,21 @@ class TestTemporalSchedules:
         if seconds_until_next_minute > 30:
             # Next minute is far enough away, use it
             target_minute = (now.minute + 1) % 60
-            wait_seconds = seconds_until_next_minute + 30
+            base_wait = seconds_until_next_minute + 45  # 45s margin
         else:
             # Too close to next minute, use the one after
             target_minute = (now.minute + 2) % 60
-            wait_seconds = seconds_until_next_minute + 90
+            base_wait = seconds_until_next_minute + 105  # 45s margin after extra minute
 
-        # If we're wrapping around to next hour, skip test
+        # Check if we're wrapping around to next hour
         if target_minute < now.minute:
-            pytest.skip("Would need to wait for next hour, skipping test")
+            # We're wrapping to the next hour, add time to wait for hour boundary
+            minutes_until_hour = 60 - now.minute
+            seconds_until_hour = (minutes_until_hour * 60) - now.second
+            wait_seconds = seconds_until_hour + (target_minute * 60) + 45  # 45s margin
+        else:
+            # Same hour, use base wait
+            wait_seconds = base_wait
 
         # Create connection with hourly schedule at specific minute
         payload = {
@@ -773,6 +779,7 @@ class TestTemporalSchedules:
         assert has_schedule, "Schedule should be created in Temporal"
 
         # Wait for the scheduled time (calculated above)
+        # Add extra margin for processing
         await asyncio.sleep(wait_seconds)
 
         # Check for sync job
