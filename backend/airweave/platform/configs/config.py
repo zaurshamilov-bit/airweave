@@ -11,6 +11,12 @@ class SourceConfig(BaseConfig):
     pass
 
 
+class AirtableConfig(SourceConfig):
+    """Airtable configuration schema."""
+
+    pass
+
+
 class AsanaConfig(SourceConfig):
     """Asana configuration schema."""
 
@@ -234,6 +240,12 @@ class CTTIConfig(SourceConfig):
 
 class PostgreSQLConfig(SourceConfig):
     """Postgres configuration schema."""
+
+    pass
+
+
+class SharePointConfig(SourceConfig):
+    """SharePoint configuration schema."""
 
     pass
 

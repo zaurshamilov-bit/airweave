@@ -1,4 +1,19 @@
 integrations:
+  airtable:
+    oauth_type: "with_refresh"
+    url: "https://airtable.com/oauth2/v1/authorize"
+    backend_url: "https://airtable.com/oauth2/v1/token"
+    grant_type: "authorization_code"
+    client_id: "8d29922c-a4e0-4633-880c-8f3f887f768e"
+    client_secret: "airtable-client-secret-key"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "header"
+    scope: "schema.bases:read data.records:read data.recordComments:read"
+    requires_pkce: true
+    additional_frontend_params:
+      response_type: "code"
+
+
   asana:
     oauth_type: "with_refresh"
     url: "https://app.asana.com/-/oauth_authorize"
@@ -192,6 +207,20 @@ integrations:
     client_credential_location: "body"
     scope: "offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/MailboxFolder.Read https://graph.microsoft.com/Mail.Read"
     additional_frontend_params:
+      response_mode: "query"
+
+  sharepoint:
+    oauth_type: "with_rotating_refresh"
+    url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+    backend_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+    grant_type: "authorization_code"
+    client_id: "050726fc-a4bf-4ffb-88de-42fc614ccadb"
+    client_secret: "sharepoint-client-secret-key"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "offline_access https://graph.microsoft.com/User.Read.All https://graph.microsoft.com/Group.Read.All https://graph.microsoft.com/Sites.Read.All https://graph.microsoft.com/Files.Read.All"
+    additional_frontend_params:
+      response_type: "code"
       response_mode: "query"
 
   slack:
