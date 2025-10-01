@@ -2,7 +2,7 @@
 
 from pydantic import Field, validator
 
-from airweave.platform.configs._base import BaseConfig
+from airweave.platform.configs._base import BaseConfig, RequiredTemplateConfig
 
 
 class SourceConfig(BaseConfig):
@@ -266,6 +266,21 @@ class TodoistConfig(SourceConfig):
     """Todoist configuration schema."""
 
     pass
+
+
+class ZendeskConfig(SourceConfig):
+    """Zendesk configuration schema."""
+
+    subdomain: str = RequiredTemplateConfig(
+        title="Zendesk Subdomain",
+        description="Your Zendesk subdomain only (e.g., 'mycompany' NOT 'mycompany.zendesk.com')",
+        json_schema_extra={"required_for_auth": True},
+    )
+    exclude_closed_tickets: bool = Field(
+        default=False,
+        title="Exclude Closed Tickets",
+        description="Skip closed tickets during sync (recommended for faster syncing)",
+    )
 
 
 # AUTH PROVIDER CONFIGURATION CLASSES

@@ -286,24 +286,33 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       );
 
       if (selectedProviderConnection) {
-        // Check if all required config fields are filled
+        // Check if all required provider config fields are filled
         const requiredFields = getRequiredProviderConfigFields(selectedProviderConnection.short_name);
         if (requiredFields.length > 0) {
-          return requiredFields.every(fieldName => authProviderConfig[fieldName]?.trim());
+          const allFilled = requiredFields.every(fieldName => authProviderConfig[fieldName]?.trim());
+          if (!allFilled) return false;
         }
       }
-
-      return true;
     } else if (authMode === 'direct_auth') {
-      // Need auth fields filled
+      // Check if all required auth fields are filled
       if (sourceDetails?.auth_fields?.fields) {
         const requiredFields = sourceDetails.auth_fields.fields.filter(f => f.required);
-        return requiredFields.every(field => authFields[field.name]?.trim());
+        const allFilled = requiredFields.every(field => authFields[field.name]?.trim());
+        if (!allFilled) return false;
       }
     } else if (authMode === 'oauth2') {
-      // Check if custom credentials are required
+      // Check if custom OAuth credentials are required
       if (requiresCustomOAuth() || useOwnCredentials) {
-        return !!(clientId.trim() && clientSecret.trim());
+        if (!clientId.trim() || !clientSecret.trim()) return false;
+      }
+    }
+
+    // Check required config fields (applies to ALL auth modes)
+    if (sourceDetails?.config_fields?.fields) {
+      const requiredConfigFields = sourceDetails.config_fields.fields.filter(f => f.required);
+      if (requiredConfigFields.length > 0) {
+        const allFilled = requiredConfigFields.every(field => configData[field.name]?.trim());
+        if (!allFilled) return false;
       }
     }
 
@@ -538,16 +547,17 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                     </div>
                   )}
 
-                  {/* Config fields (optional additional configuration) */}
+                  {/* Config fields */}
                   {sourceDetails?.config_fields?.fields && sourceDetails.config_fields.fields.length > 0 && (
                     <div className="space-y-3">
                       <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Additional Configuration (optional)
+                        Additional Configuration
                       </label>
                       {sourceDetails.config_fields.fields.map((field) => (
                         <div key={field.name}>
                           <label className="block text-sm font-medium mb-1">
                             {field.title || field.name}
+                            {field.required && <span className="text-red-500 ml-1">*</span>}
                           </label>
                           {field.description && (
                             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">

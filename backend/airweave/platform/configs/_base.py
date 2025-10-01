@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 from pydantic_core import PydanticUndefined
 
 
-def AuthRequiredField(*args, **kwargs):
+def RequiredTemplateConfig(*args, **kwargs):
     """Create a Field marked as required for OAuth URL templates.
 
     This helper marks config fields that must be provided BEFORE OAuth flow starts.
@@ -22,7 +22,7 @@ def AuthRequiredField(*args, **kwargs):
     Example:
         ```python
         class SalesforceConfig(BaseConfig):
-            instance_url: str = AuthRequiredField(
+            instance_url: str = RequiredTemplateConfig(
                 title="Instance URL",
                 description="Your Salesforce instance (e.g., mycompany.salesforce.com)",
             )

@@ -42,7 +42,7 @@ def _extract_template_variables(template_string: str) -> set[str]:
 
 
 def _validate_source_template_config(source_class: Type[BaseSource]) -> None:
-    """Validate that source's YAML template variables match config class AuthRequiredFields.
+    """Validate that source's YAML template variables match config class RequiredTemplateConfigs.
 
     Args:
         source_class: Source class to validate
@@ -92,7 +92,7 @@ def _validate_source_template_config(source_class: Type[BaseSource]) -> None:
         config_class = resource_locator.get_config(config_class_name)
         template_config_fields = set(config_class.get_template_config_fields())
 
-        # Validate: every template variable must have a matching AuthRequiredField
+        # Validate: every template variable must have a matching RequiredTemplateConfig
         missing_in_config = all_template_vars - template_config_fields
         if missing_in_config:
             raise ValueError(
@@ -103,7 +103,7 @@ def _validate_source_template_config(source_class: Type[BaseSource]) -> None:
                 f"Fix: Add to {config_class_name}:\n"
                 + "\n".join(
                     [
-                        f"    {var}: str = AuthRequiredField("
+                        f"    {var}: str = RequiredTemplateConfig("
                         f'title="{var.replace("_", " ").title()}")'
                         for var in sorted(missing_in_config)
                     ]
