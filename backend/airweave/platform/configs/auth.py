@@ -407,6 +407,12 @@ class TodoistAuthConfig(OAuth2AuthConfig):
     # Inherits access_token from OAuth2AuthConfig
 
 
+class TeamsAuthConfig(OAuth2WithRefreshAuthConfig):
+    """Microsoft Teams authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+
+
 # AUTH PROVIDER AUTHENTICATION CONFIGS
 # These are for authenticating TO auth providers themselves
 

@@ -299,6 +299,12 @@ class TodoistConfig(SourceConfig):
     pass
 
 
+class TeamsConfig(SourceConfig):
+    """Microsoft Teams configuration schema."""
+
+    pass
+
+
 # AUTH PROVIDER CONFIGURATION CLASSES
 # These are for configuring auth provider behavior
 
