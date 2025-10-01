@@ -20,7 +20,6 @@ from airweave.platform.entities.clickup import (
     ClickUpWorkspaceEntity,
 )
 from airweave.platform.sources._base import BaseSource
-
 from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 
 
@@ -36,6 +35,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     auth_config_class="ClickUpAuthConfig",
     config_class="ClickUpConfig",
     labels=["Project Management"],
+    supports_continuous=False,
 )
 class ClickUpSource(BaseSource):
     """ClickUp source connector integrates with the ClickUp API to extract and synchronize data.
