@@ -160,6 +160,58 @@ class SourceConnectionService:
 
         # All other patterns (including "0 * * * *" for hourly) are allowed
 
+    async def _validate_and_extract_template_configs(
+        self,
+        db: AsyncSession,
+        source: schemas.Source,
+        validated_config: Optional[dict],
+        ctx: ApiContext,
+    ) -> Optional[dict]:
+        """Validate and extract template config fields for OAuth flows.
+
+        Template configs are config fields that are required before OAuth can begin
+        (e.g., instance URLs like Zendesk subdomain).
+
+        Args:
+            db: Database session
+            source: Source model
+            validated_config: Already validated config dictionary
+            ctx: API context
+
+        Returns:
+            Dictionary of template configs or None if not applicable
+
+        Raises:
+            HTTPException: If required template configs are missing or invalid
+        """
+        template_configs = None
+        if source.config_class and validated_config:
+            from airweave.platform.locator import resource_locator
+
+            try:
+                config_class = resource_locator.get_config(source.config_class)
+
+                # Check if this source has template config fields
+                template_config_fields = config_class.get_template_config_fields()
+
+                if template_config_fields:
+                    # Validate template config fields are present
+                    try:
+                        config_class.validate_template_configs(validated_config)
+                        template_configs = config_class.extract_template_configs(validated_config)
+
+                        ctx.logger.info(
+                            f"✅ Validated template configs for {source.short_name}: "
+                            f"{list(template_configs.keys())}"
+                        )
+                    except ValueError as e:
+                        raise HTTPException(status_code=422, detail=str(e))
+            except Exception as e:
+                # Log but don't fail if config class not found (backward compatibility)
+                ctx.logger.warning(f"Could not load config class for {source.short_name}: {e}")
+
+        return template_configs
+
     """Clean service with automatic auth method inference.
 
     Key improvements:
@@ -582,32 +634,10 @@ class SourceConnectionService:
             db, obj_in.short_name, obj_in.config, ctx
         )
 
-        # NEW: Validate and extract auth-required config fields for OAuth flow
-        template_configs = None
-        if source.config_class and validated_config:
-            from airweave.platform.locator import resource_locator
-
-            try:
-                config_class = resource_locator.get_config(source.config_class)
-
-                # Check if this source has template config fields
-                template_config_fields = config_class.get_template_config_fields()
-
-                if template_config_fields:
-                    # Validate template config fields are present
-                    try:
-                        config_class.validate_template_configs(validated_config)
-                        template_configs = config_class.extract_template_configs(validated_config)
-
-                        ctx.logger.info(
-                            f"✅ Validated template configs for {source.short_name}: "
-                            f"{list(template_configs.keys())}"
-                        )
-                    except ValueError as e:
-                        raise HTTPException(status_code=422, detail=str(e))
-            except Exception as e:
-                # Log but don't fail if config class not found (backward compatibility)
-                ctx.logger.warning(f"Could not load config class for {source.short_name}: {e}")
+        # Validate and extract template config fields for OAuth flow
+        template_configs = await self._validate_and_extract_template_configs(
+            db, source, validated_config, ctx
+        )
 
         # Generate OAuth URL
         oauth_settings = await integration_settings.get_by_short_name(source.short_name)
