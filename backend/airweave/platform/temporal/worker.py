@@ -98,55 +98,19 @@ async def main() -> None:
     worker = TemporalWorker()
 
     # Handle shutdown signals
-    shutdown_event = asyncio.Event()
-
     def signal_handler(signum: int, frame: Any) -> None:
-        logger.info(f"Received signal {signum}, initiating graceful shutdown...")
-        shutdown_event.set()
+        logger.info(f"Received signal {signum}, shutting down...")
+        asyncio.create_task(worker.stop())
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
     try:
-        # Start worker in background task
-        worker_task = asyncio.create_task(worker.start())
-
-        # Wait for shutdown signal or worker completion
-        shutdown_task = asyncio.create_task(shutdown_event.wait())
-        done, pending = await asyncio.wait(
-            {worker_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
-        )
-
-        # If shutdown was signaled, stop the worker
-        if shutdown_task in done:
-            logger.info("Shutdown signal received, stopping worker...")
-            await worker.stop()
-
-            # Give the worker task time to cleanup
-            try:
-                await asyncio.wait_for(worker_task, timeout=3.0)
-            except asyncio.TimeoutError:
-                logger.warning("Worker task did not complete in time, cancelling...")
-                worker_task.cancel()
-                try:
-                    await worker_task
-                except asyncio.CancelledError:
-                    pass
-        else:
-            # Worker completed naturally
-            await worker_task
-
+        await worker.start()
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt, shutting down...")
-        await worker.stop()
-    except Exception as e:
-        logger.error(f"Error in worker main: {e}", exc_info=True)
-        await worker.stop()
-        raise
     finally:
-        # Ensure cleanup
-        if worker.running:
-            await worker.stop()
+        await worker.stop()
 
 
 if __name__ == "__main__":
