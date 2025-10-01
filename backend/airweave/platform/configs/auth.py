@@ -287,6 +287,12 @@ class GoogleDriveAuthConfig(OAuth2BYOCAuthConfig):
     # Inherits client_id, client_secret, refresh_token and access_token from OAuth2BYOCAuthConfig
 
 
+class GitLabAuthConfig(OAuth2WithRefreshAuthConfig):
+    """GitLab authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+
+
 class HubspotAuthConfig(OAuth2WithRefreshAuthConfig):
     """Hubspot authentication credentials schema."""
 
