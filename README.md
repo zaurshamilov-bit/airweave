@@ -24,7 +24,10 @@ The search interface is exposed via REST API or MCP. When using MCP, Airweave es
 
 📺 Check out the quick demo below:
 
-https://github.com/user-attachments/assets/b070cbf2-6deb-4eb6-adbd-eb4bbe625ae3
+
+![Demo](https://github.com/user-attachments/assets/0e543082-3ee9-4961-b151-c31bb29e9d03)
+
+
 [**🔗 Example notebooks**](https://github.com/airweave-ai/airweave/tree/main/examples)
 
 ## Table of Contents
