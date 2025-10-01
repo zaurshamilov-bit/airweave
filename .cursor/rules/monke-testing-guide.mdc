@@ -10,14 +10,29 @@ This guide shows you how to build comprehensive tests that verify **every entity
 
 ## Why Test Every Entity Type?
 
+**⚠️ CRITICAL RULE: Your Monke tests MUST create and verify ALL entity types defined in your source connector.**
+
 **Problem:** Many connector tests only verify top-level entities (e.g., tasks) but ignore nested entities (e.g., comments, files).
 
 **Impact:**
 - Comments might not sync properly → Silent failures in production
 - File attachments might not be indexed → Missing searchable content
 - Entity relationships might be broken → Poor search results
+- Users can't search the full breadth of data they expect
 
 **Solution:** Create test entities for **every entity type** your connector syncs, and verify each one appears in Qdrant.
+
+**Before Writing Monke Tests:**
+1. Open your source file: `backend/airweave/platform/sources/{short_name}.py`
+2. List ALL entity types yielded in `generate_entities()`:
+   - Example: WorkspaceEntity, ProjectEntity, TaskEntity, CommentEntity, FileEntity
+3. Your Monke tests MUST create at least one instance of EACH type
+4. Your Monke tests MUST verify each instance appears in Qdrant after sync
+
+**Validation:**
+- Count entity classes in `entities/{short_name}.py`
+- Count entity types created in `bongos/{short_name}.py::create_entities()`
+- **These counts MUST match** (excluding parent/workspace entities that don't get stored)
 
 ---
 
@@ -169,11 +184,34 @@ class MyConnectorBongo(BaseBongo):
 
 ### Implementing `create_entities()` - The Critical Method
 
+**⚠️ CRITICAL: This method MUST create at least one instance of EVERY entity type your source connector yields.**
+
 **Key principle:** Create at least one instance of **every entity type** your connector syncs.
+
+**Before implementing, check your source connector:**
+```bash
+# Open your source file and list ALL entities yielded
+grep "yield.*Entity" backend/airweave/platform/sources/{short_name}.py
+
+# Example output for Asana:
+# yield workspace  # WorkspaceEntity
+# yield project    # ProjectEntity
+# yield task       # TaskEntity
+# yield comment    # CommentEntity
+# yield file       # FileEntity
+
+# Your create_entities() MUST create: tasks, comments, AND files
+```
 
 ```python
 async def create_entities(self) -> List[Dict[str, Any]]:
     """Create comprehensive test entities.
+
+    ⚠️ CRITICAL: This method MUST create instances of ALL entity types:
+    - Check your source's generate_entities() method
+    - List every entity type it yields
+    - Create at least one of EACH type here
+    - Return descriptors for ALL types for verification
 
     Strategy:
     1. Create parent entities (projects, tasks, etc.)
@@ -322,11 +360,31 @@ async def create_entities(self) -> List[Dict[str, Any]]:
 
 ### Key Principles for `create_entities()`
 
-1. **Create nested entities** - Don't just create tasks; create comments ON those tasks, files ATTACHED to those tasks
-2. **Unique tokens per entity** - Each comment, file, task gets its own verification token
-3. **Track everything** - Store descriptors for all created entities
-4. **Parallel creation** - Use `asyncio.Semaphore` for efficient bulk creation
-5. **Error handling** - Log failures but continue creating other entities
+**⚠️ CRITICAL RULE #1: Create ALL entity types, not just parent entities**
+
+1. **Create ALL entity types from source** - Before coding, list every entity type your source's `generate_entities()` yields. Your tests MUST create at least one of each type.
+
+2. **Create nested entities** - Don't just create tasks; create comments ON those tasks, files ATTACHED to those tasks
+
+3. **Unique tokens per entity** - Each comment, file, task gets its own verification token
+
+4. **Track everything** - Store descriptors for all created entities and return them all
+
+5. **Parallel creation** - Use `asyncio.Semaphore` for efficient bulk creation
+
+6. **Error handling** - Log failures but continue creating other entities
+
+**Validation Pattern:**
+```python
+# At the end of create_entities(), verify you created all types:
+self.logger.info(
+    f"✅ Created {len(self._tasks)} tasks, "
+    f"{len(self._comments)} comments, "  # Must be > 0 if source yields comments
+    f"{len(self._files)} files"          # Must be > 0 if source yields files
+)
+
+# If any count is 0 but your source yields that type, YOU HAVE A BUG
+```
 
 ### Implementing `update_entities()`
 
@@ -1029,18 +1087,27 @@ See the Asana tests for a complete example:
 
 ## Checklist
 
-- [ ] Bongo creates ALL entity types (not just top-level)
+**Critical Requirements:**
+- [ ] **⚠️ VERIFIED: Bongo creates ALL entity types from source connector (not just top-level)**
+  - [ ] Listed all entity types from `generate_entities()` in source file
+  - [ ] Confirmed `create_entities()` creates at least one of each type
+  - [ ] Confirmed entity count matches between source and tests
+- [ ] **⚠️ VERIFIED: All created entity types are returned in `create_entities()` for verification**
+  - [ ] Tasks ✓
+  - [ ] Comments ✓ (if source yields them)
+  - [ ] Files ✓ (if source yields them)
+  - [ ] Any other entity types ✓
+
+**Implementation Requirements:**
 - [ ] Each entity gets a unique verification token
 - [ ] Tokens are embedded in searchable content
 - [ ] Entity descriptors include type, id, token, parent_id (if nested)
-- [ ] Generation schemas defined for all entity types
+- [ ] Generation schemas defined for all entity types (not just tasks)
 - [ ] Generation adapters use LLMClient
 - [ ] Test config includes comprehensive test_flow
 - [ ] Verification settings are appropriate (retries, delays)
 - [ ] cleanup() removes ALL test data
 - [ ] Rate limiting added (only if API requires it)
-- [ ] File attachments are created and verified (if supported)
-- [ ] Comments/discussions are created and verified (if supported)
 - [ ] Update flow tests incremental sync
 - [ ] Deletion flow tests deletion detection (if supported)
 

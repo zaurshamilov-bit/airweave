@@ -90,28 +90,116 @@ class MyConnectorEntity(ChunkEntity):
 
 ### Key Principles
 
-#### 1. Use AirweaveField for Searchable Content
+#### 1. Use AirweaveField for Searchable Content - CRITICAL FOR SEARCH
+
+**⚠️ CRITICAL: The `embeddable=True` flag is what makes your entities semantically searchable!**
+
+Without `embeddable=True`, fields are ONLY keyword-searchable, not semantically searchable. This severely limits the user's ability to find relevant entities.
+
+**Best Practice: Mark ALL user-visible, content-rich fields as `embeddable=True`**
+
+This includes:
+- **Text content**: descriptions, notes, comments, body text
+- **Names and titles**: entity names, display names, titles
+- **People**: assignees, authors, owners, members (as dicts with name/email)
+- **Status and metadata**: status fields, tags, labels, priorities
+- **Structured data**: any dict/list that contains searchable information
+- **Timestamps**: created_at, modified_at, due_dates (helps with recency)
+- **URLs**: permalink_url, web_links (helps users find original content)
+
+**Only exclude from embeddable:**
+- Internal IDs (entity_id, external_id, database IDs)
+- Binary/technical metadata (sizes, checksums, mime_types)
+- System-only fields not relevant to user searches
+
+**Example - Information-Rich Entity:**
 
 ```python
-# Searchable text
-description: str = AirweaveField(
-    ...,
-    description="Task description",
-    embeddable=True
-)
+class MyConnectorTaskEntity(ChunkEntity):
+    """Task entity - NOTE: Most fields are embeddable for rich search."""
 
-# Searchable structured data
-assignee: Optional[Dict] = AirweaveField(
-    None,
-    description="User assigned to this task",
-    embeddable=True
-)
+    # Core content - ALWAYS embeddable
+    name: str = AirweaveField(..., description="Task name", embeddable=True)
+    description: Optional[str] = AirweaveField(
+        None,
+        description="Task description",
+        embeddable=True  # ✅ Critical for semantic search
+    )
+    notes: Optional[str] = AirweaveField(
+        None,
+        description="Additional notes",
+        embeddable=True  # ✅ Searchable content
+    )
 
-# Non-searchable metadata
-external_id: str = Field(
-    ...,
-    description="ID in external system"
-)
+    # People - embeddable for "find tasks assigned to John" queries
+    assignee: Optional[Dict] = AirweaveField(
+        None,
+        description="User assigned to this task",
+        embeddable=True  # ✅ Enables "who" searches
+    )
+
+    owner: Optional[Dict] = AirweaveField(
+        None,
+        description="Task owner",
+        embeddable=True  # ✅ Enables owner searches
+    )
+
+    # Status and metadata - embeddable for filtering/search
+    status: Optional[str] = AirweaveField(
+        None,
+        description="Task status (open, in_progress, done)",
+        embeddable=True  # ✅ Enables status-based search
+    )
+
+    priority: Optional[str] = AirweaveField(
+        None,
+        description="Priority level",
+        embeddable=True  # ✅ Find high-priority tasks
+    )
+
+    tags: List[str] = AirweaveField(
+        default_factory=list,
+        description="Task tags",
+        embeddable=True  # ✅ Find by tag
+    )
+
+    # Timestamps - embeddable for recency boosting
+    created_at: Optional[datetime] = AirweaveField(
+        None,
+        description="Creation time",
+        embeddable=True,  # ✅ For recency
+        is_created_at=True
+    )
+
+    due_date: Optional[str] = AirweaveField(
+        None,
+        description="Due date",
+        embeddable=True  # ✅ Find overdue tasks
+    )
+
+    # URLs - embeddable so users can find links
+    permalink_url: Optional[str] = Field(
+        None,
+        description="Link to task in external system"
+        # Note: Use Field() not AirweaveField() for URLs if you don't want them embedded
+        # But consider making them embeddable for "find tasks linking to X"
+    )
+
+    # IDs - NOT embeddable (internal use only)
+    external_id: str = Field(..., description="ID in external system")
+    project_id: str = Field(..., description="Parent project ID")
+```
+
+**Common Mistake - Sparse Entity (BAD):**
+
+```python
+# ❌ BAD: Only name is embeddable, rest is not searchable
+class SparseTaskEntity(ChunkEntity):
+    name: str = AirweaveField(..., embeddable=True)
+    description: Optional[str] = Field(None)  # ❌ Not searchable!
+    assignee: Optional[Dict] = Field(None)     # ❌ Can't find by assignee!
+    status: Optional[str] = Field(None)        # ❌ Can't filter by status!
+    # Result: Users can only search by task name, nothing else!
 ```
 
 #### 2. Always Include Timestamps
@@ -817,8 +905,14 @@ async def _generate_projects(self, client, workspace):
 ### Validation Checklist
 
 - [ ] All entity types are defined in `entities/{short_name}.py`
-- [ ] All entities have `created_at` or `modified_at` timestamps
-- [ ] All searchable fields use `AirweaveField(..., embeddable=True)`
+- [ ] **CRITICAL: Most fields use `AirweaveField(..., embeddable=True)` for rich semantic search**
+  - [ ] All text content fields (descriptions, notes, comments, body)
+  - [ ] All name/title fields
+  - [ ] All people fields (assignees, authors, owners, members)
+  - [ ] All status/metadata fields (status, priority, tags, labels)
+  - [ ] All timestamps (created_at, modified_at, due_dates)
+  - [ ] Verify: Only IDs and binary metadata use `Field()` without embeddable
+- [ ] All entities have `created_at` or `modified_at` timestamps with proper flags
 - [ ] Auth config class added to `platform/configs/auth.py`
 - [ ] Auth config referenced in source `@source` decorator
 - [ ] Source implements `create()`, `generate_entities()`, and `validate()`
@@ -833,12 +927,22 @@ async def _generate_projects(self, client, workspace):
 
 ### Common Pitfalls
 
-1. **Forgetting timestamps** - Without `is_created_at` or `is_updated_at`, incremental sync won't work
-2. **Not using `embeddable=True`** - Content won't be searchable
+1. **⚠️ CRITICAL: Creating sparse entities without `embeddable=True` on most fields**
+   - **Impact**: Users can't semantically search your entities, severely limiting usefulness
+   - **Fix**: Mark ALL user-visible, content-rich fields as `embeddable=True`
+   - **Rule of thumb**: 70%+ of your entity fields should be embeddable
+   - **Anti-pattern**: Only marking `name` as embeddable and using `Field()` for everything else
+
+2. **Forgetting timestamps** - Without `is_created_at` or `is_updated_at`, incremental sync won't work
+
 3. **Not handling token refresh** - Syncs will fail after tokens expire
+
 4. **Not tracking breadcrumbs** - Entity relationships will be lost
+
 5. **Blocking the event loop** - Always use `async`/`await` for I/O
+
 6. **Not handling pagination** - You'll only get first page of results
+
 7. **Not respecting rate limits** - Your connector will get throttled or banned
 
 ---
