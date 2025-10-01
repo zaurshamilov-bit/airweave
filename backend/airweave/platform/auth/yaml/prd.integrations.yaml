@@ -56,6 +56,17 @@ integrations:
 
   github:
 
+  gitlab:
+    oauth_type: "with_refresh"
+    url: "https://gitlab.com/oauth/authorize"
+    backend_url: "https://gitlab.com/oauth/token"
+    grant_type: "authorization_code"
+    client_id: "624ae3aab6bfaded8f98c0335a6f4f2703c347788ca9b857e1dbde344feaec02"
+    client_secret: "gitlab-client-secret-key"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read_api read_user read_repository openid profile email"
+
   gmail:
     oauth_type: "with_refresh"
     url: "https://accounts.google.com/o/oauth2/auth"

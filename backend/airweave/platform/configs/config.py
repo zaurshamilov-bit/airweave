@@ -88,6 +88,25 @@ class GitHubConfig(SourceConfig):
     )
 
 
+class GitLabConfig(SourceConfig):
+    """GitLab configuration schema."""
+
+    project_id: str = Field(
+        default="",
+        title="Project ID",
+        description=(
+            "Specific project ID to sync (e.g., '12345'). If empty, syncs all accessible projects."
+        ),
+    )
+    branch: str = Field(
+        default="",
+        title="Branch name",
+        description=(
+            "Specific branch to sync (e.g., 'main', 'master'). If empty, uses the default branch."
+        ),
+    )
+
+
 class GmailConfig(SourceConfig):
     """Gmail configuration schema."""
 
