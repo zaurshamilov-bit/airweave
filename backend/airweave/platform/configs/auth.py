@@ -168,6 +168,15 @@ class AsanaAuthConfig(OAuth2WithRefreshAuthConfig):
     # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
+class AttioAuthConfig(APIKeyAuthConfig):
+    """Attio authentication credentials schema."""
+
+    api_key: str = Field(
+        title="API Key",
+        description="The API key for Attio. Generate one in Workspace Settings > Developers.",
+    )
+
+
 class BitbucketAuthConfig(AuthConfig):
     """Bitbucket authentication credentials schema.
 
