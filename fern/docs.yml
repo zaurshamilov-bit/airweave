@@ -47,6 +47,8 @@ navigation:
       path: docs/pages/direct-token-injection.mdx
   - section: Connectors
     contents:
+    - page: Airtable
+      path: docs/pages/connectors/airtable/main.mdx
     - page: Asana
       path: docs/pages/connectors/asana/main.mdx
     - page: Bitbucket
@@ -85,6 +87,8 @@ navigation:
       path: docs/pages/connectors/outlook_mail/main.mdx
     - page: Postgresql
       path: docs/pages/connectors/postgresql/main.mdx
+    - page: Sharepoint
+      path: docs/pages/connectors/sharepoint/main.mdx
     - page: Stripe
       path: docs/pages/connectors/stripe/main.mdx
     - page: Todoist
