@@ -22,6 +22,11 @@
 
 The search interface is exposed via REST API or MCP. When using MCP, Airweave essentially builds a semantically searchable MCP server. The platform handles everything from auth and extraction to embedding and serving.
 
+📺 Check out the quick demo below:
+
+https://github.com/user-attachments/assets/b070cbf2-6deb-4eb6-adbd-eb4bbe625ae3
+[**🔗 Example notebooks**](https://github.com/airweave-ai/airweave/tree/main/examples)
+
 ## Table of Contents
 
 - [Airweave](#airweave)
