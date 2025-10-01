@@ -105,16 +105,6 @@ class GitLabConfig(SourceConfig):
             "Specific branch to sync (e.g., 'main', 'master'). If empty, uses the default branch."
         ),
     )
-    include_issues: bool = Field(
-        default=True,
-        title="Include Issues",
-        description="Whether to sync project issues",
-    )
-    include_merge_requests: bool = Field(
-        default=True,
-        title="Include Merge Requests",
-        description="Whether to sync project merge requests",
-    )
 
 
 class GmailConfig(SourceConfig):

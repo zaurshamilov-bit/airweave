@@ -73,13 +73,9 @@ class GitLabSource(BaseSource):
         if config:
             instance.project_id = config.get("project_id")
             instance.branch = config.get("branch", "")
-            instance.include_issues = config.get("include_issues", True)
-            instance.include_merge_requests = config.get("include_merge_requests", True)
         else:
             instance.project_id = None
             instance.branch = ""
-            instance.include_issues = True
-            instance.include_merge_requests = True
 
         return instance
 
@@ -571,13 +567,7 @@ class GitLabSource(BaseSource):
                     repo_name=project_path.split("/")[-1],
                     repo_owner=project_path.split("/")[0],
                     content=content_text,  # Store the content directly in the entity
-                    last_modified=(
-                        datetime.fromisoformat(
-                            file_data["last_commit_id"] if file_data.get("last_commit_id") else ""
-                        )
-                        if file_data.get("last_commit_id")
-                        else None
-                    ),
+                    last_modified=None,  # GitLab API returns commit SHA, not timestamp
                 )
 
                 yield file_entity
@@ -650,25 +640,23 @@ class GitLabSource(BaseSource):
                     f"Failed to traverse repository for {project.path_with_namespace}: {e}"
                 )
 
-        # Get issues if enabled
-        if hasattr(self, "include_issues") and self.include_issues:
-            try:
-                async for issue in self._get_project_issues(
-                    client, project.entity_id, project_breadcrumbs
-                ):
-                    yield issue
-            except Exception as e:
-                self.logger.warning(f"Failed to get issues for {project.path_with_namespace}: {e}")
+        # Get issues
+        try:
+            async for issue in self._get_project_issues(
+                client, project.entity_id, project_breadcrumbs
+            ):
+                yield issue
+        except Exception as e:
+            self.logger.warning(f"Failed to get issues for {project.path_with_namespace}: {e}")
 
-        # Get merge requests if enabled
-        if hasattr(self, "include_merge_requests") and self.include_merge_requests:
-            try:
-                async for mr in self._get_project_merge_requests(
-                    client, project.entity_id, project_breadcrumbs
-                ):
-                    yield mr
-            except Exception as e:
-                self.logger.warning(f"Failed to get MRs for {project.path_with_namespace}: {e}")
+        # Get merge requests
+        try:
+            async for mr in self._get_project_merge_requests(
+                client, project.entity_id, project_breadcrumbs
+            ):
+                yield mr
+        except Exception as e:
+            self.logger.warning(f"Failed to get MRs for {project.path_with_namespace}: {e}")
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate entities from GitLab.
