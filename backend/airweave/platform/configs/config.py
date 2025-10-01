@@ -11,6 +11,12 @@ class SourceConfig(BaseConfig):
     pass
 
 
+class AirtableConfig(SourceConfig):
+    """Airtable configuration schema."""
+
+    pass
+
+
 class AsanaConfig(SourceConfig):
     """Asana configuration schema."""
 

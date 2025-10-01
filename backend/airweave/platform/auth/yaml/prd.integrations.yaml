@@ -7,8 +7,9 @@ integrations:
     client_id: "8d29922c-a4e0-4633-880c-8f3f887f768e"
     client_secret: "airtable-client-secret-key"
     content_type: "application/x-www-form-urlencoded"
-    client_credential_location: "body"
+    client_credential_location: "header"
     scope: "schema.bases:read data.records:read data.recordComments:read"
+    requires_pkce: true
     additional_frontend_params:
       response_type: "code"
 

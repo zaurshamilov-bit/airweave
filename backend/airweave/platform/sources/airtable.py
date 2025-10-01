@@ -29,7 +29,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
         AuthenticationMethod.AUTH_PROVIDER,
     ],
     oauth_type=OAuthType.WITH_REFRESH,
-    auth_config_class=None,
+    auth_config_class="AirtableAuthConfig",
     config_class="AirtableConfig",
     labels=["Database", "Spreadsheet"],
     supports_continuous=False,
@@ -37,7 +37,15 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 class AirtableSource(BaseSource):
     """Airtable source connector integrates with the Airtable API to extract and synchronize data.
 
-    Connects to your Airtable bases and syncs bases, tables, records, comments, and attachments.
+    Connects to your Airtable bases and syncs everything by default:
+    - User info (authenticated user)
+    - All accessible bases
+    - All tables in each base
+    - All records in each table
+    - All comments on each record
+    - All attachments in each record
+
+    No configuration needed - just connect and sync!
     """
 
     API_BASE = "https://api.airtable.com/v0"
@@ -50,40 +58,13 @@ class AirtableSource(BaseSource):
 
         Args:
             access_token: OAuth access token for Airtable API
-            config: Optional configuration parameters
+            config: Optional configuration parameters (currently unused)
 
         Returns:
             Configured AirtableSource instance
         """
         instance = cls()
         instance.access_token = access_token
-
-        # Store config values as instance attributes
-        if config:
-            instance.base_ids = config.get("base_ids", [])
-            instance.table_ids = config.get("table_ids", [])
-            instance.table_names = config.get("table_names", [])
-            instance.view = config.get("view")
-            instance.fields = config.get("fields", [])
-            instance.filter_by_formula = config.get("filter_by_formula")
-            instance.page_size = config.get("page_size", 100)
-            instance.max_records = config.get("max_records")
-            instance.include_attachments = config.get("include_attachments", True)
-            instance.include_comments = config.get("include_comments", True)
-            instance.attachment_max_bytes = config.get("attachment_max_bytes")
-        else:
-            instance.base_ids = []
-            instance.table_ids = []
-            instance.table_names = []
-            instance.view = None
-            instance.fields = []
-            instance.filter_by_formula = None
-            instance.page_size = 100
-            instance.max_records = None
-            instance.include_attachments = True
-            instance.include_comments = True
-            instance.attachment_max_bytes = None
-
         return instance
 
     @retry(
@@ -192,6 +173,7 @@ class AirtableSource(BaseSource):
     async def _get_user_info(self, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
         """Get authenticated user information from whoami endpoint."""
         url = f"{self.API_BASE}/meta/whoami"
+
         try:
             return await self._get_with_auth(client, url)
         except Exception as e:
@@ -234,18 +216,7 @@ class AirtableSource(BaseSource):
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """List all records in a table with pagination."""
         url = f"{self.API_BASE}/{base_id}/{table_id_or_name}"
-        params: Dict[str, Any] = {}
-
-        if self.page_size:
-            params["pageSize"] = min(int(self.page_size), 100)
-        if self.max_records:
-            params["maxRecords"] = int(self.max_records)
-        if self.view:
-            params["view"] = self.view
-        if self.filter_by_formula:
-            params["filterByFormula"] = self.filter_by_formula
-        if self.fields:
-            params["fields"] = self.fields
+        params: Dict[str, Any] = {"pageSize": 100}
 
         while True:
             try:
@@ -297,45 +268,28 @@ class AirtableSource(BaseSource):
 
         Note: Bases must already exist in Airtable. The API does not provide
         endpoints to create bases programmatically (requires special permissions).
-        We either:
-        1. Use base IDs specified in config, or
-        2. List all accessible bases via the Meta API
+        We list all accessible bases via the Meta API.
 
-        This is a fundamental Airtable API limitation - all other connectors
+        This is a fundamental Airtable API limitation - all connectors
         (tables, records) are created within existing bases.
         """
-        # If specific base IDs are configured, use those
-        if self.base_ids:
-            for base_id in self.base_ids:
-                try:
-                    # We don't have a get single base endpoint, so create minimal entity
-                    yield AirtableBaseEntity(
-                        entity_id=base_id,
-                        breadcrumbs=[],
-                        base_id=base_id,
-                        name=base_id,  # Will be updated when we get schema
-                        url=f"https://airtable.com/{base_id}",
-                    )
-                except Exception as e:
-                    self.logger.error(f"Error creating base entity for {base_id}: {e}")
-        else:
-            # List all accessible bases
-            async for base in self._list_bases(client):
-                try:
-                    base_id = base.get("id")
-                    if not base_id:
-                        continue
+        # List all accessible bases
+        async for base in self._list_bases(client):
+            try:
+                base_id = base.get("id")
+                if not base_id:
+                    continue
 
-                    yield AirtableBaseEntity(
-                        entity_id=base_id,
-                        breadcrumbs=[],
-                        base_id=base_id,
-                        name=base.get("name", base_id),
-                        permission_level=base.get("permissionLevel"),
-                        url=f"https://airtable.com/{base_id}",
-                    )
-                except Exception as e:
-                    self.logger.error(f"Error creating base entity: {e}")
+                yield AirtableBaseEntity(
+                    entity_id=base_id,
+                    breadcrumbs=[],
+                    base_id=base_id,
+                    name=base.get("name", base_id),
+                    permission_level=base.get("permissionLevel"),
+                    url=f"https://airtable.com/{base_id}",
+                )
+            except Exception as e:
+                self.logger.error(f"Error creating base entity: {e}")
 
     async def _generate_table_entities(
         self, client: httpx.AsyncClient, base_id: str, base_name: str, base_breadcrumb: Breadcrumb
@@ -350,12 +304,6 @@ class AirtableSource(BaseSource):
                 table_name = table.get("name")
 
                 if not table_id:
-                    continue
-
-                # Filter by table IDs or names if specified
-                if self.table_ids and table_id not in self.table_ids:
-                    continue
-                if self.table_names and table_name not in self.table_names:
                     continue
 
                 # Get primary field name if available
@@ -422,9 +370,6 @@ class AirtableSource(BaseSource):
         record_breadcrumbs: List[Breadcrumb],
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate comment entities for a record."""
-        if not self.include_comments:
-            return
-
         record_id = record.get("id")
         if not record_id:
             return
@@ -455,13 +400,6 @@ class AirtableSource(BaseSource):
         except Exception as e:
             self.logger.warning(f"Error generating comment entities for record {record_id}: {e}")
 
-    def _should_process_attachment(self, size: Optional[int], filename: str) -> bool:
-        """Check if attachment should be processed based on size limit."""
-        if self.attachment_max_bytes and size and size > self.attachment_max_bytes:
-            self.logger.info(f"Skipping large attachment {filename} ({size} bytes)")
-            return False
-        return True
-
     def _create_attachment_entity(
         self,
         attachment: Dict[str, Any],
@@ -481,9 +419,6 @@ class AirtableSource(BaseSource):
         filename = attachment.get("filename") or attachment.get("name") or "attachment"
         mime_type = attachment.get("type")
         size = attachment.get("size")
-
-        if not self._should_process_attachment(size, filename):
-            return None
 
         return AirtableAttachmentEntity(
             entity_id=att_id,
@@ -511,9 +446,6 @@ class AirtableSource(BaseSource):
         record_breadcrumbs: List[Breadcrumb],
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate attachment entities for a record."""
-        if not self.include_attachments:
-            return
-
         record_id = record.get("id")
         if not record_id:
             return

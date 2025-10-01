@@ -7,8 +7,9 @@ integrations:
     client_id: "84ab41c1-4f8c-4fc6-b1f9-b027a75f36a4"
     client_secret: "c57b745550b977ca501a53cccc379ae90157ed5d59dbeafab197c26e5b621429"
     content_type: "application/x-www-form-urlencoded"
-    client_credential_location: "body"
+    client_credential_location: "header"
     scope: "schema.bases:read data.records:read data.recordComments:read"
+    requires_pkce: true
     additional_frontend_params:
       response_type: "code"
 
