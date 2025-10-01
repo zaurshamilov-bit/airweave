@@ -145,32 +145,6 @@ class AttioNoteEntity(ChunkEntity):
     permalink_url: Optional[str] = Field(None, description="URL to view this note in Attio")
 
 
-class AttioCommentEntity(ChunkEntity):
-    """Schema for Attio Comment.
-
-    Comments are discussion threads on notes or records.
-    """
-
-    comment_id: str = Field(..., description="Unique ID of the comment")
-    parent_note_id: Optional[str] = Field(
-        None, description="ID of the note this comment is on (if applicable)"
-    )
-    parent_record_id: Optional[str] = Field(
-        None, description="ID of the record this comment is on (if applicable)"
-    )
-
-    # Comment content
-    text: str = AirweaveField(..., description="Text content of the comment", embeddable=True)
-
-    # Author information
-    author: Dict[str, Any] = AirweaveField(
-        ..., description="User who created this comment", embeddable=True
-    )
-
-    # Timestamps
-    created_at: datetime = AirweaveField(
-        ..., description="When this comment was created", embeddable=True, is_created_at=True
-    )
-
-    # Metadata
-    is_resolved: bool = Field(False, description="Whether this comment thread is resolved")
+# Note: AttioCommentEntity was removed because the Attio API does not provide
+# a way to fetch comments for notes through their public REST API.
+# Comments are visible in the Attio UI but not accessible via /v2/threads or any other endpoint.

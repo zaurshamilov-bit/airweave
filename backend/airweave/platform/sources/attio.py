@@ -5,9 +5,13 @@ Attio is a flexible CRM platform. We extract:
 - Lists (Custom collections)
 - Records (Individual entries in objects/lists)
 - Notes (Attached to records)
-- Comments (On notes)
+
+Note: Comments are not supported as the Attio API does not expose them via REST API.
 """
 
+import asyncio
+from datetime import datetime
+from email.utils import parsedate_to_datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
@@ -17,7 +21,6 @@ from airweave.platform.configs.auth import AttioAuthConfig
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
 from airweave.platform.entities.attio import (
-    AttioCommentEntity,
     AttioListEntity,
     AttioNoteEntity,
     AttioObjectEntity,
@@ -40,7 +43,7 @@ from airweave.schemas.source_connection import AuthenticationMethod
 class AttioSource(BaseSource):
     """Attio source connector integrates with the Attio API to extract CRM data.
 
-    Synchronizes your Attio workspace including objects, lists, records, notes, and comments.
+    Synchronizes your Attio workspace including objects, lists, records, and notes.
     """
 
     BASE_URL = "https://api.attio.com/v2"
@@ -62,13 +65,10 @@ class AttioSource(BaseSource):
         instance.api_key = attio_auth_config.api_key
         return instance
 
-    @retry(
-        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
-    )
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict[str, Any]] = None
     ) -> Dict:
-        """Make authenticated GET request to Attio API.
+        """Make authenticated GET request to Attio API with rate limit handling.
 
         Args:
             client: HTTP client
@@ -79,23 +79,60 @@ class AttioSource(BaseSource):
             JSON response data
 
         Raises:
-            httpx.HTTPStatusError: On HTTP errors
+            httpx.HTTPStatusError: On HTTP errors (except 429, which is retried)
         """
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json",
         }
 
-        try:
-            response = await client.get(url, headers=headers, params=params, timeout=20.0)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            self.logger.error(f"HTTP error from Attio API: {e.response.status_code} for {url}")
-            raise
-        except Exception as e:
-            self.logger.error(f"Unexpected error accessing Attio API: {url}, {str(e)}")
-            raise
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = await client.get(url, headers=headers, params=params, timeout=20.0)
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    # Rate limited - respect Retry-After header
+                    retry_after = e.response.headers.get("Retry-After")
+
+                    if retry_after:
+                        try:
+                            # Try parsing as HTTP date
+                            retry_date = parsedate_to_datetime(retry_after)
+                            wait_seconds = max(
+                                0, (retry_date - datetime.now(retry_date.tzinfo)).total_seconds()
+                            )
+                        except (ValueError, TypeError):
+                            # Fall back to treating as seconds
+                            try:
+                                wait_seconds = float(retry_after)
+                            except (ValueError, TypeError):
+                                wait_seconds = 1.0  # Default wait
+                    else:
+                        wait_seconds = 1.0  # Default to 1 second if no header
+
+                    if attempt < max_retries - 1:
+                        self.logger.warning(
+                            f"Rate limited (429) on {url}, waiting {wait_seconds:.1f}s (attempt {attempt + 1}/{max_retries})"
+                        )
+                        await asyncio.sleep(wait_seconds)
+                        continue
+                    else:
+                        self.logger.error(
+                            f"Rate limit exceeded after {max_retries} attempts for {url}"
+                        )
+                        raise
+                else:
+                    # Non-429 error - log and raise immediately
+                    self.logger.error(
+                        f"HTTP error from Attio API: {e.response.status_code} for {url}"
+                    )
+                    raise
+            except Exception as e:
+                self.logger.error(f"Unexpected error accessing Attio API: {url}, {str(e)}")
+                raise
 
     @retry(
         stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
@@ -532,23 +569,45 @@ class AttioSource(BaseSource):
         Yields:
             AttioNoteEntity instances
         """
-        self.logger.debug(f"Fetching notes for record: {record_id}")
+        self.logger.debug(
+            f"🔍 Attempting to fetch notes for record {record_id} (parent: {parent_object_or_list_id})"
+        )
 
-        # Try object endpoint first, then list endpoint (using query POST)
-        urls_to_try = [
-            f"{self.BASE_URL}/objects/{parent_object_or_list_id}/records/{record_id}/notes/query",
-            f"{self.BASE_URL}/lists/{parent_object_or_list_id}/records/{record_id}/notes/query",
-        ]
+        # According to Attio API docs, use GET /v2/notes with query parameters
+        # Reference: https://docs.attio.com/rest-api/endpoint-reference/notes/list-notes
+        url = f"{self.BASE_URL}/notes"
+
+        params = {
+            "parent_object": parent_object_or_list_id,
+            "parent_record_id": record_id,
+            "limit": 50,  # Maximum allowed by API
+        }
 
         notes = []
-        for url in urls_to_try:
-            notes = await self._query_all_pages_optional(client, url, data_key="data")
-            if notes:  # Found notes, don't try other URLs
-                self.logger.debug(f"Found {len(notes)} notes for record {record_id}")
-                break
-
-        if not notes:
-            self.logger.debug(f"No notes found for record {record_id}")
+        try:
+            # Use GET with query parameters
+            response = await self._get_with_auth(client, url, params=params)
+            notes = response.get("data", [])
+            if notes:
+                self.logger.info(
+                    f"✅ Found {len(notes)} notes for record {record_id} (parent: {parent_object_or_list_id})"
+                )
+            else:
+                self.logger.debug(f"No notes found for record {record_id}")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                # Notes endpoint might not exist or no notes found
+                self.logger.warning(f"⚠️ Notes endpoint returned 404 for record {record_id}")
+                return
+            else:
+                self.logger.warning(
+                    f"❌ Error fetching notes for record {record_id}: HTTP {e.response.status_code}"
+                )
+                return
+        except Exception as e:
+            self.logger.warning(
+                f"❌ Exception fetching notes for record {record_id}: {e}", exc_info=True
+            )
 
         for note in notes:
             note_id = note.get("id", {}).get("note_id")
@@ -569,61 +628,6 @@ class AttioSource(BaseSource):
                 updated_at=note.get("updated_at"),
             )
 
-    async def _generate_comment_entities_for_note(
-        self,
-        client: httpx.AsyncClient,
-        parent_object_or_list_id: str,
-        record_id: str,
-        note_id: str,
-        note_breadcrumbs: List[Breadcrumb],
-    ) -> AsyncGenerator[ChunkEntity, None]:
-        """Generate comment entities for a specific note.
-
-        Args:
-            client: HTTP client
-            parent_object_or_list_id: ID of parent object or list
-            record_id: ID of the record
-            note_id: ID of the note
-            note_breadcrumbs: Breadcrumbs leading to this note
-
-        Yields:
-            AttioCommentEntity instances
-        """
-        self.logger.debug(f"Fetching comments for note: {note_id}")
-
-        # Try object endpoint first, then list endpoint
-        urls_to_try = [
-            f"{self.BASE_URL}/objects/{parent_object_or_list_id}/records/{record_id}/notes/{note_id}/comments/query",
-            f"{self.BASE_URL}/lists/{parent_object_or_list_id}/records/{record_id}/notes/{note_id}/comments/query",
-        ]
-
-        comments = []
-        for url in urls_to_try:
-            comments = await self._query_all_pages_optional(client, url, data_key="data")
-            if comments:  # Found comments, don't try other URLs
-                self.logger.debug(f"Found {len(comments)} comments for note {note_id}")
-                break
-
-        if not comments:
-            self.logger.debug(f"No comments found for note {note_id}")
-
-        for comment in comments:
-            comment_id = comment.get("id", {}).get("comment_id")
-            if not comment_id:
-                continue
-
-            yield AttioCommentEntity(
-                entity_id=comment_id,
-                breadcrumbs=note_breadcrumbs,
-                comment_id=comment_id,
-                parent_note_id=note_id,
-                parent_record_id=record_id,
-                text=comment.get("text", ""),
-                author=comment.get("author", {}),
-                created_at=comment.get("created_at"),
-                is_resolved=comment.get("is_resolved", False),
-            )
-
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Attio.
 
@@ -634,93 +638,146 @@ class AttioSource(BaseSource):
         """
         self.logger.info("Starting Attio sync...")
 
-        async with self.http_client() as client:
-            # Generate objects first
-            object_map = {}  # Store objects for later use
-            async for obj in self._generate_object_entities(client):
-                yield obj
-                object_map[obj.entity_id] = obj
+        try:
+            async with self.http_client() as client:
+                # Generate objects first
+                object_map = {}  # Store objects for later use
+                async for obj in self._generate_object_entities(client):
+                    yield obj
+                    object_map[obj.entity_id] = obj
 
-            # Generate lists
-            list_map = {}  # Store lists for later use
-            async for lst in self._generate_list_entities(client):
-                yield lst
-                list_map[lst.entity_id] = lst
+                # Generate lists
+                list_map = {}  # Store lists for later use
+                async for lst in self._generate_list_entities(client):
+                    yield lst
+                    list_map[lst.entity_id] = lst
 
-            # Generate records for each object
-            for object_id, obj in object_map.items():
-                object_breadcrumb = Breadcrumb(
-                    entity_id=object_id, name=obj.singular_noun, type="object"
-                )
-
-                # Use api_slug for the API endpoint, not object_id
-                async for record in self._generate_record_entities_for_object(
-                    client, obj.api_slug, obj.singular_noun, object_breadcrumb
-                ):
-                    yield record
-
-                    # Generate notes for this record
-                    record_breadcrumb = Breadcrumb(
-                        entity_id=record.record_id,
-                        name=record.name or record.record_id,
-                        type="record",
-                    )
-                    record_breadcrumbs = [object_breadcrumb, record_breadcrumb]
-
-                    async for note in self._generate_note_entities_for_record(
-                        client, obj.api_slug, record.record_id, record_breadcrumbs
-                    ):
-                        yield note
-
-                        # Generate comments for this note
-                        note_breadcrumb = Breadcrumb(
-                            entity_id=note.note_id,
-                            name=note.title or note.note_id,
-                            type="note",
+                # Generate records for each object (with concurrent note fetching)
+                for object_id, obj in object_map.items():
+                    try:
+                        object_breadcrumb = Breadcrumb(
+                            entity_id=object_id, name=obj.singular_noun, type="object"
                         )
-                        note_breadcrumbs = record_breadcrumbs + [note_breadcrumb]
 
-                        async for comment in self._generate_comment_entities_for_note(
-                            client, obj.api_slug, record.record_id, note.note_id, note_breadcrumbs
+                        # Create a worker that processes a record and its notes concurrently
+                        async def _record_worker(record):
+                            # Yield the record first
+                            yield record
+
+                            # Generate notes for this record
+                            try:
+                                record_breadcrumb = Breadcrumb(
+                                    entity_id=record.record_id,
+                                    name=record.name or record.record_id,
+                                    type="record",
+                                )
+                                record_breadcrumbs = [object_breadcrumb, record_breadcrumb]
+
+                                note_count = 0
+                                async for note in self._generate_note_entities_for_record(
+                                    client, obj.api_slug, record.record_id, record_breadcrumbs
+                                ):
+                                    note_count += 1
+                                    yield note
+
+                                if note_count > 0:
+                                    self.logger.info(
+                                        f"✅ Yielded {note_count} notes for record {record.record_id}"
+                                    )
+                            except Exception as e:
+                                self.logger.warning(
+                                    f"❌ Error fetching notes for record {record.record_id}: {e}",
+                                    exc_info=True,
+                                )
+
+                        # Collect all records for this object first
+                        records = []
+                        async for record in self._generate_record_entities_for_object(
+                            client, obj.api_slug, obj.singular_noun, object_breadcrumb
                         ):
-                            yield comment
+                            records.append(record)
 
-            # Generate records for each list
-            for list_id, lst in list_map.items():
-                list_breadcrumb = Breadcrumb(entity_id=list_id, name=lst.name, type="list")
-
-                async for record in self._generate_record_entities_for_list(
-                    client, list_id, lst.name, list_breadcrumb
-                ):
-                    yield record
-
-                    # Generate notes for this record
-                    record_breadcrumb = Breadcrumb(
-                        entity_id=record.record_id,
-                        name=record.name or record.record_id,
-                        type="record",
-                    )
-                    record_breadcrumbs = [list_breadcrumb, record_breadcrumb]
-
-                    async for note in self._generate_note_entities_for_record(
-                        client, list_id, record.record_id, record_breadcrumbs
-                    ):
-                        yield note
-
-                        # Generate comments for this note
-                        note_breadcrumb = Breadcrumb(
-                            entity_id=note.note_id,
-                            name=note.title or note.note_id,
-                            type="note",
-                        )
-                        note_breadcrumbs = record_breadcrumbs + [note_breadcrumb]
-
-                        async for comment in self._generate_comment_entities_for_note(
-                            client, list_id, record.record_id, note.note_id, note_breadcrumbs
+                        # Process records concurrently
+                        # batch_size=10 to respect Attio's 100 req/sec rate limit
+                        # (each record = 1 record fetch + potential notes fetch)
+                        async for entity in self.process_entities_concurrent(
+                            items=records,
+                            worker=_record_worker,
+                            batch_size=getattr(self, "batch_size", 10),
+                            preserve_order=False,
+                            stop_on_error=False,
                         ):
-                            yield comment
+                            yield entity
 
-        self.logger.info("Attio sync completed successfully")
+                    except Exception as e:
+                        self.logger.warning(f"Error processing object {obj.api_slug}: {e}")
+                        continue
+
+                # Generate records for each list (with concurrent note fetching)
+                for list_id, lst in list_map.items():
+                    try:
+                        list_breadcrumb = Breadcrumb(entity_id=list_id, name=lst.name, type="list")
+
+                        # Create a worker that processes a record and its notes concurrently
+                        async def _list_record_worker(record):
+                            # Yield the record first
+                            yield record
+
+                            # Generate notes for this record
+                            try:
+                                record_breadcrumb = Breadcrumb(
+                                    entity_id=record.record_id,
+                                    name=record.name or record.record_id,
+                                    type="record",
+                                )
+                                record_breadcrumbs = [list_breadcrumb, record_breadcrumb]
+
+                                note_count = 0
+                                async for note in self._generate_note_entities_for_record(
+                                    client, list_id, record.record_id, record_breadcrumbs
+                                ):
+                                    note_count += 1
+                                    yield note
+
+                                if note_count > 0:
+                                    self.logger.info(
+                                        f"✅ Yielded {note_count} notes for record {record.record_id}"
+                                    )
+                            except Exception as e:
+                                self.logger.warning(
+                                    f"❌ Error fetching notes for record {record.record_id}: {e}",
+                                    exc_info=True,
+                                )
+
+                        # Collect all records for this list first
+                        records = []
+                        async for record in self._generate_record_entities_for_list(
+                            client, list_id, lst.name, list_breadcrumb
+                        ):
+                            records.append(record)
+
+                        # Process records concurrently
+                        # batch_size=10 to respect Attio's 100 req/sec rate limit
+                        async for entity in self.process_entities_concurrent(
+                            items=records,
+                            worker=_list_record_worker,
+                            batch_size=getattr(self, "batch_size", 10),
+                            preserve_order=False,
+                            stop_on_error=False,
+                        ):
+                            yield entity
+
+                    except Exception as e:
+                        self.logger.warning(f"Error processing list {list_id}: {e}")
+                        continue
+
+            self.logger.info("Attio sync completed successfully")
+        except asyncio.CancelledError:
+            self.logger.info("Attio sync was cancelled")
+            raise
+        except Exception as e:
+            self.logger.error(f"Error during Attio sync: {e}", exc_info=True)
+            raise
 
     async def validate(self) -> bool:
         """Verify credentials by pinging the Attio API.
