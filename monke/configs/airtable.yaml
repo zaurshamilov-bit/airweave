@@ -14,27 +14,22 @@ connector:
 
 test_flow:
   steps:
-    # Initial cleanup to start fresh
     - cleanup
-    # Create and verify entities
     - create
     - sync
     - verify
-    # Update and verify changes
     - update
     - sync
     - verify
-    # Deletion steps commented out for manual inspection
-    # - partial_delete
-    # - sync
-    # - verify_partial_deletion
-    # - verify_remaining_entities
-    # - complete_delete
-    # - sync
-    # - verify_complete_deletion
-    # Final cleanup commented out for manual inspection
-    # - cleanup
-    # - collection_cleanup
+    - partial_delete
+    - sync
+    - verify_partial_deletion
+    - verify_remaining_entities
+    - complete_delete
+    - sync
+    - verify_complete_deletion
+    - cleanup
+    - collection_cleanup
 
 deletion:
   partial_delete_count: 1

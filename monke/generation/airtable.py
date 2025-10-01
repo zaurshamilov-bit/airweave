@@ -3,7 +3,7 @@
 Generates realistic record content for testing Airtable integration using LLM.
 """
 
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 from monke.client.llm import LLMClient
 from monke.generation.schemas.airtable import AirtableRecord
