@@ -6,16 +6,11 @@ connector:
   type: zendesk
   auth_mode: composio
   composio_config:
-    account_id:
-    auth_config_id: ${ZENDESK_AUTH_PROVIDER_AUTH_CONFIG_ID}
-
-  # Direct auth config (when auth_mode: direct)
-  # auth_fields:
-  #   access_token: MONKE_ZENDESK_ACCESS_TOKEN
-  auth_fields: {}
+    account_id: ca_JYKG6s0vkcJ1
+    auth_config_id: ac_Ciu4TMkuEY4_
   config_fields:
     # Airweave source config (passed to source connection creation)
-    subdomain: "your-subdomain"
+    subdomain: "airweavehelp"
 
 
     # Bongo-specific config (used for test data generation)
