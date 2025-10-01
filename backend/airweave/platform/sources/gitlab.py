@@ -174,20 +174,57 @@ class GitLabSource(BaseSource):
                 "Accept": "application/json",
             }
 
-            response = await client.get(url, headers=headers, params=params)
-            response.raise_for_status()
+            try:
+                response = await client.get(url, headers=headers, params=params)
 
-            results = response.json()
-            if not results:  # Empty page means we're done
-                break
+                # Handle 401 Unauthorized - token might have expired
+                if response.status_code == 401:
+                    self.logger.warning(f"Received 401 Unauthorized for {url}, refreshing token...")
 
-            all_results.extend(results)
+                    if self.token_manager:
+                        try:
+                            # Force refresh the token
+                            from airweave.core.exceptions import TokenRefreshError
 
-            # Check if there's a next page via header
-            if "x-next-page" not in response.headers or not response.headers["x-next-page"]:
-                break
+                            new_token = await self.token_manager.refresh_on_unauthorized()
+                            headers = {
+                                "Authorization": f"Bearer {new_token}",
+                                "Accept": "application/json",
+                            }
 
-            page += 1
+                            # Retry with new token
+                            self.logger.info(
+                                f"Retrying paginated request with refreshed token: {url}"
+                            )
+                            response = await client.get(url, headers=headers, params=params)
+
+                        except TokenRefreshError as e:
+                            self.logger.error(f"Failed to refresh token: {str(e)}")
+                            response.raise_for_status()
+                    else:
+                        self.logger.error("No token manager available to refresh expired token")
+                        response.raise_for_status()
+
+                response.raise_for_status()
+
+                results = response.json()
+                if not results:  # Empty page means we're done
+                    break
+
+                all_results.extend(results)
+
+                # Check if there's a next page via header
+                if "x-next-page" not in response.headers or not response.headers["x-next-page"]:
+                    break
+
+                page += 1
+
+            except httpx.HTTPStatusError as e:
+                self.logger.error(f"HTTP error from GitLab API: {e.response.status_code} for {url}")
+                raise
+            except Exception as e:
+                self.logger.error(f"Unexpected error accessing GitLab API: {url}, {str(e)}")
+                raise
 
         return all_results
 

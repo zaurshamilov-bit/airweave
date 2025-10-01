@@ -7,6 +7,7 @@ import asyncio
 import time
 import uuid
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 import httpx
 from monke.bongos.base_bongo import BaseBongo
@@ -162,7 +163,7 @@ class GitLabBongo(BaseBongo):
                         )
 
                         await self._rate_limit()
-                        encoded_filename = filename.replace("/", "%2F")
+                        encoded_filename = quote(filename, safe="")
                         file_url = (
                             f"{self.API_BASE}/projects/{self._project_id}"
                             f"/repository/files/{encoded_filename}"

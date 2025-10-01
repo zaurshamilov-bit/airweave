@@ -40,6 +40,10 @@ async def generate_gitlab_issue(model: str, token: str) -> Tuple[str, str, List[
     # Ensure token is in the issue
     issue.spec.token = token
 
+    # Ensure the token appears in the title
+    if token not in issue.spec.title:
+        issue.spec.title = f"{issue.spec.title} [{token}]"
+
     # Also ensure the token appears in the description if it's not already there
     if token not in issue.content.description:
         issue.content.description += f"\n\n**Verification Token**: {token}"
@@ -86,6 +90,10 @@ async def generate_gitlab_merge_request(
     # Ensure token and branch are set
     mr.spec.token = token
     mr.spec.source_branch = source_branch
+
+    # Ensure the token appears in the title
+    if token not in mr.spec.title:
+        mr.spec.title = f"{mr.spec.title} [{token}]"
 
     # Ensure token appears in description
     if token not in mr.content.description:
