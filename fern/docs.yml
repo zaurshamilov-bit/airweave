@@ -51,6 +51,8 @@ navigation:
       path: docs/pages/connectors/airtable/main.mdx
     - page: Asana
       path: docs/pages/connectors/asana/main.mdx
+    - page: Attio
+      path: docs/pages/connectors/attio/main.mdx
     - page: Bitbucket
       path: docs/pages/connectors/bitbucket/main.mdx
     - page: Clickup
