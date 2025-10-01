@@ -36,7 +36,7 @@ The search interface is exposed via REST API or MCP. When using MCP, Airweave es
     - [Python](#python)
     - [TypeScript/JavaScript](#typescriptjavascript)
   - [🔑 Key Features](#-key-features)
-  - [🔧 Technology Stack](#-technology-stack)
+  - [🔧 Technology Stack](#-tech-stack)
   - [👥 Contributing](#-contributing)
   - [📄 License](#-license)
   - [🔗 Connect](#-connect)
