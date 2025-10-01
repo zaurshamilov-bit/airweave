@@ -1153,12 +1153,19 @@ class SourceConnectionHelpers:
             or f"{core_settings.api_url}/source-connections/callback"
         )
 
-        provider_auth_url = await oauth2_service.generate_auth_url_with_redirect(
+        provider_auth_url, code_verifier = await oauth2_service.generate_auth_url_with_redirect(
             oauth_settings,
             redirect_uri=api_callback,
             client_id=init_session.overrides.get("client_id"),
             state=state,
         )
+
+        # Store code_verifier in init_session if PKCE is being used
+        if code_verifier:
+            init_session.overrides["code_verifier"] = code_verifier
+            await crud.source_connection_init_session.update(
+                db=db, db_obj=init_session, obj_in={"overrides": init_session.overrides}, ctx=ctx
+            )
 
         # Create new proxy URL
         proxy_url, proxy_expiry, _ = await self.create_proxy_url(db, provider_auth_url, ctx)

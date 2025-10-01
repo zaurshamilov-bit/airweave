@@ -79,7 +79,12 @@ class SharePointSource(BaseSource):
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict] = None
     ) -> Dict:
-        """Make an authenticated GET request to Microsoft Graph API with retry logic."""
+        """Make an authenticated GET request to Microsoft Graph API with retry logic.
+
+        Handles:
+        - 401 errors by refreshing token and retrying
+        - 429 rate limits by respecting Retry-After header
+        """
         # Get fresh token (will refresh if needed)
         access_token = await self.get_access_token()
         headers = {
@@ -103,6 +108,18 @@ class SharePointSource(BaseSource):
                     "Authorization": f"Bearer {access_token}",
                     "Accept": "application/json",
                 }
+                resp = await client.get(url, headers=headers, params=params, timeout=30.0)
+
+            # Handle 429 Rate Limit
+            if resp.status_code == 429:
+                retry_after = resp.headers.get("Retry-After", "60")
+                self.logger.warning(
+                    f"Rate limit hit for {url}, waiting {retry_after} seconds before retry"
+                )
+                import asyncio
+
+                await asyncio.sleep(float(retry_after))
+                # Retry after waiting
                 resp = await client.get(url, headers=headers, params=params, timeout=30.0)
 
             resp.raise_for_status()
@@ -451,7 +468,7 @@ class SharePointSource(BaseSource):
                     yield item
 
                     # If this item is a folder, add it to the queue for processing
-                    if "folder" in item and len(folder_queue) < 100:  # Limit queue size
+                    if "folder" in item:
                         folder_queue.append(item["id"])
             except Exception as e:
                 self.logger.error(f"Error processing folder {current_folder_id}: {e}")

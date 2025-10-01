@@ -50,6 +50,7 @@ class AirtableBongo(BaseBongo):
 
         # Pacing
         self.last_request_time = 0.0
+        self._rate_limit_lock = asyncio.Lock()
 
         self.logger = get_logger("airtable_bongo")
 
@@ -390,9 +391,13 @@ class AirtableBongo(BaseBongo):
         }
 
     async def _rate_limit(self):
-        """Rate limiting to respect Airtable's 5 requests/second per base limit."""
-        now = time.time()
-        delta = now - self.last_request_time
-        if delta < self.rate_limit_delay:
-            await asyncio.sleep(self.rate_limit_delay - delta)
-        self.last_request_time = time.time()
+        """Rate limiting to respect Airtable's 5 requests/second per base limit.
+
+        Uses a lock to prevent race conditions when multiple tasks are running concurrently.
+        """
+        async with self._rate_limit_lock:
+            now = time.time()
+            delta = now - self.last_request_time
+            if delta < self.rate_limit_delay:
+                await asyncio.sleep(self.rate_limit_delay - delta)
+            self.last_request_time = time.time()

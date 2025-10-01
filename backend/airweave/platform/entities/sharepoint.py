@@ -185,8 +185,8 @@ class SharePointDriveItemEntity(FileEntity):
     Reference: https://learn.microsoft.com/en-us/graph/api/resources/driveitem
     """
 
-    name: Optional[str] = AirweaveField(
-        None, description="The name of the item (file or folder).", embeddable=True
+    name: str = AirweaveField(
+        ..., description="The name of the item (file or folder).", embeddable=True
     )
     description: Optional[str] = AirweaveField(
         None, description="User-visible description of the item.", embeddable=True
