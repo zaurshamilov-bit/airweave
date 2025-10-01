@@ -25,6 +25,9 @@ from airweave.platform.entities.sharepoint import (
     SharePointDriveEntity,
     SharePointDriveItemEntity,
     SharePointGroupEntity,
+    SharePointListEntity,
+    SharePointListItemEntity,
+    SharePointPageEntity,
     SharePointSiteEntity,
     SharePointUserEntity,
 )
@@ -571,6 +574,342 @@ class SharePointSource(BaseSource):
 
         self.logger.debug(f"Total files processed in drive {drive_name}: {file_count}")
 
+    async def _generate_list_entities(
+        self, client: httpx.AsyncClient, site_id: str, site_name: str
+    ) -> AsyncGenerator[SharePointListEntity, None]:
+        """Generate SharePointListEntity objects for lists in a site."""
+        self.logger.debug(f"Starting list entity generation for site: {site_name}")
+        url = f"{self.GRAPH_BASE_URL}/sites/{site_id}/lists"
+        params = {"$top": 100, "$expand": "columns"}
+        list_count = 0
+
+        try:
+            while url:
+                self.logger.debug(f"Fetching lists from: {url}")
+                data = await self._get_with_auth(client, url, params=params)
+                lists = data.get("value", [])
+                self.logger.debug(f"Retrieved {len(lists)} lists for site {site_name}")
+
+                for list_data in lists:
+                    list_count += 1
+                    list_id = list_data.get("id")
+                    display_name = list_data.get("displayName", "Unknown List")
+
+                    self.logger.debug(f"Processing list #{list_count}: {display_name}")
+
+                    yield SharePointListEntity(
+                        entity_id=list_id,
+                        breadcrumbs=[
+                            Breadcrumb(entity_id=site_id, name=site_name[:50], type="site")
+                        ],
+                        display_name=display_name,
+                        name=list_data.get("name"),
+                        description=list_data.get("description"),
+                        web_url=list_data.get("webUrl"),
+                        created_datetime=self._parse_datetime(list_data.get("createdDateTime")),
+                        last_modified_datetime=self._parse_datetime(
+                            list_data.get("lastModifiedDateTime")
+                        ),
+                        list_info=list_data.get("list"),
+                        site_id=site_id,
+                    )
+
+                # Handle pagination
+                url = data.get("@odata.nextLink")
+                if url:
+                    self.logger.debug("Following pagination to next page")
+                    params = None
+
+            self.logger.debug(
+                f"Completed list generation for site {site_name}. Total lists: {list_count}"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error generating list entities for site {site_name}: {str(e)}")
+            # Don't raise - continue with other entities
+
+    async def _generate_list_item_entities(
+        self,
+        client: httpx.AsyncClient,
+        list_entity: SharePointListEntity,
+        site_breadcrumb: Breadcrumb,
+    ) -> AsyncGenerator[SharePointListItemEntity, None]:
+        """Generate SharePointListItemEntity objects for items in a list."""
+        list_id = list_entity.entity_id
+        list_name = list_entity.display_name or "Unknown List"
+        self.logger.debug(f"Starting list item generation for list: {list_name}")
+
+        url = f"{self.GRAPH_BASE_URL}/sites/{list_entity.site_id}/lists/{list_id}/items"
+        params = {"$top": 100, "$expand": "fields"}
+        item_count = 0
+
+        try:
+            while url:
+                self.logger.debug(f"Fetching list items from: {url}")
+                data = await self._get_with_auth(client, url, params=params)
+                items = data.get("value", [])
+                self.logger.debug(f"Retrieved {len(items)} items for list {list_name}")
+
+                for item_data in items:
+                    item_count += 1
+                    item_id = item_data.get("id")
+
+                    list_breadcrumb = Breadcrumb(
+                        entity_id=list_id, name=list_name[:50], type="list"
+                    )
+
+                    yield SharePointListItemEntity(
+                        entity_id=item_id,
+                        breadcrumbs=[site_breadcrumb, list_breadcrumb],
+                        fields=item_data.get("fields"),
+                        content_type=item_data.get("contentType"),
+                        created_datetime=self._parse_datetime(item_data.get("createdDateTime")),
+                        last_modified_datetime=self._parse_datetime(
+                            item_data.get("lastModifiedDateTime")
+                        ),
+                        created_by=item_data.get("createdBy"),
+                        last_modified_by=item_data.get("lastModifiedBy"),
+                        web_url=item_data.get("webUrl"),
+                        list_id=list_id,
+                        site_id=list_entity.site_id,
+                    )
+
+                # Handle pagination
+                url = data.get("@odata.nextLink")
+                if url:
+                    self.logger.debug("Following pagination to next page")
+                    params = None
+
+            self.logger.debug(
+                f"Completed list item generation for list {list_name}. Total items: {item_count}"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error generating list items for list {list_name}: {str(e)}")
+            # Don't raise - continue with other lists
+
+    def _clean_html_text(self, html: str) -> str:
+        """Strip HTML tags and clean text content.
+
+        Args:
+            html: HTML string to clean
+
+        Returns:
+            Cleaned text without HTML tags
+        """
+        import re
+
+        text = re.sub(r"<[^>]+>", " ", html)
+        return text.strip()
+
+    def _extract_canvas_sections(self, canvas: Dict) -> list[str]:
+        """Extract text from canvas layout sections.
+
+        Args:
+            canvas: Canvas layout dictionary
+
+        Returns:
+            List of text content from canvas sections
+        """
+        content_parts = []
+        sections = canvas.get("horizontalSections", [])
+        for section in sections:
+            columns = section.get("columns", [])
+            for column in columns:
+                webparts = column.get("webparts", [])
+                for webpart in webparts:
+                    inner_html = webpart.get("innerHtml", "")
+                    if inner_html:
+                        text = self._clean_html_text(inner_html)
+                        if text:
+                            content_parts.append(text)
+        return content_parts
+
+    def _extract_webparts_array(self, webparts: list) -> list[str]:
+        """Extract text from webParts array (older format).
+
+        Args:
+            webparts: List of webpart dictionaries
+
+        Returns:
+            List of text content from webparts
+        """
+        content_parts = []
+        for webpart in webparts:
+            if isinstance(webpart, dict):
+                inner_html = webpart.get("data", {}).get("innerHTML", "")
+                if inner_html:
+                    text = self._clean_html_text(inner_html)
+                    if text:
+                        content_parts.append(text)
+        return content_parts
+
+    def _extract_page_content(self, page_data: Dict) -> str:
+        """Extract text content from page webParts.
+
+        Args:
+            page_data: Page data from Graph API
+
+        Returns:
+            Extracted text content from all web parts
+        """
+        content_parts = []
+
+        # Extract from canvasLayout if available
+        canvas = page_data.get("canvasLayout")
+        if canvas and isinstance(canvas, dict):
+            content_parts = self._extract_canvas_sections(canvas)
+
+        # Fallback: extract from webParts array (older format)
+        if not content_parts:
+            webparts = page_data.get("webParts", [])
+            content_parts = self._extract_webparts_array(webparts)
+
+        return "\n\n".join(content_parts) if content_parts else ""
+
+    async def _generate_page_entities(
+        self, client: httpx.AsyncClient, site_id: str, site_name: str
+    ) -> AsyncGenerator[SharePointPageEntity, None]:
+        """Generate SharePointPageEntity objects for pages in a site."""
+        self.logger.debug(f"Starting page entity generation for site: {site_name}")
+        url = f"{self.GRAPH_BASE_URL}/sites/{site_id}/pages"
+        params = {"$top": 100}
+        page_count = 0
+
+        try:
+            while url:
+                self.logger.debug(f"Fetching pages from: {url}")
+                data = await self._get_with_auth(client, url, params=params)
+                pages = data.get("value", [])
+                self.logger.debug(f"Retrieved {len(pages)} pages for site {site_name}")
+
+                for page_data in pages:
+                    page_count += 1
+                    page_id = page_data.get("id")
+                    title = page_data.get("title", "Untitled Page")
+
+                    self.logger.debug(f"Processing page #{page_count}: {title}")
+
+                    # Extract text content from webParts
+                    content = self._extract_page_content(page_data)
+
+                    yield SharePointPageEntity(
+                        entity_id=page_id,
+                        breadcrumbs=[
+                            Breadcrumb(entity_id=site_id, name=site_name[:50], type="site")
+                        ],
+                        title=title,
+                        name=page_data.get("name"),
+                        content=content,
+                        description=page_data.get("description"),
+                        page_layout=page_data.get("pageLayout"),
+                        web_url=page_data.get("webUrl"),
+                        created_datetime=self._parse_datetime(page_data.get("createdDateTime")),
+                        last_modified_datetime=self._parse_datetime(
+                            page_data.get("lastModifiedDateTime")
+                        ),
+                        created_by=page_data.get("createdBy"),
+                        last_modified_by=page_data.get("lastModifiedBy"),
+                        publishing_state=page_data.get("publishingState"),
+                        site_id=site_id,
+                    )
+
+                # Handle pagination
+                url = data.get("@odata.nextLink")
+                if url:
+                    self.logger.debug("Following pagination to next page")
+                    params = None
+
+            self.logger.debug(
+                f"Completed page generation for site {site_name}. Total pages: {page_count}"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error generating page entities for site {site_name}: {str(e)}")
+            # Don't raise - continue with other entities
+
+    async def _generate_lists_with_items(
+        self,
+        client: httpx.AsyncClient,
+        site_id: str,
+        site_name: str,
+        site_breadcrumb: Breadcrumb,
+        start_count: int,
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Generate list entities and their items for a site.
+
+        Args:
+            client: HTTP client
+            site_id: Site ID
+            site_name: Site name
+            site_breadcrumb: Site breadcrumb for child entities
+            start_count: Starting entity count for logging
+
+        Yields:
+            List and list item entities
+        """
+        self.logger.debug(f"Generating list entities for site: {site_name}")
+        current_count = start_count
+
+        async for list_entity in self._generate_list_entities(client, site_id, site_name):
+            current_count += 1
+            self.logger.debug(
+                f"Yielding entity #{current_count}: List - {list_entity.display_name}"
+            )
+            yield list_entity
+
+            # Generate list items for each list
+            async for list_item_entity in self._generate_list_item_entities(
+                client, list_entity, site_breadcrumb
+            ):
+                current_count += 1
+                list_name = list_entity.display_name
+                self.logger.debug(f"Yielding entity #{current_count}: ListItem from {list_name}")
+                yield list_item_entity
+
+    async def _generate_drives_with_items(
+        self,
+        client: httpx.AsyncClient,
+        site_id: str,
+        site_name: str,
+        site_breadcrumb: Breadcrumb,
+        start_count: int,
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Generate drive entities and their files for a site.
+
+        Args:
+            client: HTTP client
+            site_id: Site ID
+            site_name: Site name
+            site_breadcrumb: Site breadcrumb for child entities
+            start_count: Starting entity count for logging
+
+        Yields:
+            Drive and file entities
+        """
+        self.logger.debug(f"Generating drive entities for site: {site_name}")
+        current_count = start_count
+
+        async for drive_entity in self._generate_drive_entities(client, site_id, site_name):
+            current_count += 1
+            self.logger.debug(f"Yielding entity #{current_count}: Drive - {drive_entity.name}")
+            yield drive_entity
+
+            # Generate file entities for each drive
+            drive_id = drive_entity.entity_id
+            drive_name = drive_entity.name or "Document Library"
+
+            self.logger.debug(f"Starting to process files from drive: {drive_id} ({drive_name})")
+
+            async for file_entity in self._generate_drive_item_entities(
+                client, drive_id, drive_name, site_id, site_name, site_breadcrumb
+            ):
+                current_count += 1
+                entity_type = type(file_entity).__name__
+                file_name = getattr(file_entity, "name", "unnamed")
+                self.logger.debug(f"Yielding entity #{current_count}: {entity_type} - {file_name}")
+                yield file_entity
+
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all SharePoint entities.
 
@@ -578,6 +917,9 @@ class SharePointSource(BaseSource):
           - SharePointUserEntity for users in the organization
           - SharePointGroupEntity for groups in the organization
           - SharePointSiteEntity for the root site
+          - SharePointListEntity for each list in the site
+          - SharePointListItemEntity for each item in each list
+          - SharePointPageEntity for each page in the site
           - SharePointDriveEntity for each drive in the site
           - SharePointDriveItemEntity for each file in each drive
         """
@@ -622,38 +964,33 @@ class SharePointSource(BaseSource):
                     self.logger.error("No site found")
                     return
 
-                # Create site breadcrumb for drives and files
+                # Create site breadcrumb for child entities
                 site_id = site_entity.entity_id
                 site_name = site_entity.display_name or "SharePoint"
                 site_breadcrumb = Breadcrumb(entity_id=site_id, name=site_name[:50], type="site")
 
-                # 4) Generate drive entities for the site
-                self.logger.debug(f"Generating drive entities for site: {site_name}")
-                async for drive_entity in self._generate_drive_entities(client, site_id, site_name):
+                # 4) Generate list entities and their items for the site
+                async for entity in self._generate_lists_with_items(
+                    client, site_id, site_name, site_breadcrumb, entity_count
+                ):
+                    entity_count += 1
+                    yield entity
+
+                # 5) Generate page entities for the site
+                self.logger.debug(f"Generating page entities for site: {site_name}")
+                async for page_entity in self._generate_page_entities(client, site_id, site_name):
                     entity_count += 1
                     self.logger.debug(
-                        f"Yielding entity #{entity_count}: Drive - {drive_entity.name}"
+                        f"Yielding entity #{entity_count}: Page - {page_entity.title}"
                     )
-                    yield drive_entity
+                    yield page_entity
 
-                    # 5) Generate file entities for each drive
-                    drive_id = drive_entity.entity_id
-                    drive_name = drive_entity.name or "Document Library"
-
-                    self.logger.debug(
-                        f"Starting to process files from drive: {drive_id} ({drive_name})"
-                    )
-
-                    async for file_entity in self._generate_drive_item_entities(
-                        client, drive_id, drive_name, site_id, site_name, site_breadcrumb
-                    ):
-                        entity_count += 1
-                        entity_type = type(file_entity).__name__
-                        self.logger.debug(
-                            f"Yielding entity #{entity_count}: {entity_type} - "
-                            f"{getattr(file_entity, 'name', 'unnamed')}"
-                        )
-                        yield file_entity
+                # 6) Generate drive entities and their files for the site
+                async for entity in self._generate_drives_with_items(
+                    client, site_id, site_name, site_breadcrumb, entity_count
+                ):
+                    entity_count += 1
+                    yield entity
 
         except Exception as e:
             self.logger.error(f"Error in entity generation: {str(e)}", exc_info=True)

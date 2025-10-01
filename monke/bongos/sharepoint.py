@@ -81,6 +81,9 @@ class SharePointBongo(BaseBongo):
         self._test_folder_id: Optional[str] = None
         self._test_folder_name = f"Monke_Test_{uuid.uuid4().hex[:8]}"
         self._files: List[Dict[str, Any]] = []
+        self._lists: List[Dict[str, Any]] = []
+        self._list_items: List[Dict[str, Any]] = []
+        self._pages: List[Dict[str, Any]] = []
 
     async def _rate_limit(self):
         """Simple rate limiting."""
@@ -308,19 +311,170 @@ class SharePointBongo(BaseBongo):
 
         self.logger.debug(f"File updated: {file_id}")
 
-    async def create_entities(self) -> List[Dict[str, Any]]:
-        """Create test files in SharePoint.
+    async def _create_list(
+        self, client: httpx.AsyncClient, display_name: str, description: str
+    ) -> Dict[str, Any]:
+        """Create a SharePoint list.
+
+        Args:
+            client: HTTP client
+            display_name: Display name of the list
+            description: Description of the list
 
         Returns:
-            List of created file descriptors with verification tokens
+            List metadata from API
         """
-        self.logger.info(f"🥁 Creating {self.entity_count} test files in SharePoint")
+        site_id = await self._ensure_site(client)
 
-        from monke.generation.sharepoint import generate_sharepoint_file
+        self.logger.debug(f"Creating list: {display_name}")
+        await self._rate_limit()
+
+        resp = await client.post(
+            f"{self.GRAPH_BASE_URL}/sites/{site_id}/lists",
+            headers={**self._headers(), "Content-Type": "application/json"},
+            json={
+                "displayName": display_name,
+                "list": {"template": "genericList"},
+                "description": description,
+            },
+        )
+        resp.raise_for_status()
+        list_data = resp.json()
+
+        self.logger.debug(f"List created: {display_name} (ID: {list_data['id']})")
+        return list_data
+
+    async def _create_list_item(
+        self, client: httpx.AsyncClient, list_id: str, fields: dict
+    ) -> Dict[str, Any]:
+        """Create a list item in a SharePoint list.
+
+        Args:
+            client: HTTP client
+            list_id: ID of the list
+            fields: Field values for the item
+
+        Returns:
+            List item metadata from API
+        """
+        site_id = await self._ensure_site(client)
+
+        self.logger.debug(f"Creating list item in list {list_id}")
+        await self._rate_limit()
+
+        resp = await client.post(
+            f"{self.GRAPH_BASE_URL}/sites/{site_id}/lists/{list_id}/items",
+            headers={**self._headers(), "Content-Type": "application/json"},
+            json={"fields": fields},
+        )
+        resp.raise_for_status()
+        item_data = resp.json()
+
+        self.logger.debug(f"List item created: {item_data['id']}")
+        return item_data
+
+    async def _create_page(
+        self, client: httpx.AsyncClient, title: str, content: str
+    ) -> Dict[str, Any]:
+        """Create a SharePoint site page.
+
+        Args:
+            client: HTTP client
+            title: Page title
+            content: Page content (HTML)
+
+        Returns:
+            Page metadata from API
+        """
+        site_id = await self._ensure_site(client)
+
+        self.logger.debug(f"Creating page: {title}")
+        await self._rate_limit()
+
+        # Create page with basic content
+        resp = await client.post(
+            f"{self.GRAPH_BASE_URL}/sites/{site_id}/pages",
+            headers={**self._headers(), "Content-Type": "application/json"},
+            json={
+                "name": f"{title.replace(' ', '_')}_{uuid.uuid4().hex[:8]}.aspx",
+                "title": title,
+                "pageLayout": "article",
+                "webParts": [
+                    {
+                        "type": "text",
+                        "data": {"innerHTML": f"<p>{content}</p>"},
+                    }
+                ],
+            },
+        )
+        resp.raise_for_status()
+        page_data = resp.json()
+
+        # Publish the page
+        try:
+            await self._rate_limit()
+            publish_resp = await client.post(
+                f"{self.GRAPH_BASE_URL}/sites/{site_id}/pages/{page_data['id']}/publish",
+                headers=self._headers(),
+            )
+            if publish_resp.status_code in (200, 204):
+                self.logger.debug(f"Page published: {title}")
+        except Exception as e:
+            self.logger.warning(f"Failed to publish page {title}: {e}")
+
+        self.logger.debug(f"Page created: {title} (ID: {page_data['id']})")
+        return page_data
+
+    async def _delete_list(self, client: httpx.AsyncClient, list_id: str):
+        """Delete a SharePoint list."""
+        site_id = await self._ensure_site(client)
+
+        self.logger.debug(f"Deleting list: {list_id}")
+        await self._rate_limit()
+
+        resp = await client.delete(
+            f"{self.GRAPH_BASE_URL}/sites/{site_id}/lists/{list_id}",
+            headers=self._headers(),
+        )
+        if resp.status_code not in (204, 404):
+            resp.raise_for_status()
+
+        self.logger.debug(f"List deleted: {list_id}")
+
+    async def _delete_page(self, client: httpx.AsyncClient, page_id: str):
+        """Delete a SharePoint page."""
+        site_id = await self._ensure_site(client)
+
+        self.logger.debug(f"Deleting page: {page_id}")
+        await self._rate_limit()
+
+        resp = await client.delete(
+            f"{self.GRAPH_BASE_URL}/sites/{site_id}/pages/{page_id}",
+            headers=self._headers(),
+        )
+        if resp.status_code not in (204, 404):
+            resp.raise_for_status()
+
+        self.logger.debug(f"Page deleted: {page_id}")
+
+    async def create_entities(self) -> List[Dict[str, Any]]:
+        """Create test entities in SharePoint (lists, list items, pages, and files).
+
+        Returns:
+            List of created entity descriptors with verification tokens
+        """
+        self.logger.info("🥁 Creating test entities in SharePoint")
+
+        from monke.generation.sharepoint import (
+            generate_sharepoint_file,
+            generate_sharepoint_list,
+            generate_list_item,
+            generate_page_content,
+        )
 
         all_entities: List[Dict[str, Any]] = []
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             # Verify token before proceeding
             is_valid = await self._verify_token(client)
             if not is_valid:
@@ -328,7 +482,90 @@ class SharePointBongo(BaseBongo):
                     "SharePoint access token is invalid or expired. "
                     "Please reconnect your SharePoint account in Composio."
                 )
-            # Ensure we have a test folder
+
+            # Create 2 lists with items
+            for i in range(2):
+                list_token = str(uuid.uuid4())[:8]
+                self.logger.info(f"Creating list {i + 1}/2 with token {list_token}")
+
+                # Generate list
+                list_name, list_desc = await generate_sharepoint_list(
+                    self.openai_model, list_token
+                )
+
+                # Create the list
+                list_data = await self._create_list(client, list_name, list_desc)
+
+                list_descriptor = {
+                    "type": "list",
+                    "id": list_data["id"],
+                    "name": list_name,
+                    "token": list_token,
+                    "expected_content": list_token,
+                    "path": f"sharepoint/list/{list_data['id']}",
+                }
+                self._lists.append(list_descriptor)
+                all_entities.append(list_descriptor)
+
+                self.logger.info(f"✅ Created list: {list_name} (token: {list_token})")
+
+                # Create 2 list items per list
+                for j in range(2):
+                    item_token = str(uuid.uuid4())[:8]
+                    self.logger.info(
+                        f"  Creating list item {j + 1}/2 with token {item_token}"
+                    )
+
+                    # Generate list item
+                    item_fields = await generate_list_item(
+                        self.openai_model, item_token
+                    )
+
+                    # Create the list item
+                    item_data = await self._create_list_item(
+                        client, list_data["id"], item_fields
+                    )
+
+                    item_descriptor = {
+                        "type": "list_item",
+                        "id": item_data["id"],
+                        "parent_id": list_data["id"],
+                        "token": item_token,
+                        "expected_content": item_token,
+                        "path": f"sharepoint/list_item/{item_data['id']}",
+                    }
+                    self._list_items.append(item_descriptor)
+                    all_entities.append(item_descriptor)
+
+                    self.logger.info(f"  ✅ Created list item (token: {item_token})")
+
+            # Create 2 pages
+            for i in range(2):
+                page_token = str(uuid.uuid4())[:8]
+                self.logger.info(f"Creating page {i + 1}/2 with token {page_token}")
+
+                # Generate page
+                page_title, page_content, page_desc = await generate_page_content(
+                    self.openai_model, page_token
+                )
+
+                # Create the page
+                page_data = await self._create_page(client, page_title, page_content)
+
+                page_descriptor = {
+                    "type": "page",
+                    "id": page_data["id"],
+                    "name": page_title,
+                    "token": page_token,
+                    "expected_content": page_token,
+                    "path": f"sharepoint/page/{page_data['id']}",
+                }
+                self._pages.append(page_descriptor)
+                all_entities.append(page_descriptor)
+
+                self.logger.info(f"✅ Created page: {page_title} (token: {page_token})")
+
+            # Ensure we have a test folder for files
             folder_id = await self._ensure_test_folder(client)
 
             # Create test files
@@ -365,7 +602,12 @@ class SharePointBongo(BaseBongo):
 
                 self.logger.info(f"✅ Created file: {filename} (token: {file_token})")
 
-        self.logger.info(f"✅ Created {len(self._files)} files in SharePoint")
+        self.logger.info(
+            f"✅ Created {len(self._lists)} lists, "
+            f"{len(self._list_items)} list items, "
+            f"{len(self._pages)} pages, "
+            f"{len(self._files)} files in SharePoint"
+        )
 
         self.created_entities = all_entities
         return all_entities
@@ -469,6 +711,8 @@ class SharePointBongo(BaseBongo):
         cleanup_stats = {
             "files_deleted": 0,
             "folders_deleted": 0,
+            "pages_deleted": 0,
+            "lists_deleted": 0,
             "errors": 0,
         }
 
@@ -505,7 +749,31 @@ class SharePointBongo(BaseBongo):
                         self.logger.warning(f"Failed to delete test folder: {e}")
                         cleanup_stats["errors"] += 1
 
-                # 3. Find and clean up any orphaned test folders
+                # 3. Delete any remaining pages
+                if self._pages:
+                    for page in self._pages:
+                        try:
+                            await self._delete_page(client, page["id"])
+                            cleanup_stats["pages_deleted"] += 1
+                        except Exception as e:
+                            self.logger.warning(
+                                f"Failed to delete page {page['id']}: {e}"
+                            )
+                            cleanup_stats["errors"] += 1
+
+                # 4. Delete any remaining lists (items deleted automatically)
+                if self._lists:
+                    for list_entity in self._lists:
+                        try:
+                            await self._delete_list(client, list_entity["id"])
+                            cleanup_stats["lists_deleted"] += 1
+                        except Exception as e:
+                            self.logger.warning(
+                                f"Failed to delete list {list_entity['id']}: {e}"
+                            )
+                            cleanup_stats["errors"] += 1
+
+                # 5. Find and clean up any orphaned test folders
                 if self._drive_id:
                     try:
                         self.logger.info("Looking for orphaned test folders...")
@@ -542,7 +810,9 @@ class SharePointBongo(BaseBongo):
 
             self.logger.info(
                 f"🧹 Cleanup completed: {cleanup_stats['files_deleted']} files, "
-                f"{cleanup_stats['folders_deleted']} folders deleted, "
+                f"{cleanup_stats['folders_deleted']} folders, "
+                f"{cleanup_stats['pages_deleted']} pages, "
+                f"{cleanup_stats['lists_deleted']} lists deleted, "
                 f"{cleanup_stats['errors']} errors"
             )
 

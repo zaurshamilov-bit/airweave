@@ -46,7 +46,7 @@ class SharePointUserEntity(ChunkEntity):
         None, description="The department in which the user works.", embeddable=True
     )
     office_location: Optional[str] = AirweaveField(
-        None, description="The office location in the user's place of business."
+        None, description="The office location in the user's place of business.", embeddable=True
     )
     mobile_phone: Optional[str] = AirweaveField(
         None, description="The primary cellular telephone number for the user."
@@ -84,12 +84,18 @@ class SharePointGroupEntity(ChunkEntity):
     group_types: List[str] = AirweaveField(
         default_factory=list,
         description="Specifies the group type (e.g., 'Unified' for Microsoft 365 groups).",
+        embeddable=True,
     )
     visibility: Optional[str] = AirweaveField(
-        None, description="Visibility of the group (Public, Private, HiddenMembership)."
+        None,
+        description="Visibility of the group (Public, Private, HiddenMembership).",
+        embeddable=True,
     )
     created_datetime: Optional[datetime] = AirweaveField(
-        None, description="Timestamp when the group was created.", is_created_at=True
+        None,
+        description="Timestamp when the group was created.",
+        is_created_at=True,
+        embeddable=True,
     )
 
 
@@ -110,13 +116,19 @@ class SharePointSiteEntity(ChunkEntity):
         None, description="The descriptive text for the site.", embeddable=True
     )
     web_url: Optional[str] = AirweaveField(
-        None, description="URL that displays the site in the browser.", embeddable=True
+        None, description="URL that displays the site in the browser."
     )
     created_datetime: Optional[datetime] = AirweaveField(
-        None, description="Date and time the site was created.", is_created_at=True
+        None,
+        description="Date and time the site was created.",
+        is_created_at=True,
+        embeddable=True,
     )
     last_modified_datetime: Optional[datetime] = AirweaveField(
-        None, description="Date and time the site was last modified.", is_updated_at=True
+        None,
+        description="Date and time the site was last modified.",
+        is_updated_at=True,
+        embeddable=True,
     )
     is_personal_site: Optional[bool] = AirweaveField(
         None, description="Whether the site is a personal site."
@@ -144,10 +156,16 @@ class SharePointDriveEntity(ChunkEntity):
     )
     web_url: Optional[str] = AirweaveField(None, description="URL to view the drive in a browser.")
     created_datetime: Optional[datetime] = AirweaveField(
-        None, description="Date and time the drive was created.", is_created_at=True
+        None,
+        description="Date and time the drive was created.",
+        is_created_at=True,
+        embeddable=True,
     )
     last_modified_datetime: Optional[datetime] = AirweaveField(
-        None, description="Date and time the drive was last modified.", is_updated_at=True
+        None,
+        description="Date and time the drive was last modified.",
+        is_updated_at=True,
+        embeddable=True,
     )
     owner: Optional[Dict[str, Any]] = AirweaveField(
         None, description="Information about the drive's owner.", embeddable=True
@@ -171,16 +189,22 @@ class SharePointDriveItemEntity(FileEntity):
         None, description="The name of the item (file or folder).", embeddable=True
     )
     description: Optional[str] = AirweaveField(
-        None, description="User-visible description of the item."
+        None, description="User-visible description of the item.", embeddable=True
     )
     web_url: Optional[str] = AirweaveField(
         None, description="URL to display the item in a browser."
     )
     created_datetime: Optional[datetime] = AirweaveField(
-        None, description="Date and time the item was created.", is_created_at=True
+        None,
+        description="Date and time the item was created.",
+        is_created_at=True,
+        embeddable=True,
     )
     last_modified_datetime: Optional[datetime] = AirweaveField(
-        None, description="Date and time the item was last modified.", is_updated_at=True
+        None,
+        description="Date and time the item was last modified.",
+        is_updated_at=True,
+        embeddable=True,
     )
     size: Optional[int] = AirweaveField(None, description="Size of the item in bytes.")
     file: Optional[Dict[str, Any]] = AirweaveField(
@@ -203,4 +227,130 @@ class SharePointDriveItemEntity(FileEntity):
     )
     drive_id: Optional[str] = AirweaveField(
         None, description="ID of the drive that contains this item."
+    )
+
+
+class SharePointListEntity(ChunkEntity):
+    """Schema for a SharePoint list.
+
+    Based on the Microsoft Graph list resource.
+    Reference: https://learn.microsoft.com/en-us/graph/api/resources/list
+    """
+
+    display_name: Optional[str] = AirweaveField(
+        None, description="The displayable title of the list.", embeddable=True
+    )
+    name: Optional[str] = AirweaveField(None, description="The name of the list.", embeddable=True)
+    description: Optional[str] = AirweaveField(
+        None, description="The description of the list.", embeddable=True
+    )
+    web_url: Optional[str] = AirweaveField(None, description="URL to view the list in browser.")
+    created_datetime: Optional[datetime] = AirweaveField(
+        None,
+        description="Date and time the list was created.",
+        is_created_at=True,
+        embeddable=True,
+    )
+    last_modified_datetime: Optional[datetime] = AirweaveField(
+        None,
+        description="Date and time the list was last modified.",
+        is_updated_at=True,
+        embeddable=True,
+    )
+    list_info: Optional[Dict[str, Any]] = AirweaveField(
+        None, description="Additional list metadata (template, hidden, etc)."
+    )
+    site_id: Optional[str] = AirweaveField(
+        None, description="ID of the site that contains this list."
+    )
+
+
+class SharePointListItemEntity(ChunkEntity):
+    """Schema for a SharePoint list item.
+
+    Based on the Microsoft Graph listItem resource.
+    Reference: https://learn.microsoft.com/en-us/graph/api/resources/listitem
+    """
+
+    fields: Optional[Dict[str, Any]] = AirweaveField(
+        None,
+        description="The values of the columns set on this list item (dynamic schema).",
+        embeddable=True,
+    )
+    content_type: Optional[Dict[str, Any]] = AirweaveField(
+        None, description="The content type of this list item."
+    )
+    created_datetime: Optional[datetime] = AirweaveField(
+        None,
+        description="Date and time the item was created.",
+        is_created_at=True,
+        embeddable=True,
+    )
+    last_modified_datetime: Optional[datetime] = AirweaveField(
+        None,
+        description="Date and time the item was last modified.",
+        is_updated_at=True,
+        embeddable=True,
+    )
+    created_by: Optional[Dict[str, Any]] = AirweaveField(
+        None, description="Identity of the user who created the item.", embeddable=True
+    )
+    last_modified_by: Optional[Dict[str, Any]] = AirweaveField(
+        None, description="Identity of the user who last modified the item.", embeddable=True
+    )
+    web_url: Optional[str] = AirweaveField(None, description="URL to view the item in browser.")
+    list_id: Optional[str] = AirweaveField(
+        None, description="ID of the list that contains this item."
+    )
+    site_id: Optional[str] = AirweaveField(
+        None, description="ID of the site that contains this item."
+    )
+
+
+class SharePointPageEntity(ChunkEntity):
+    """Schema for a SharePoint site page.
+
+    Based on the Microsoft Graph sitePage resource.
+    Reference: https://learn.microsoft.com/en-us/graph/api/resources/sitepage
+    """
+
+    title: Optional[str] = AirweaveField(
+        None, description="The title of the page.", embeddable=True
+    )
+    name: Optional[str] = AirweaveField(None, description="The name of the page.", embeddable=True)
+    content: Optional[str] = AirweaveField(
+        None,
+        description="The actual page content (extracted from webParts).",
+        embeddable=True,
+    )
+    description: Optional[str] = AirweaveField(
+        None, description="Description or summary of the page content.", embeddable=True
+    )
+    page_layout: Optional[str] = AirweaveField(
+        None, description="The layout type of the page (article, home, etc).", embeddable=True
+    )
+    web_url: Optional[str] = AirweaveField(None, description="URL to view the page in browser.")
+    created_datetime: Optional[datetime] = AirweaveField(
+        None,
+        description="Date and time the page was created.",
+        is_created_at=True,
+        embeddable=True,
+    )
+    last_modified_datetime: Optional[datetime] = AirweaveField(
+        None,
+        description="Date and time the page was last modified.",
+        is_updated_at=True,
+        embeddable=True,
+    )
+    created_by: Optional[Dict[str, Any]] = AirweaveField(
+        None, description="Identity of the user who created the page.", embeddable=True
+    )
+    last_modified_by: Optional[Dict[str, Any]] = AirweaveField(
+        None, description="Identity of the user who last modified the page.", embeddable=True
+    )
+    publishing_state: Optional[Dict[str, Any]] = AirweaveField(
+        None, description="Publishing status of the page."
+    )
+    site_id: Optional[str] = AirweaveField(
+        None, description="ID of the site that contains this page."
     )

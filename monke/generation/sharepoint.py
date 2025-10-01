@@ -105,3 +105,97 @@ async def generate_folder_name(model: str) -> Tuple[str, str]:
     folder_spec = await llm.generate_structured(SharePointFolderSpec, instruction)
 
     return folder_spec.name, folder_spec.description
+
+
+async def generate_sharepoint_list(model: str, token: str) -> Tuple[str, str]:
+    """Generate list metadata for SharePoint testing using LLM.
+
+    Args:
+        model: The LLM model to use
+        token: A unique token to embed in the description
+
+    Returns:
+        Tuple of (display_name, description)
+    """
+    from monke.generation.schemas.sharepoint import SharePointListSpec
+
+    llm = LLMClient(model_override=model)
+
+    instruction = (
+        "Generate a realistic SharePoint list for tracking business data. "
+        "The list should have a professional name that fits in a business context. "
+        f"You MUST include the literal token '{token}' in the description. "
+        "Examples: 'Project Tracker', 'Issue Log', 'Team Tasks', 'Inventory Management'."
+    )
+
+    list_spec = await llm.generate_structured(SharePointListSpec, instruction)
+    list_spec.token = token
+
+    # Ensure token in description
+    if token not in list_spec.description:
+        list_spec.description += f" (Token: {token})"
+
+    return list_spec.display_name, list_spec.description
+
+
+async def generate_list_item(model: str, token: str) -> dict:
+    """Generate list item content for SharePoint testing using LLM.
+
+    Args:
+        model: The LLM model to use
+        token: A unique token to embed in the content
+
+    Returns:
+        Dict with Title and other fields
+    """
+    from monke.generation.schemas.sharepoint import SharePointListItemContent
+
+    llm = LLMClient(model_override=model)
+
+    instruction = (
+        "Generate realistic content for a SharePoint list item (like a task or project entry). "
+        f"You MUST include the literal token '{token}' in the title field. "
+        "Create meaningful title and description that would fit in a business list."
+    )
+
+    item_content = await llm.generate_structured(SharePointListItemContent, instruction)
+
+    # Ensure token in title
+    if token not in item_content.title:
+        item_content.title += f" [{token}]"
+
+    return {
+        "Title": item_content.title,
+        "Description": item_content.description,
+        **item_content.additional_fields,
+    }
+
+
+async def generate_page_content(model: str, token: str) -> Tuple[str, str, str]:
+    """Generate page content for SharePoint testing using LLM.
+
+    Args:
+        model: The LLM model to use
+        token: A unique token to embed in the content
+
+    Returns:
+        Tuple of (title, content, description)
+    """
+    from monke.generation.schemas.sharepoint import SharePointPageContent
+
+    llm = LLMClient(model_override=model)
+
+    instruction = (
+        "Generate realistic content for a SharePoint site page (like a news article or wiki page). "
+        f"You MUST include the literal token '{token}' in the content. "
+        "Create a professional page with title, description, and rich content. "
+        "Examples: company news, team updates, documentation pages."
+    )
+
+    page_content = await llm.generate_structured(SharePointPageContent, instruction)
+
+    # Ensure token in content
+    if token not in page_content.content:
+        page_content.content += f"\n\n**Verification Token**: {token}"
+
+    return page_content.title, page_content.content, page_content.description

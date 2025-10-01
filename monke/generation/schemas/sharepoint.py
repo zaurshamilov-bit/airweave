@@ -1,6 +1,6 @@
 """SharePoint-specific Pydantic schemas used for LLM structured generation."""
 
-from typing import List
+from typing import Dict, List
 from pydantic import BaseModel, Field
 
 
@@ -42,3 +42,29 @@ class SharePointFolderSpec(BaseModel):
 
     name: str = Field(description="Name of the folder")
     description: str = Field(default="", description="Folder description")
+
+
+class SharePointListSpec(BaseModel):
+    """Metadata for list generation."""
+
+    display_name: str = Field(description="Display name of the list")
+    description: str = Field(description="Description of the list")
+    token: str = Field(description="Unique verification token")
+
+
+class SharePointListItemContent(BaseModel):
+    """Content for a list item."""
+
+    title: str = Field(description="Title field with token embedded")
+    description: str = Field(description="Description or notes field")
+    additional_fields: Dict[str, str] = Field(
+        default_factory=dict, description="Additional custom fields"
+    )
+
+
+class SharePointPageContent(BaseModel):
+    """Content for a site page."""
+
+    title: str = Field(description="Page title")
+    content: str = Field(description="Page content with token embedded")
+    description: str = Field(default="", description="Page description/summary")
