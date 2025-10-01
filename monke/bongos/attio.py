@@ -43,7 +43,6 @@ class AttioBongo(BaseBongo):
         # Runtime state
         self._company_records: List[Dict[str, Any]] = []
         self._person_records: List[Dict[str, Any]] = []
-        self._workspace_id: Optional[str] = None
 
         # Pacing
         self.last_request_time = 0.0
@@ -67,23 +66,8 @@ class AttioBongo(BaseBongo):
         self.last_request_time = time.time()
 
     async def _ensure_workspace(self):
-        """Fetch and cache the workspace ID."""
-        if self._workspace_id:
-            return
-
-        async with httpx.AsyncClient() as client:
-            await self._rate_limit()
-            resp = await client.get(
-                f"{self.API_BASE}/workspaces", headers=self._headers(), timeout=20.0
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            workspaces = data.get("data", [])
-            if not workspaces:
-                raise ValueError("No Attio workspaces found")
-
-            self._workspace_id = workspaces[0]["id"]["workspace_id"]
-            self.logger.info(f"Using workspace: {self._workspace_id}")
+        """No-op: Attio API doesn't require workspace ID for record creation."""
+        pass
 
     async def create_entities(self) -> List[Dict[str, Any]]:
         """Create companies and people in Attio with embedded tokens.
@@ -117,11 +101,12 @@ class AttioBongo(BaseBongo):
 
                         # Create company record
                         # Attio uses a specific format for attribute values
+                        # Note: Only using universally available fields
                         attributes = {
                             "name": [{"value": company_data["name"]}],
                             "domains": [{"domain": company_data["domain"]}],
                             "description": [{"value": company_data["description"]}],
-                            "categories": [{"value": cat} for cat in company_data["categories"]],
+                            # Skip categories - they must be pre-configured in the workspace
                         }
 
                         resp = await client.post(
@@ -142,34 +127,8 @@ class AttioBongo(BaseBongo):
 
                         self.logger.info(f"✅ Created company record: {record_id}")
 
-                        # Create a note on the company
-                        await self._rate_limit()
-                        note_token = str(uuid.uuid4())[:8]
-                        note_title, note_content = await generate_attio_note(
-                            self.openai_model, note_token
-                        )
-
-                        try:
-                            note_resp = await client.post(
-                                f"{self.API_BASE}/objects/companies/records/{record_id}/notes",
-                                headers=self._headers(),
-                                json={
-                                    "data": {
-                                        "title": note_title,
-                                        "content": note_content,
-                                        "format": "plaintext",
-                                    }
-                                },
-                                timeout=20.0,
-                            )
-                            note_resp.raise_for_status()
-                            note_data = note_resp.json()["data"]
-                            note_id = note_data["id"]["note_id"]
-                            self.logger.info(f"📄 Created note on company: {note_id}")
-                        except Exception as e:
-                            self.logger.warning(f"Failed to create note: {e}")
-                            note_id = None
-                            note_token = None
+                        # Note: Attio API doesn't support creating notes via REST API
+                        # Notes can only be created through the UI
 
                         entity = {
                             "type": "company",
@@ -179,11 +138,6 @@ class AttioBongo(BaseBongo):
                             "expected_content": token,
                             "object_id": "companies",
                         }
-
-                        # Add note info if created successfully
-                        if note_id:
-                            entity["note_id"] = note_id
-                            entity["note_token"] = note_token
 
                         return entity
 
@@ -205,9 +159,12 @@ class AttioBongo(BaseBongo):
                         )
 
                         # Create person record
+                        # Note: Attio requires full_name format, not first/last separately
+                        full_name = f"{person_data['first_name']} {person_data['last_name']}"
                         attributes = {
                             "name": [
                                 {
+                                    "full_name": full_name,
                                     "first_name": person_data["first_name"],
                                     "last_name": person_data["last_name"],
                                 }
@@ -235,34 +192,8 @@ class AttioBongo(BaseBongo):
 
                         self.logger.info(f"✅ Created person record: {record_id}")
 
-                        # Create a note on the person
-                        await self._rate_limit()
-                        note_token = str(uuid.uuid4())[:8]
-                        note_title, note_content = await generate_attio_note(
-                            self.openai_model, note_token
-                        )
-
-                        try:
-                            note_resp = await client.post(
-                                f"{self.API_BASE}/objects/people/records/{record_id}/notes",
-                                headers=self._headers(),
-                                json={
-                                    "data": {
-                                        "title": note_title,
-                                        "content": note_content,
-                                        "format": "plaintext",
-                                    }
-                                },
-                                timeout=20.0,
-                            )
-                            note_resp.raise_for_status()
-                            note_data = note_resp.json()["data"]
-                            note_id = note_data["id"]["note_id"]
-                            self.logger.info(f"📄 Created note on person: {note_id}")
-                        except Exception as e:
-                            self.logger.warning(f"Failed to create note: {e}")
-                            note_id = None
-                            note_token = None
+                        # Note: Attio API doesn't support creating notes via REST API
+                        # Notes can only be created through the UI
 
                         entity = {
                             "type": "person",
@@ -272,11 +203,6 @@ class AttioBongo(BaseBongo):
                             "expected_content": token,
                             "object_id": "people",
                         }
-
-                        # Add note info if created successfully
-                        if note_id:
-                            entity["note_id"] = note_id
-                            entity["note_token"] = note_token
 
                         return entity
 

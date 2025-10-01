@@ -6,7 +6,7 @@ connector:
   type: attio
   auth_mode: direct
   auth_fields:
-    api_key: ${ATTIO_API_KEY}  # Set this in your environment or .env file
+    api_key: MONKE_ATTIO_API_KEY  # Set this in your environment or .env file
   config_fields:
     openai_model: "gpt-4.1-mini"
     rate_limit_delay_ms: 300

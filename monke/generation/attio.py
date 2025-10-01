@@ -44,9 +44,12 @@ async def generate_attio_company(model: str, token: str) -> Dict:
         + f"\n\n**Notes:**\n{company.content.notes}"
     )
 
+    # Make domain unique by incorporating the token to avoid conflicts
+    unique_domain = f"{company.spec.domain.split('.')[0]}-{token}.com"
+
     return {
-        "name": company.spec.name,
-        "domain": company.spec.domain,
+        "name": f"{company.spec.name} ({token})",  # Make name unique too
+        "domain": unique_domain,
         "industry": company.spec.industry,
         "description": full_description,
         "categories": company.content.categories,
@@ -89,10 +92,14 @@ async def generate_attio_person(model: str, token: str) -> Dict:
         + f"\n\n**Notes:**\n{person.content.notes}"
     )
 
+    # Make email unique by incorporating the token to avoid conflicts
+    email_parts = person.spec.email.split('@')
+    unique_email = f"{email_parts[0]}-{token}@{email_parts[1]}"
+
     return {
         "first_name": person.spec.first_name,
         "last_name": person.spec.last_name,
-        "email": person.spec.email,
+        "email": unique_email,
         "title": person.spec.title,
         "bio": full_bio,
         "token": token,
