@@ -29,6 +29,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     short_name="salesforce",
     auth_methods=[AuthenticationMethod.OAUTH_BROWSER],
     oauth_type=OAuthType.WITH_REFRESH,
+    requires_byoc=True,  # Users must bring their own Salesforce OAuth credentials
     auth_config_class="SalesforceAuthConfig",  # This tells factory to pass full dict
     config_class="SalesforceConfig",
     labels=["CRM", "Sales"],
