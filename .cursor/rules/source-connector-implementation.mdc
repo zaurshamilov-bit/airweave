@@ -90,13 +90,13 @@ class MyConnectorEntity(ChunkEntity):
 
 ### Key Principles
 
-#### 1. Use AirweaveField for Searchable Content - CRITICAL FOR SEARCH
+#### 1. Use AirweaveField for Searchable Content
 
-**⚠️ CRITICAL: The `embeddable=True` flag is what makes your entities semantically searchable!**
+**Important: The `embeddable=True` flag is what makes your entities semantically searchable.**
 
-Without `embeddable=True`, fields are ONLY keyword-searchable, not semantically searchable. This severely limits the user's ability to find relevant entities.
+Without `embeddable=True`, fields are only keyword-searchable, not semantically searchable. This limits the user's ability to find relevant entities.
 
-**Best Practice: Mark ALL user-visible, content-rich fields as `embeddable=True`**
+**Best Practice: Mark most user-visible, content-rich fields as `embeddable=True`**
 
 This includes:
 - **Text content**: descriptions, notes, comments, body text
@@ -190,16 +190,16 @@ class MyConnectorTaskEntity(ChunkEntity):
     project_id: str = Field(..., description="Parent project ID")
 ```
 
-**Common Mistake - Sparse Entity (BAD):**
+**Common Mistake - Sparse Entity:**
 
 ```python
-# ❌ BAD: Only name is embeddable, rest is not searchable
+# Avoid: Only name is embeddable, rest is not searchable
 class SparseTaskEntity(ChunkEntity):
     name: str = AirweaveField(..., embeddable=True)
-    description: Optional[str] = Field(None)  # ❌ Not searchable!
-    assignee: Optional[Dict] = Field(None)     # ❌ Can't find by assignee!
-    status: Optional[str] = Field(None)        # ❌ Can't filter by status!
-    # Result: Users can only search by task name, nothing else!
+    description: Optional[str] = Field(None)  # Should be embeddable
+    assignee: Optional[Dict] = Field(None)     # Should be embeddable
+    status: Optional[str] = Field(None)        # Should be embeddable
+    # Result: Users can only search by task name, nothing else
 ```
 
 #### 2. Always Include Timestamps
@@ -905,12 +905,12 @@ async def _generate_projects(self, client, workspace):
 ### Validation Checklist
 
 - [ ] All entity types are defined in `entities/{short_name}.py`
-- [ ] **CRITICAL: Most fields use `AirweaveField(..., embeddable=True)` for rich semantic search**
-  - [ ] All text content fields (descriptions, notes, comments, body)
-  - [ ] All name/title fields
-  - [ ] All people fields (assignees, authors, owners, members)
-  - [ ] All status/metadata fields (status, priority, tags, labels)
-  - [ ] All timestamps (created_at, modified_at, due_dates)
+- [ ] Most user-visible fields use `AirweaveField(..., embeddable=True)` for semantic search
+  - [ ] Text content fields (descriptions, notes, comments, body)
+  - [ ] Name/title fields
+  - [ ] People fields (assignees, authors, owners, members)
+  - [ ] Status/metadata fields (status, priority, tags, labels)
+  - [ ] Timestamps (created_at, modified_at, due_dates)
   - [ ] Verify: Only IDs and binary metadata use `Field()` without embeddable
 - [ ] All entities have `created_at` or `modified_at` timestamps with proper flags
 - [ ] Auth config class added to `platform/configs/auth.py`
@@ -927,11 +927,11 @@ async def _generate_projects(self, client, workspace):
 
 ### Common Pitfalls
 
-1. **⚠️ CRITICAL: Creating sparse entities without `embeddable=True` on most fields**
-   - **Impact**: Users can't semantically search your entities, severely limiting usefulness
-   - **Fix**: Mark ALL user-visible, content-rich fields as `embeddable=True`
-   - **Rule of thumb**: 70%+ of your entity fields should be embeddable
-   - **Anti-pattern**: Only marking `name` as embeddable and using `Field()` for everything else
+1. **Creating sparse entities without embeddable fields**
+   - Marking only `name` as embeddable while using `Field()` for descriptions, assignees, status, etc.
+   - Impact: Users can't semantically search your entities
+   - Fix: Mark most user-visible, content-rich fields as `embeddable=True`
+   - Rule of thumb: ~70% of entity fields should be embeddable
 
 2. **Forgetting timestamps** - Without `is_created_at` or `is_updated_at`, incremental sync won't work
 

@@ -10,9 +10,9 @@ This guide shows you how to build comprehensive tests that verify **every entity
 
 ## Why Test Every Entity Type?
 
-**⚠️ CRITICAL RULE: Your Monke tests MUST create and verify ALL entity types defined in your source connector.**
+**Important: Your Monke tests should create and verify all entity types defined in your source connector.**
 
-**Problem:** Many connector tests only verify top-level entities (e.g., tasks) but ignore nested entities (e.g., comments, files).
+Many connector tests only verify top-level entities (e.g., tasks) but ignore nested entities (e.g., comments, files).
 
 **Impact:**
 - Comments might not sync properly → Silent failures in production
@@ -20,19 +20,19 @@ This guide shows you how to build comprehensive tests that verify **every entity
 - Entity relationships might be broken → Poor search results
 - Users can't search the full breadth of data they expect
 
-**Solution:** Create test entities for **every entity type** your connector syncs, and verify each one appears in Qdrant.
+**Solution:** Create test entities for every entity type your connector syncs, and verify each one appears in Qdrant.
 
 **Before Writing Monke Tests:**
 1. Open your source file: `backend/airweave/platform/sources/{short_name}.py`
-2. List ALL entity types yielded in `generate_entities()`:
+2. List all entity types yielded in `generate_entities()`:
    - Example: WorkspaceEntity, ProjectEntity, TaskEntity, CommentEntity, FileEntity
-3. Your Monke tests MUST create at least one instance of EACH type
-4. Your Monke tests MUST verify each instance appears in Qdrant after sync
+3. Your Monke tests should create at least one instance of each type
+4. Verify each instance appears in Qdrant after sync
 
 **Validation:**
 - Count entity classes in `entities/{short_name}.py`
 - Count entity types created in `bongos/{short_name}.py::create_entities()`
-- **These counts MUST match** (excluding parent/workspace entities that don't get stored)
+- These counts should match (excluding parent/workspace entities that don't get stored)
 
 ---
 
@@ -360,11 +360,9 @@ async def create_entities(self) -> List[Dict[str, Any]]:
 
 ### Key Principles for `create_entities()`
 
-**⚠️ CRITICAL RULE #1: Create ALL entity types, not just parent entities**
+1. **Create all entity types from source** - Before coding, list every entity type your source's `generate_entities()` yields. Your tests should create at least one of each type.
 
-1. **Create ALL entity types from source** - Before coding, list every entity type your source's `generate_entities()` yields. Your tests MUST create at least one of each type.
-
-2. **Create nested entities** - Don't just create tasks; create comments ON those tasks, files ATTACHED to those tasks
+2. **Create nested entities** - Don't just create tasks; create comments on those tasks, files attached to those tasks
 
 3. **Unique tokens per entity** - Each comment, file, task gets its own verification token
 
@@ -376,14 +374,14 @@ async def create_entities(self) -> List[Dict[str, Any]]:
 
 **Validation Pattern:**
 ```python
-# At the end of create_entities(), verify you created all types:
+# At the end of create_entities(), log what you created:
 self.logger.info(
-    f"✅ Created {len(self._tasks)} tasks, "
-    f"{len(self._comments)} comments, "  # Must be > 0 if source yields comments
-    f"{len(self._files)} files"          # Must be > 0 if source yields files
+    f"Created {len(self._tasks)} tasks, "
+    f"{len(self._comments)} comments, "
+    f"{len(self._files)} files"
 )
 
-# If any count is 0 but your source yields that type, YOU HAVE A BUG
+# Verify counts match what your source yields
 ```
 
 ### Implementing `update_entities()`
@@ -1087,12 +1085,12 @@ See the Asana tests for a complete example:
 
 ## Checklist
 
-**Critical Requirements:**
-- [ ] **⚠️ VERIFIED: Bongo creates ALL entity types from source connector (not just top-level)**
+**Entity Coverage:**
+- [ ] Bongo creates all entity types from source connector
   - [ ] Listed all entity types from `generate_entities()` in source file
   - [ ] Confirmed `create_entities()` creates at least one of each type
   - [ ] Confirmed entity count matches between source and tests
-- [ ] **⚠️ VERIFIED: All created entity types are returned in `create_entities()` for verification**
+- [ ] All created entity types are returned in `create_entities()` for verification
   - [ ] Tasks ✓
   - [ ] Comments ✓ (if source yields them)
   - [ ] Files ✓ (if source yields them)

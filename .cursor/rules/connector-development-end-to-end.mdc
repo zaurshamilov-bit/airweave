@@ -19,9 +19,9 @@ Your task is to write the code. The human will handle testing and running comman
 
 ---
 
-## ⚠️ CRITICAL RULES - Must Follow
+## Important Guidelines
 
-These are the most common mistakes when building connectors. Follow these strictly:
+These are the most common mistakes when building connectors:
 
 ### 1. Make Entities Information-Rich (Embeddable Fields)
 
@@ -42,63 +42,63 @@ These are the most common mistakes when building connectors. Follow these strict
 
 **Bad Example:**
 ```python
-# ❌ WRONG: Sparse entity - users can't search by anything except name
+# Avoid: Sparse entity - users can't search by anything except name
 class TaskEntity(ChunkEntity):
     name: str = AirweaveField(..., embeddable=True)
-    description: str = Field(...)  # ❌ Should be embeddable!
-    assignee: Dict = Field(...)     # ❌ Should be embeddable!
+    description: str = Field(...)  # Should be embeddable
+    assignee: Dict = Field(...)     # Should be embeddable
 ```
 
 **Good Example:**
 ```python
-# ✅ CORRECT: Information-rich - users can search everything
+# Better: Information-rich - users can search everything
 class TaskEntity(ChunkEntity):
     name: str = AirweaveField(..., embeddable=True)
-    description: str = AirweaveField(..., embeddable=True)  # ✅
-    assignee: Dict = AirweaveField(..., embeddable=True)    # ✅
-    status: str = AirweaveField(..., embeddable=True)       # ✅
-    external_id: str = Field(...)  # ✅ ID correctly not embeddable
+    description: str = AirweaveField(..., embeddable=True)
+    assignee: Dict = AirweaveField(..., embeddable=True)
+    status: str = AirweaveField(..., embeddable=True)
+    external_id: str = Field(...)  # ID correctly not embeddable
 ```
 
-### 2. Test ALL Entity Types in Monke
+### 2. Test All Entity Types in Monke
 
-**Rule:** Your Monke tests MUST create and verify every entity type your source yields
+**Rule:** Your Monke tests should create and verify every entity type your source yields
 
-**Why:** Untested entity types = broken in production. Silent failures that hurt users.
+**Why:** Untested entity types may break in production without detection.
 
 **How to verify:**
 1. Open your source: `backend/airweave/platform/sources/{short_name}.py`
 2. Find all `yield` statements in `generate_entities()`
 3. List entity types: Task, Comment, File, etc.
-4. Your `bongos/{short_name}.py::create_entities()` MUST create at least one of EACH type
-5. Your `create_entities()` MUST return descriptors for ALL types
+4. Your `bongos/{short_name}.py::create_entities()` should create at least one of each type
+5. Your `create_entities()` should return descriptors for all types
 
 **Bad Example:**
 ```python
-# ❌ WRONG: Only creates tasks, ignores comments and files
+# Avoid: Only creates tasks, ignores comments and files
 async def create_entities(self):
     for i in range(self.entity_count):
         task = await self._create_task(...)
         all_entities.append(task)
-    # ❌ Source yields comments and files, but we don't test them!
+    # Source yields comments and files, but we don't test them
     return all_entities
 ```
 
 **Good Example:**
 ```python
-# ✅ CORRECT: Creates ALL entity types from source
+# Better: Creates all entity types from source
 async def create_entities(self):
     for i in range(self.entity_count):
         # Create parent
         task = await self._create_task(...)
         all_entities.append(task)
 
-        # ✅ Create comments (source yields them)
+        # Create comments (source yields them)
         for j in range(2):
             comment = await self._create_comment(task["id"], ...)
             all_entities.append(comment)
 
-        # ✅ Create file (source yields them)
+        # Create file (source yields them)
         file = await self._upload_file(task["id"], ...)
         all_entities.append(file)
 
@@ -196,7 +196,7 @@ Decide:
 3. Add **nested entities** (comments, messages)
 4. Add **file entities** if the API supports attachments
 
-**⚠️ CRITICAL: Make entities information-rich with embeddable fields**
+** Make entities information-rich with embeddable fields**
 
 **Key principles:**
 - **USE `AirweaveField(..., embeddable=True)` FOR ~70% OF FIELDS** - this is what makes entities searchable!
@@ -531,7 +531,7 @@ async def generate_comment(model: str, token: str) -> dict:
 
 **Reference:** See `monke-testing-guide.mdc` Part 1
 
-**⚠️ THIS IS THE MOST CRITICAL FILE: It must create ALL entity types defined in your source connector.**
+**It must create ALL entity types defined in your source connector.**
 
 **Before starting:**
 1. Open `backend/airweave/platform/sources/{short_name}.py`
@@ -558,7 +558,7 @@ async def generate_comment(model: str, token: str) -> dict:
 7. Implement `cleanup()`
 8. Add rate limiting and error handling
 
-**Critical: Test ALL Entity Types**
+** Test ALL Entity Types**
 
 **Validation before proceeding:**
 - [ ] Count: How many entity types does your source yield?
@@ -569,7 +569,7 @@ async def generate_comment(model: str, token: str) -> dict:
 async def create_entities(self) -> List[Dict[str, Any]]:
     """Create comprehensive test entities.
 
-    CRITICAL: Must create instances of EVERY entity type that
+    Must create instances of EVERY entity type that
     the source connector syncs.
     """
     all_entities = []
@@ -593,7 +593,7 @@ async def create_entities(self) -> List[Dict[str, Any]]:
             })
 
             # ==========================================
-            # CRITICAL: Create child entities
+            # Create child entities
             # ==========================================
 
             # Create 2 comments per task
@@ -708,7 +708,7 @@ Wait for human feedback. If tests fail, review the error logs and fix the code.
 
 **Source Connector:**
 - [ ] All entity types are implemented in `entities/{short_name}.py`
-- [ ] **⚠️ CRITICAL: Most entity fields use `AirweaveField(..., embeddable=True)`**
+- [ ] **semantically relevant entity fields use `AirweaveField(..., embeddable=True)`**
   - [ ] All text content fields are embeddable
   - [ ] All people fields are embeddable
   - [ ] All status/metadata fields are embeddable
@@ -725,13 +725,13 @@ Wait for human feedback. If tests fail, review the error logs and fix the code.
 - [ ] OAuth config is in `dev.integrations.yaml`
 
 **Monke Tests:**
-- [ ] **⚠️ CRITICAL: Bongo creates ALL entity types from source (not just tasks)**
+- [ ] **Bongo creates ALL entity types from source**
   - [ ] Listed all entity types yielded in source's `generate_entities()`
   - [ ] Confirmed `create_entities()` creates each type
   - [ ] Entity type count matches between source and tests
 - [ ] Each entity has unique verification token
 - [ ] Tokens are embedded in searchable content
-- [ ] Generation schemas defined for all entity types (not just tasks)
+- [ ] Generation schemas defined for all entity types
 - [ ] Test config has comprehensive test flow
 - [ ] All entity types are verified after sync
 - [ ] Update flow tests incremental sync
@@ -836,7 +836,7 @@ Reference the Asana source as an example: @asana.py
 ```
 Now implement the Monke tests.
 
-CRITICAL: The bongo MUST create instances of EVERY entity type, including
+The bongo MUST create instances of EVERY entity type, including
 comments and files, not just the top-level tasks.
 
 Start with:
@@ -856,10 +856,10 @@ Building a complete connector requires:
 
 1. **Research:** Understand the API, entity hierarchy, auth, and rate limits
 2. **Entities:** Define schemas for ALL entity types with proper timestamps
-   - **⚠️ CRITICAL: Mark ~70% of fields as `embeddable=True` for semantic search**
+   - **Mark ~70% of fields as `embeddable=True` for semantic search**
 3. **Source:** Implement hierarchical entity generation with token refresh
 4. **Testing:** Create Monke tests that verify EVERY entity type
-   - **⚠️ CRITICAL: Test ALL entity types your source yields, not just tasks**
+   - **Test ALL entity types your source yields, not just tasks**
 5. **Validation:** Run E2E tests and verify all entities appear in search
 6. **Refinement:** Debug issues, optimize performance, handle edge cases
 
