@@ -63,6 +63,8 @@ navigation:
       path: docs/pages/connectors/dropbox/main.mdx
     - page: Github
       path: docs/pages/connectors/github/main.mdx
+    - page: Gitlab
+      path: docs/pages/connectors/gitlab/main.mdx
     - page: Gmail
       path: docs/pages/connectors/gmail/main.mdx
     - page: Google Calendar
