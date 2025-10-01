@@ -20,6 +20,7 @@ from airweave.platform.entities.clickup import (
     ClickUpWorkspaceEntity,
 )
 from airweave.platform.sources._base import BaseSource
+
 from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 
 
