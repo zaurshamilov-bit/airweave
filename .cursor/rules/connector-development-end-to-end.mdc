@@ -60,18 +60,22 @@ class TaskEntity(ChunkEntity):
     external_id: str = Field(...)  # ID correctly not embeddable
 ```
 
-### 2. Test All Entity Types in Monke
+### 2. Test Entity Types Your Source Actually Implements
 
-**Rule:** Your Monke tests should create and verify every entity type your source yields
+**Rule:** Your Monke tests should create and verify the entity types that your source actually yields
 
 **Why:** Untested entity types may break in production without detection.
+
+**Important:** Only test entities that your source implementation yields. You don't need to test every theoretically possible entity type from the API—just the ones your connector actually implements.
 
 **How to verify:**
 1. Open your source: `backend/airweave/platform/sources/{short_name}.py`
 2. Find all `yield` statements in `generate_entities()`
-3. List entity types: Task, Comment, File, etc.
-4. Your `bongos/{short_name}.py::create_entities()` should create at least one of each type
-5. Your `create_entities()` should return descriptors for all types
+3. List the entity types your source ACTUALLY yields (e.g., Task, Comment, File)
+4. Your `bongos/{short_name}.py::create_entities()` should create at least one of each yielded type
+5. Your `create_entities()` should return descriptors for all yielded types
+
+**Example:** If your SharePoint source only yields `ListItem`, `Page`, and `DriveItem` entities (not `User`, `Group`, `Site`), then your Monke bongo only needs to create those three types—not the entire SharePoint API surface.
 
 **Bad Example:**
 ```python
