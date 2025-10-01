@@ -17,6 +17,12 @@ class AsanaConfig(SourceConfig):
     pass
 
 
+class AttioConfig(SourceConfig):
+    """Attio configuration schema."""
+
+    pass
+
+
 class BitbucketConfig(SourceConfig):
     """Bitbucket configuration schema."""
 

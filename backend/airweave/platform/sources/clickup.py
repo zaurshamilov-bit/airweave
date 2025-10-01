@@ -7,7 +7,6 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from airweave.core.exceptions import TokenRefreshError
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
 from airweave.platform.entities.clickup import (
@@ -21,15 +20,22 @@ from airweave.platform.entities.clickup import (
     ClickUpWorkspaceEntity,
 )
 from airweave.platform.sources._base import BaseSource
+from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 
 
 @source(
     name="ClickUp",
     short_name="clickup",
-    auth_type=AuthType.oauth2,
+    auth_methods=[
+        AuthenticationMethod.OAUTH_BROWSER,
+        AuthenticationMethod.OAUTH_TOKEN,
+        AuthenticationMethod.AUTH_PROVIDER,
+    ],
+    oauth_type=OAuthType.ACCESS_ONLY,
     auth_config_class="ClickUpAuthConfig",
     config_class="ClickUpConfig",
     labels=["Project Management"],
+    supports_continuous=False,
 )
 class ClickUpSource(BaseSource):
     """ClickUp source connector integrates with the ClickUp API to extract and synchronize data.
