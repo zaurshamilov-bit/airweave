@@ -34,6 +34,7 @@ class OAuth2Service:
         oauth2_settings: OAuth2Settings,
         client_id: Optional[str] = None,
         state: Optional[str] = None,
+        template_configs: Optional[dict] = None,
     ) -> str:
         """Generate the OAuth2 authorization URL for an integration.
 
@@ -41,18 +42,37 @@ class OAuth2Service:
             oauth2_settings: The OAuth2 settings for the integration
             client_id: Optional client ID to override the default one
             state: Optional state token to round-trip through the OAuth flow
+            template_configs: Optional config fields for URL templates (e.g., instance_url)
 
         Returns:
             The authorization URL for the OAuth2 flow
 
         Raises:
             HTTPException: If there's an error generating the authorization URL
+            ValueError: If template URL requires template_configs but it's missing
         """
         redirect_uri = OAuth2Service._get_redirect_url(oauth2_settings.integration_short_name)
 
         # if client_id is not provided, get it from the integration settings
         if not client_id:
             client_id = oauth2_settings.client_id
+
+        # Render URL if it's a template
+        if oauth2_settings.url_template:
+            if not template_configs:
+                raise ValueError(
+                    f"template_configs needed for templated OAuth URLs "
+                    f"({oauth2_settings.integration_short_name})"
+                )
+            try:
+                auth_url_base = oauth2_settings.render_url(**template_configs)
+            except KeyError as e:
+                raise ValueError(
+                    f"Missing template variable {e} for {oauth2_settings.integration_short_name}. "
+                    f"Available in template_configs: {list(template_configs.keys())}"
+                ) from e
+        else:
+            auth_url_base = oauth2_settings.url
 
         params = {
             "response_type": "code",
@@ -67,7 +87,7 @@ class OAuth2Service:
         if state is not None:
             params["state"] = state
 
-        auth_url = f"{oauth2_settings.url}?{urlencode(params)}"
+        auth_url = f"{auth_url_base}?{urlencode(params)}"
 
         return auth_url
 
@@ -78,6 +98,7 @@ class OAuth2Service:
         code: str,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
+        template_configs: Optional[dict] = None,
     ) -> OAuth2TokenResponse:
         """Exchange an authorization code for an OAuth2 token.
 
@@ -88,6 +109,7 @@ class OAuth2Service:
             code (str): The authorization code to exchange.
             client_id (Optional[str]): Optional client ID to override the default.
             client_secret (Optional[str]): Optional client secret to override the default.
+            template_configs (Optional[dict]): Optional config fields for URL templates.
 
         Returns:
         -------
@@ -106,6 +128,19 @@ class OAuth2Service:
 
         redirect_uri = OAuth2Service._get_redirect_url(source_short_name)
 
+        # Render backend URL if it's a template
+        if getattr(oauth2_settings, "backend_url_template", False):
+            if not template_configs:
+                raise ValueError(f"template_configs needed for {source_short_name}")
+            try:
+                backend_url = oauth2_settings.render_backend_url(**template_configs)
+            except KeyError as e:
+                raise ValueError(
+                    f"Missing template variable {e} in template_configs for token exchange"
+                ) from e
+        else:
+            backend_url = oauth2_settings.backend_url
+
         if not client_id and not client_secret:
             client_id = oauth2_settings.client_id
             client_secret = oauth2_settings.client_secret
@@ -116,6 +151,7 @@ class OAuth2Service:
             redirect_uri=redirect_uri,
             client_id=client_id,
             client_secret=client_secret,
+            backend_url=backend_url,
             integration_config=oauth2_settings,
         )
 
@@ -126,13 +162,43 @@ class OAuth2Service:
         redirect_uri: str,
         client_id: Optional[str] = None,
         state: Optional[str] = None,
+        template_configs: Optional[dict] = None,
     ) -> str:
         """Generate an OAuth2 authorization URL but force a specific redirect_uri and include state.
 
         Useful for API-hosted callback flows.
+
+        Args:
+            oauth2_settings: The OAuth2 settings for the integration
+            redirect_uri: The redirect URI to use
+            client_id: Optional client ID to override the default
+            state: Optional state token
+            template_configs: Optional config fields for URL templates (e.g., instance_url)
+
+        Returns:
+            The authorization URL
+
+        Raises:
+            ValueError: If template URL requires template_configs but it's missing
         """
         if not client_id:
             client_id = oauth2_settings.client_id
+
+        # Render URL if it's a template
+        if oauth2_settings.url_template:
+            if not template_configs:
+                raise ValueError(
+                    f"template_configs needed for templated OAuth URLs "
+                    f"({oauth2_settings.integration_short_name})"
+                )
+            try:
+                auth_url_base = oauth2_settings.render_url(**template_configs)
+            except KeyError as e:
+                raise ValueError(
+                    f"Missing template variable {e} for {oauth2_settings.integration_short_name}"
+                ) from e
+        else:
+            auth_url_base = oauth2_settings.url
 
         params = {
             "response_type": "code",
@@ -145,7 +211,7 @@ class OAuth2Service:
         if oauth2_settings.scope:
             params["scope"] = oauth2_settings.scope
 
-        return f"{oauth2_settings.url}?{urlencode(params)}"
+        return f"{auth_url_base}?{urlencode(params)}"
 
     @staticmethod
     async def exchange_authorization_code_for_token_with_redirect(
@@ -156,10 +222,26 @@ class OAuth2Service:
         redirect_uri: str,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
+        template_configs: Optional[dict] = None,
     ) -> OAuth2TokenResponse:
         """Exchange an OAuth2 code using an explicit redirect_uri.
 
         Must match the one used in auth.
+
+        Args:
+            ctx: The API context
+            source_short_name: The short name of the integration
+            code: The authorization code
+            redirect_uri: The redirect URI
+            client_id: Optional client ID
+            client_secret: Optional client secret
+            template_configs: Optional config fields for URL templates
+
+        Returns:
+            OAuth2TokenResponse with tokens
+
+        Raises:
+            HTTPException: If settings not found or token exchange fails
         """
         try:
             oauth2_settings = await integration_settings.get_by_short_name(source_short_name)
@@ -167,6 +249,19 @@ class OAuth2Service:
             raise HTTPException(
                 status_code=404, detail=f"Settings not found for source: {source_short_name}"
             ) from e
+
+        # Render backend URL if it's a template
+        if getattr(oauth2_settings, "backend_url_template", False):
+            if not template_configs:
+                raise ValueError(f"template_configs needed for {source_short_name}")
+            try:
+                backend_url = oauth2_settings.render_backend_url(**template_configs)
+            except KeyError as e:
+                raise ValueError(
+                    f"Missing template variable {e} in template_configs for token exchange"
+                ) from e
+        else:
+            backend_url = oauth2_settings.backend_url
 
         if not client_id:
             client_id = oauth2_settings.client_id
@@ -179,6 +274,7 @@ class OAuth2Service:
             redirect_uri=redirect_uri,
             client_id=client_id,
             client_secret=client_secret,
+            backend_url=backend_url,
             integration_config=oauth2_settings,
         )
 
@@ -189,6 +285,7 @@ class OAuth2Service:
         ctx: ApiContext,
         connection_id: UUID,
         decrypted_credential: dict,
+        config_fields: Optional[dict] = None,
     ) -> OAuth2TokenResponse:
         """Refresh an access token using a refresh token.
 
@@ -201,6 +298,7 @@ class OAuth2Service:
             ctx (ApiContext): The API context.
             connection_id (UUID): The ID of the connection to refresh the token for.
             decrypted_credential (dict): The token and optional config fields
+            config_fields (Optional[dict]): Config fields for template rendering
 
         Returns:
         -------
@@ -221,6 +319,40 @@ class OAuth2Service:
                 ctx.logger, integration_short_name
             )
 
+            # NEW: Render backend URL if it's a template
+            backend_url = integration_config.backend_url
+            if getattr(integration_config, "backend_url_template", False):
+                if not config_fields:
+                    raise ValueError(
+                        f"config_fields required for token refresh of {integration_short_name}"
+                    )
+
+                # Extract only auth-required fields if config class is available
+                try:
+                    from airweave import crud
+
+                    source = await crud.source.get_by_short_name(db, integration_short_name)
+                    if source and source.config_class:
+                        from airweave.platform.locator import resource_locator
+
+                        config_class = resource_locator.get_config(source.config_class)
+                        template_config_values = config_class.extract_template_configs(
+                            config_fields
+                        )
+                    else:
+                        template_config_values = config_fields
+                except Exception:
+                    # Fallback to all config fields
+                    template_config_values = config_fields
+
+                try:
+                    backend_url = integration_config.backend_url.format(**template_config_values)
+                    ctx.logger.debug(f"Rendered backend URL for token refresh: {backend_url}")
+                except KeyError as e:
+                    raise ValueError(
+                        f"Missing template variable {e} in config_fields for token refresh"
+                    ) from e
+
             # Get client credentials
             # TODO: this is the only place we need to check the db for client credentials
             client_id, client_secret = await OAuth2Service._get_client_credentials(
@@ -234,7 +366,7 @@ class OAuth2Service:
 
             # Make request and handle response
             response = await OAuth2Service._make_token_request(
-                ctx.logger, integration_config.backend_url, headers, payload
+                ctx.logger, backend_url, headers, payload
             )
 
             # Handle rotating refresh tokens if needed
@@ -533,6 +665,7 @@ class OAuth2Service:
         redirect_uri: str,
         client_id: str,
         client_secret: str,
+        backend_url: str,
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
     ) -> OAuth2TokenResponse:
         """Core method to exchange an authorization code for tokens.
@@ -544,6 +677,7 @@ class OAuth2Service:
             redirect_uri: The redirect URI used in the authorization request
             client_id: The OAuth2 client ID
             client_secret: The OAuth2 client secret
+            backend_url: The backend URL for token exchange (may be rendered from template)
             integration_config: The integration configuration
 
         Returns:
@@ -568,7 +702,7 @@ class OAuth2Service:
         logger.info(f"DEBUG - Using redirect_uri: {redirect_uri}")
         logger.info(f"DEBUG - Using client_id: {client_id}")
         logger.info(f"DEBUG - Code length: {len(code)}")
-        logger.info(f"DEBUG - Backend URL: {integration_config.backend_url}")
+        logger.info(f"DEBUG - Backend URL: {backend_url}")
 
         if integration_config.client_credential_location == "header":
             encoded_credentials = OAuth2Service._encode_client_credentials(client_id, client_secret)
@@ -580,7 +714,7 @@ class OAuth2Service:
         # Log the request details for debugging
         logger.info(
             f"OAuth2 code exchange request - "
-            f"URL: {integration_config.backend_url}, "
+            f"URL: {backend_url}, "
             f"Redirect URI: {redirect_uri}, "
             f"Client ID: {client_id}, "
             f"Code length: {len(code)}, "
@@ -590,9 +724,7 @@ class OAuth2Service:
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    integration_config.backend_url, headers=headers, data=payload
-                )
+                response = await client.post(backend_url, headers=headers, data=payload)
                 response.raise_for_status()
         except httpx.HTTPStatusError as e:
             # Log the actual error response from the OAuth provider

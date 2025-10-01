@@ -77,15 +77,17 @@ class OAuth2Settings(BaseAuthSettings):
     Attributes:
     ----------
         integration_short_name (str): The integration short name.
-        url (str): The authorization URL.
-        backend_url (str): The backend URL.
+        url (str): The authorization URL (may contain {placeholders} for templates).
+        backend_url (str): The backend URL (may contain {placeholders} for templates).
         grant_type (str): The grant type.
         client_id (str): The client ID.
         client_secret (Optional[str]): The client secret. Only in dev.integrations.yaml.
         content_type (str): The content type.
         client_credential_location (str): The client credential location.
-        additional_frontend_params (Optional[dict[str, str]]): Additional frontend parameters.
+        additional_frontend_params (Optional[dict[str, str]]): Additional frontend params.
         scope (Optional[str]): The scope.
+        url_template (bool): Whether url contains template variables (default: False).
+        backend_url_template (bool): Whether backend_url has templates (default: False).
 
     """
 
@@ -99,6 +101,10 @@ class OAuth2Settings(BaseAuthSettings):
     client_credential_location: str
     additional_frontend_params: Optional[dict[str, str]] = None
     scope: Optional[str] = None
+
+    # Template support for instance-specific OAuth URLs
+    url_template: bool = False
+    backend_url_template: bool = False
 
     @model_validator(mode="after")
     def validate_oauth_fields(self):
@@ -114,6 +120,48 @@ class OAuth2Settings(BaseAuthSettings):
                 f"OAuth integration {self.integration_short_name} missing 'client_id' field"
             )
         return self
+
+    def render_url(self, **template_vars) -> str:
+        """Render URL with template variables.
+
+        Args:
+            **template_vars: Variables to interpolate (e.g., instance_url="example.com")
+
+        Returns:
+            Rendered URL with variables replaced
+
+        Raises:
+            KeyError: If template variable missing
+
+        Example:
+            >>> settings.url = "https://{instance_url}/oauth/authorize"
+            >>> settings.render_url(instance_url="example.com")
+            'https://example.com/oauth/authorize'
+        """
+        if self.url_template:
+            return self.url.format(**template_vars)
+        return self.url
+
+    def render_backend_url(self, **template_vars) -> str:
+        """Render backend URL with template variables.
+
+        Args:
+            **template_vars: Variables to interpolate (e.g., instance_url="example.com")
+
+        Returns:
+            Rendered backend URL with variables replaced
+
+        Raises:
+            KeyError: If template variable missing
+
+        Example:
+            >>> settings.backend_url = "https://{instance_url}/oauth/token"
+            >>> settings.render_backend_url(instance_url="example.com")
+            'https://example.com/oauth/token'
+        """
+        if self.backend_url_template:
+            return self.backend_url.format(**template_vars)
+        return self.backend_url
 
 
 class OAuth2WithRefreshSettings(OAuth2Settings):

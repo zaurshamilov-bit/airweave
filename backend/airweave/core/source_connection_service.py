@@ -582,6 +582,33 @@ class SourceConnectionService:
             db, obj_in.short_name, obj_in.config, ctx
         )
 
+        # NEW: Validate and extract auth-required config fields for OAuth flow
+        template_configs = None
+        if source.config_class and validated_config:
+            from airweave.platform.locator import resource_locator
+
+            try:
+                config_class = resource_locator.get_config(source.config_class)
+
+                # Check if this source has template config fields
+                template_config_fields = config_class.get_template_config_fields()
+
+                if template_config_fields:
+                    # Validate template config fields are present
+                    try:
+                        config_class.validate_template_configs(validated_config)
+                        template_configs = config_class.extract_template_configs(validated_config)
+
+                        ctx.logger.info(
+                            f"✅ Validated template configs for {source.short_name}: "
+                            f"{list(template_configs.keys())}"
+                        )
+                    except ValueError as e:
+                        raise HTTPException(status_code=422, detail=str(e))
+            except Exception as e:
+                # Log but don't fail if config class not found (backward compatibility)
+                ctx.logger.warning(f"Could not load config class for {source.short_name}: {e}")
+
         # Generate OAuth URL
         oauth_settings = await integration_settings.get_by_short_name(source.short_name)
         if not oauth_settings:
@@ -603,6 +630,7 @@ class SourceConnectionService:
             redirect_uri=api_callback,
             client_id=client_id,
             state=state,
+            template_configs=template_configs,
         )
 
         async with UnitOfWork(db) as uow:
@@ -626,7 +654,13 @@ class SourceConnectionService:
 
             # Create init session with the redirect_session_id
             init_session = await self._create_init_session(
-                uow.session, obj_in, state, ctx, uow, redirect_session_id=redirect_session_id
+                uow.session,
+                obj_in,
+                state,
+                ctx,
+                uow,
+                redirect_session_id=redirect_session_id,
+                template_configs=template_configs,
             )
 
             # Link them

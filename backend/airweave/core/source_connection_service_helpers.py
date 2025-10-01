@@ -917,6 +917,7 @@ class SourceConnectionHelpers:
         ctx: ApiContext,
         uow: Any,
         redirect_session_id: Optional[UUID] = None,
+        template_configs: Optional[dict] = None,
     ) -> Any:
         """Create connection init session for OAuth flow.
 
@@ -927,6 +928,15 @@ class SourceConnectionHelpers:
           4) Platform default (no client overrides)
 
         For BYOC, both client_id and client_secret are REQUIRED; otherwise 422.
+
+        Args:
+            db: Database session
+            obj_in: Input schema
+            state: OAuth state token
+            ctx: API context
+            uow: Unit of work
+            redirect_session_id: Optional redirect session ID
+            template_configs: Optional pre-validated template configs (e.g., instance_url)
         """
         # Handle both new and legacy schemas
         source_type = getattr(obj_in, "source_type", None) or getattr(obj_in, "short_name", None)
@@ -991,6 +1001,10 @@ class SourceConnectionHelpers:
                         oauth_client_mode = "byoc_top_level"
 
         # 4) Platform default: keep client_id/client_secret as None
+
+        # NOTE: template_configs is passed in pre-validated by caller (source_connection_service)
+        # No need to re-validate here - just use what was passed in
+
         overrides = {
             "client_id": client_id,
             "client_secret": client_secret,
@@ -999,6 +1013,8 @@ class SourceConnectionHelpers:
             "redirect_url": getattr(obj_in, "redirect_url", core_settings.app_url),
             # OAuth provider callback that this backend handles:
             "oauth_redirect_uri": f"{core_settings.api_url}/source-connections/callback",
+            # NEW: Store template configs for callback (pre-validated by caller)
+            "template_configs": template_configs,
         }
 
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
@@ -1056,6 +1072,10 @@ class SourceConnectionHelpers:
             overrides.get("oauth_redirect_uri")
             or f"{core_settings.api_url}/source-connections/callback"
         )
+
+        # NEW: Extract template configs from overrides
+        template_configs = overrides.get("template_configs")
+
         return await oauth2_service.exchange_authorization_code_for_token_with_redirect(
             ctx=ctx,
             source_short_name=short_name,
@@ -1063,6 +1083,7 @@ class SourceConnectionHelpers:
             redirect_uri=redirect_uri,
             client_id=overrides.get("client_id"),
             client_secret=overrides.get("client_secret"),
+            template_configs=template_configs,
         )
 
     async def _regenerate_oauth_url(
@@ -1115,11 +1136,15 @@ class SourceConnectionHelpers:
             or f"{core_settings.api_url}/source-connections/callback"
         )
 
+        # NEW: Extract template configs from overrides
+        template_configs = init_session.overrides.get("template_configs")
+
         provider_auth_url = await oauth2_service.generate_auth_url_with_redirect(
             oauth_settings,
             redirect_uri=api_callback,
             client_id=init_session.overrides.get("client_id"),
             state=state,
+            template_configs=template_configs,
         )
 
         # Create new proxy URL
