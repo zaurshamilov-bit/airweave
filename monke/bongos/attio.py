@@ -29,11 +29,26 @@ class AttioBongo(BaseBongo):
         """Initialize the Attio bongo.
 
         Args:
-            credentials: Dict with at least "api_key" (Attio API key)
+            credentials: Dict with "api_key" (direct auth) or "access_token" (OAuth/Composio)
             **kwargs: Configuration from config file
         """
         super().__init__(credentials)
-        self.api_key: str = credentials["api_key"]
+
+        # Attio supports both API key (direct) and OAuth (via Composio)
+        # Direct auth: api_key
+        # Composio OAuth: access_token
+        self.api_key: str = (
+            credentials.get("api_key")
+            or credentials.get("access_token")  # OAuth from Composio
+            or credentials.get("generic_api_key")  # Alternative API key field
+        )
+
+        if not self.api_key:
+            available_fields = list(credentials.keys())
+            raise ValueError(
+                f"Missing authentication credentials. Expected 'api_key' (direct) or "
+                f"'access_token' (OAuth/Composio). Available fields: {available_fields}"
+            )
         self.entity_count: int = int(kwargs.get("entity_count", 3))
         self.openai_model: str = kwargs.get("openai_model", "gpt-4.1-mini")
         self.max_concurrency: int = int(kwargs.get("max_concurrency", 2))

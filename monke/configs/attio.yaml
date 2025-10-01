@@ -4,9 +4,10 @@ description: End-to-end test for Attio source using Monke
 connector:
   name: Attio
   type: attio
-  auth_mode: direct
-  auth_fields:
-    api_key: MONKE_ATTIO_API_KEY  # Set this in your environment or .env file
+  auth_mode: composio
+  composio_config:
+    account_id: ca_JguaRdn8-X0P
+    auth_config_id: ac_pOsXow0t-y_q
   config_fields:
     openai_model: "gpt-4.1-mini"
     rate_limit_delay_ms: 300
