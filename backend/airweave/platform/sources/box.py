@@ -31,7 +31,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
     ],
     oauth_type=OAuthType.WITH_REFRESH,
     auth_config_class="BoxAuthConfig",
-    config_class=None,
+    config_class="BoxConfig",
     labels=["Storage"],
     supports_continuous=False,
 )
