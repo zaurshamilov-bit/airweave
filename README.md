@@ -133,7 +133,7 @@ await client.collections.create({
 
 ## 🔑 Key Features
 
-- **Data synchronization** from 25+ sources with minimal config
+- **Data synchronization** from 30+ sources with minimal config
 - **Entity extraction** and transformation pipeline
 - **Multi-tenant** architecture with OAuth2
 - **Incremental updates** using content hashing
