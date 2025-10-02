@@ -185,7 +185,7 @@ class SourceConnectionService:
             HTTPException: If required template configs are missing or invalid
         """
         template_configs = None
-        if source.config_class and validated_config:
+        if source.config_class and validated_config is not None:
             from airweave.platform.locator import resource_locator
 
             try:
@@ -196,6 +196,7 @@ class SourceConnectionService:
 
                 if template_config_fields:
                     # Validate template config fields are present
+                    # (even if validated_config is empty dict)
                     try:
                         config_class.validate_template_configs(validated_config)
                         template_configs = config_class.extract_template_configs(validated_config)
@@ -206,6 +207,9 @@ class SourceConnectionService:
                         )
                     except ValueError as e:
                         raise HTTPException(status_code=422, detail=str(e))
+            except HTTPException:
+                # Re-raise HTTP exceptions (like validation errors)
+                raise
             except Exception as e:
                 # Log but don't fail if config class not found (backward compatibility)
                 ctx.logger.warning(f"Could not load config class for {source.short_name}: {e}")
@@ -285,6 +289,14 @@ class SourceConnectionService:
                 status_code=400,
                 detail=f"Source {obj_in.short_name} does not support this authentication method. "
                 f"Supported methods: {[m.value for m in supported]}",
+            )
+
+        # Validate BYOC requirement: If source requires BYOC, auth method must be OAUTH_BYOC
+        if source_class.requires_byoc() and auth_method == AuthenticationMethod.OAUTH_BROWSER:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Source {obj_in.short_name} requires custom OAuth client credentials. "
+                "Please provide client_id and client_secret in the authentication configuration.",
             )
 
         # Handle the edge case where authentication was None (defaults to OAuth browser)

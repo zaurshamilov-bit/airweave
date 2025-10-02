@@ -81,7 +81,7 @@ class BaseConfig(BaseModel):
 
     @classmethod
     def validate_template_configs(cls, config_dict: dict) -> None:
-        """Validate that all template config fields are present.
+        """Validate that all template config fields are present and not empty.
 
         Should be called BEFORE starting OAuth flow to fail fast.
 
@@ -89,7 +89,7 @@ class BaseConfig(BaseModel):
             config_dict: Config dictionary to validate
 
         Raises:
-            ValueError: If any template config fields are missing or None
+            ValueError: If any template config fields are missing, None, or empty strings
 
         Example:
             ```python
@@ -98,11 +98,18 @@ class BaseConfig(BaseModel):
             ```
         """
         template_fields = cls.get_template_config_fields()
-        missing = [f for f in template_fields if f not in config_dict or config_dict[f] is None]
+        missing = []
+
+        for field in template_fields:
+            if field not in config_dict or config_dict[field] is None:
+                missing.append(field)
+            elif isinstance(config_dict[field], str) and not config_dict[field].strip():
+                # Reject empty strings or strings with only whitespace
+                missing.append(field)
 
         if missing:
             raise ValueError(
-                f"Template config fields missing: {', '.join(missing)}. "
+                f"Template config fields missing or empty: {', '.join(missing)}. "
                 f"These must be provided before OAuth authentication."
             )
 
