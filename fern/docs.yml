@@ -93,6 +93,8 @@ navigation:
       path: docs/pages/connectors/outlook_mail/main.mdx
     - page: Postgresql
       path: docs/pages/connectors/postgresql/main.mdx
+    - page: Salesforce
+      path: docs/pages/connectors/salesforce/main.mdx
     - page: Sharepoint
       path: docs/pages/connectors/sharepoint/main.mdx
     - page: Stripe
