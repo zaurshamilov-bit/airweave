@@ -400,19 +400,35 @@ class TrelloBongo(BaseBongo):
     ) -> List[str]:
         """Delete specific entities.
 
+        Handles Trello's cascade deletion: when a card is deleted, its checklists
+        are automatically deleted too.
+
         Args:
             entities: List of entity descriptors to delete
 
         Returns:
-            List of deleted entity IDs
+            List of deleted entity IDs (includes cascade-deleted checklists)
         """
         self.logger.info(f"🥁 Deleting {len(entities)} Trello entities")
         deleted: List[str] = []
 
+        # Find which cards are being deleted (they will cascade-delete their checklists)
+        cards_to_delete = {e["id"] for e in entities if e["type"] == "card"}
+
+        # Find checklists that belong to those cards (they'll be cascade-deleted)
+        cascade_deleted_checklists = [
+            e["id"]
+            for e in self.created_entities
+            if e["type"] == "checklist" and e.get("parent_id") in cards_to_delete
+        ]
+
         async with httpx.AsyncClient() as client:
-            # Delete checklists first
+            # Delete standalone checklists first (ones not attached to cards we're deleting)
             for entity in entities:
-                if entity["type"] == "checklist":
+                if (
+                    entity["type"] == "checklist"
+                    and entity.get("parent_id") not in cards_to_delete
+                ):
                     try:
                         await self._request(
                             client,
@@ -426,7 +442,7 @@ class TrelloBongo(BaseBongo):
                             f"Failed to delete checklist {entity['id']}: {e}"
                         )
 
-            # Then delete cards
+            # Then delete cards (which will cascade-delete their checklists)
             for entity in entities:
                 if entity["type"] == "card":
                     try:
@@ -441,6 +457,13 @@ class TrelloBongo(BaseBongo):
                         self.logger.warning(
                             f"Failed to delete card {entity['id']}: {e}"
                         )
+
+        # Add cascade-deleted checklist IDs
+        if cascade_deleted_checklists:
+            self.logger.info(
+                f"📎 {len(cascade_deleted_checklists)} checklists cascade-deleted with cards"
+            )
+            deleted.extend(cascade_deleted_checklists)
 
         return deleted
 
