@@ -17,8 +17,11 @@ class SalesforceBongo(BaseBongo):
     def __init__(self, credentials: Dict[str, Any], **kwargs):
         super().__init__(credentials)
         self.access_token: str = credentials["access_token"]
-        self.instance_url: str = credentials.get("instance_url", "").replace("https://", "").replace("http://", "")
-        self.api_version: str = credentials.get("api_version", "58.0")
+        # instance_url is now in config_fields, passed via kwargs
+        self.instance_url: str = (
+            kwargs.get("instance_url", "").replace("https://", "").replace("http://", "")
+        )
+        self.api_version: str = kwargs.get("api_version", "58.0")
         self.entity_count: int = int(kwargs.get("entity_count", 3))
         self.openai_model: str = kwargs.get("openai_model", "gpt-4.1-mini")
         self.rate_limit_delay = float(kwargs.get("rate_limit_delay_ms", 200)) / 1000.0
@@ -62,7 +65,11 @@ class SalesforceBongo(BaseBongo):
                     **({"MailingStreet": c.mailing_street} if c.mailing_street else {}),
                     **({"MailingCity": c.mailing_city} if c.mailing_city else {}),
                     **({"MailingState": c.mailing_state} if c.mailing_state else {}),
-                    **({"MailingPostalCode": c.mailing_postal_code} if c.mailing_postal_code else {}),
+                    **(
+                        {"MailingPostalCode": c.mailing_postal_code}
+                        if c.mailing_postal_code
+                        else {}
+                    ),
                     **({"MailingCountry": c.mailing_country} if c.mailing_country else {}),
                 }
                 r = await client.post(
@@ -103,7 +110,7 @@ class SalesforceBongo(BaseBongo):
                     json={
                         "Title": "Senior Test Engineer",
                         "Department": "Monke QA",
-                        "Phone": "+1-555-0100"
+                        "Phone": "+1-555-0100",
                     },
                 )
                 r.raise_for_status()
@@ -121,8 +128,7 @@ class SalesforceBongo(BaseBongo):
                 try:
                     await self._pace()
                     r = await client.delete(
-                        f"{self._get_base_url()}/sobjects/Contact/{ent['id']}",
-                        headers=self._hdrs()
+                        f"{self._get_base_url()}/sobjects/Contact/{ent['id']}", headers=self._hdrs()
                     )
                     if r.status_code in (200, 204):
                         deleted.append(ent["id"])
@@ -173,7 +179,7 @@ class SalesforceBongo(BaseBongo):
                 r = await client.get(
                     f"{self._get_base_url()}/query",
                     headers=self._hdrs(),
-                    params={"q": soql_query.strip()}
+                    params={"q": soql_query.strip()},
                 )
 
                 if r.status_code == 200:
@@ -207,10 +213,7 @@ class SalesforceBongo(BaseBongo):
             self.logger.warning(f"⚠️ Could not search for orphaned contacts: {e}")
 
     def _hdrs(self) -> Dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json"
-        }
+        return {"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"}
 
     async def _pace(self):
         now = time.time()

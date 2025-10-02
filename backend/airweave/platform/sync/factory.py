@@ -793,6 +793,7 @@ class SyncFactory:
                 ctx,
                 connection_id,
                 decrypted_credential,
+                source_connection_data["config_fields"],
             )
             # Update the access_token in the credentials while preserving other fields
             # This is critical for sources like Salesforce that need instance_url
@@ -885,6 +886,7 @@ class SyncFactory:
                     "integration_credential_id": source_connection_data[
                         "integration_credential_id"
                     ],
+                    "config_fields": source_connection_data.get("config_fields"),
                 },
             )()
 

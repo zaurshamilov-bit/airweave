@@ -323,12 +323,7 @@ class IntercomAuthConfig(OAuth2AuthConfig):
 class SalesforceAuthConfig(OAuth2BYOCAuthConfig):
     """Salesforce authentication credentials schema."""
 
-    instance_url: str = Field(
-        ...,
-        title="Instance URL",
-        description="Salesforce instance URL (e.g., https://mycompany.my.salesforce.com)",
-    )
-
+    # instance_url is now in SalesforceConfig as a template field
     # Inherits client_id, client_secret, refresh_token and access_token from OAuth2BYOCAuthConfig
 
 

@@ -342,7 +342,7 @@ class OAuth2Service:
                 ctx.logger, integration_short_name
             )
 
-            # NEW: Render backend URL if it's a template
+            # Render backend URL if it's a template
             backend_url = integration_config.backend_url
             if getattr(integration_config, "backend_url_template", False):
                 if not config_fields:
@@ -837,19 +837,6 @@ class OAuth2Service:
                 "access_token": oauth2_response.access_token,
             }
         )
-
-        # Include any extra fields from OAuth response (e.g., instance_url for Salesforce)
-        # In Pydantic v2, extra fields are stored in __pydantic_extra__
-        if hasattr(oauth2_response, "__pydantic_extra__") and oauth2_response.__pydantic_extra__:
-            for key, value in oauth2_response.__pydantic_extra__.items():
-                if value is not None:
-                    decrypted_credentials[key] = value
-
-        # Also check the extra_fields dict if present
-        if hasattr(oauth2_response, "extra_fields") and oauth2_response.extra_fields:
-            for key, value in oauth2_response.extra_fields.items():
-                if value is not None and key not in decrypted_credentials:
-                    decrypted_credentials[key] = value
 
         encrypted_credentials = credentials.encrypt(decrypted_credentials)
 

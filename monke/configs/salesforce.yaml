@@ -4,11 +4,8 @@ connector:
   name: "Salesforce"
   type: "salesforce"
   auth_mode: direct
-  auth_fields:
-    instance_url: "${SALESFORCE_INSTANCE_URL}"
-    access_token: "${SALESFORCE_ACCESS_TOKEN}"
-    refresh_token: "${SALESFORCE_REFRESH_TOKEN}"
   config_fields:
+    instance_url: "${SALESFORCE_INSTANCE_URL}"
     openai_model: "gpt-4.1-mini"
     rate_limit_delay_ms: 200
 test_flow:

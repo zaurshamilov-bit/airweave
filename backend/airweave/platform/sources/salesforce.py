@@ -1,11 +1,13 @@
 """Salesforce source implementation.
 
-We retrieve data from the Salesforce REST API for the following core resources:
+We retrieve data from the Salesforce REST API for the following core
+resources:
 - Accounts
 - Contacts
 - Opportunities
 
-Then, we yield them as entities using the respective entity schemas defined in entities/salesforce.py.
+Then, we yield them as entities using the respective entity schemas defined
+in entities/salesforce.py.
 """
 
 from typing import Any, AsyncGenerator, Dict, Optional
@@ -27,7 +29,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 @source(
     name="Salesforce",
     short_name="salesforce",
-    auth_methods=[AuthenticationMethod.OAUTH_BROWSER],
+    auth_methods=[AuthenticationMethod.OAUTH_BROWSER, AuthenticationMethod.OAUTH_BYOC],
     oauth_type=OAuthType.WITH_REFRESH,
     requires_byoc=True,  # Users must bring their own Salesforce OAuth credentials
     auth_config_class="SalesforceAuthConfig",  # This tells factory to pass full dict
@@ -48,54 +50,35 @@ class SalesforceSource(BaseSource):
 
     @classmethod
     async def create(
-        cls,
-        credentials: Optional[Any] = None,
-        config: Optional[Dict[str, Any]] = None,
-        access_token: Optional[str] = None,
-        instance_url: Optional[str] = None,
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
     ) -> "SalesforceSource":
         """Create a new Salesforce source instance.
 
-        Supports multiple calling patterns:
-        1. SalesforceAuthConfig object (used by sync factory):
-           create(SalesforceAuthConfig(access_token=..., instance_url=...))
-        2. credentials dict (used by validation):
-           create({'access_token': ..., 'instance_url': ...})
-        3. keyword args:
-           create(access_token=..., instance_url=...)
-
         Args:
-            credentials: OAuth credentials (SalesforceAuthConfig, dict, or string)
-            config: Optional source configuration
-            access_token: OAuth access token (keyword arg)
-            instance_url: Salesforce instance URL (keyword arg)
+            access_token: OAuth access token for Salesforce API
+            config: Required configuration containing instance_url
 
         Returns:
             Configured SalesforceSource instance
         """
         instance = cls()
 
-        # Handle different input formats
-        if hasattr(credentials, "access_token") and hasattr(credentials, "instance_url"):
-            # SalesforceAuthConfig object (from factory)
-            instance.access_token = credentials.access_token
-            instance.instance_url = cls._normalize_instance_url(credentials.instance_url)
-            instance.api_version = getattr(credentials, "api_version", "58.0")
-        elif isinstance(credentials, dict):
-            # Full credentials dict with instance_url (from validation)
-            instance.access_token = credentials.get("access_token")
-            instance.instance_url = cls._normalize_instance_url(credentials.get("instance_url"))
-            instance.api_version = credentials.get("api_version", "58.0")
-        elif isinstance(credentials, str):
-            # Just access token string (shouldn't happen with auth_config_class set)
-            instance.access_token = credentials
-            instance.instance_url = cls._normalize_instance_url(instance_url)
-            instance.api_version = "58.0"
+        if not access_token:
+            raise ValueError("Access token is required")
+
+        instance.access_token = access_token
+        instance.auth_type = "oauth"
+
+        # Get instance_url from config (template field)
+        if config and config.get("instance_url"):
+            instance.instance_url = cls._normalize_instance_url(config["instance_url"])
+            instance.api_version = config.get("api_version", "58.0")
         else:
-            # Keyword arguments
-            instance.access_token = access_token
-            instance.instance_url = cls._normalize_instance_url(instance_url)
+            # For token validation, we can use a placeholder instance_url
+            # The actual instance_url will be provided during connection creation
+            instance.instance_url = "validation-placeholder.salesforce.com"
             instance.api_version = "58.0"
+            instance._is_validation_mode = True  # Flag to indicate this is for validation only
 
         return instance
 
@@ -114,9 +97,10 @@ class SalesforceSource(BaseSource):
     def _get_base_url(self) -> str:
         """Get the base URL for Salesforce API calls."""
         if not self.instance_url:
+            token_status = "<set>" if self.access_token else "<not set>"
             raise ValueError(
                 f"Salesforce instance_url is not set. "
-                f"instance_url={self.instance_url}, access_token={'<set>' if self.access_token else '<not set>'}"
+                f"instance_url={self.instance_url}, access_token={token_status}"
             )
         return f"https://{self.instance_url}/services/data/v{self.api_version}"
 
@@ -395,6 +379,12 @@ class SalesforceSource(BaseSource):
 
     async def validate(self) -> bool:
         """Verify Salesforce access token by pinging the identity endpoint."""
+        # If we're in validation mode without a real instance_url, skip the actual API call
+        if getattr(self, "_is_validation_mode", False):
+            # For validation mode, we can't make a real API call without the instance_url
+            # Just validate that we have an access token
+            return bool(getattr(self, "access_token", None))
+
         if not getattr(self, "access_token", None):
             self.logger.error("Salesforce validation failed: missing access token.")
             return False
