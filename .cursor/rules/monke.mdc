@@ -189,7 +189,7 @@ Types:
 
 ## Supported Connectors
 
-asana, bitbucket, clickup, confluence, dropbox, github, gmail, google_calendar, google_drive, hubspot, jira, linear, monday, notion, onedrive, outlook_calendar, outlook_mail, postgres, stripe, todoist
+airtable, asana, bitbucket, box, clickup, confluence, dropbox, github, gitlab, gmail, google_calendar, google_drive, hubspot, jira, linear, monday, notion, outlook_calendar, outlook_mail, sharepoint, stripe, todoist
 
 Each has: bongo implementation, config file, content generator, schema definitions.
 
