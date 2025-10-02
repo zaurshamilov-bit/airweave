@@ -32,7 +32,7 @@ The search interface is exposed via REST API or MCP. When using MCP, Airweave es
 
 📺 Check out the quick demo below:
 
-<video width="100%" src="https://github.com/user-attachments/assets/330f2242-c244-4eac-8651-d5c97d6fce07" controls></video>
+<video width="100%" src="https://github.com/user-attachments/assets/995e4a36-3f88-4d8e-b401-6ca43db0c7bf" controls></video>
 
 [**🔗 Example notebooks**](https://github.com/airweave-ai/airweave/tree/main/examples)
 
