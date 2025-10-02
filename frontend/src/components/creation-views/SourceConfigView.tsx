@@ -385,9 +385,20 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         sync_immediately: authMode === 'direct_auth' || authMode === 'external_provider',
       };
 
-      // Add config fields if any
+      // Add config fields if any - filter out empty values
       if (Object.keys(configData).length > 0) {
-        payload.config = configData;
+        const filteredConfig = Object.entries(configData).reduce((acc, [key, value]) => {
+          // Only include non-empty values
+          if (value !== '' && value !== null && value !== undefined) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {} as Record<string, any>);
+
+        // Only add config if there are actual values
+        if (Object.keys(filteredConfig).length > 0) {
+          payload.config = filteredConfig;
+        }
       }
 
       const response = await apiClient.post('/source-connections', payload);
