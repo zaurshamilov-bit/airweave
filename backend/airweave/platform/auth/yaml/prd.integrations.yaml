@@ -24,6 +24,8 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
 
+  attio:
+
   bitbucket:
 
   box:
@@ -169,6 +171,21 @@ integrations:
     client_credential_location: "body"
     scope: "read"
 
+  teams:
+    oauth_type: "with_rotating_refresh"
+    url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+    backend_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+    grant_type: "authorization_code"
+    client_id: "f5478ddf-ee3f-4010-8ef1-9525e4e09f0b"
+    client_secret: "teams-client-secret-key"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/Team.ReadBasic.All https://graph.microsoft.com/Channel.ReadBasic.All https://graph.microsoft.com/ChannelMessage.Read.All https://graph.microsoft.com/Chat.Read https://graph.microsoft.com/ChatMessage.Read https://graph.microsoft.com/Group.Read.All"
+    additional_frontend_params:
+      response_type: "code"
+      response_mode: "query"
+
+
   monday:
     oauth_type: "access_only"
     url: "https://auth.monday.com/oauth2/authorize"
@@ -268,6 +285,19 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
     scope: "data:read"
+
+  zendesk:
+    oauth_type: "with_refresh"
+    url: "https://{subdomain}.zendesk.com/oauth/authorizations/new"
+    backend_url: "https://{subdomain}.zendesk.com/oauth/tokens"
+    grant_type: "authorization_code"
+    client_id: "zendesk-client-id-key"
+    client_secret: "zendesk-client-secret-key"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read write"
+    url_template: true
+    backend_url_template: true
 
   clickup:
     oauth_type: "access_only"
