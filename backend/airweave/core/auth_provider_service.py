@@ -32,31 +32,8 @@ class AuthProviderService:
         """
         supported = []
 
-        # Import and check each auth provider individually
-        # This ensures we can handle partial availability of providers
-        auth_provider_classes = []
-
-        # Try to import Pipedream
-        try:
-            from airweave.platform.auth_providers.pipedream import PipedreamAuthProvider
-
-            auth_provider_classes.append(PipedreamAuthProvider)
-        except ImportError:
-            # Skip if provider is not available
-            auth_provider_logger.debug("Pipedream provider not available")
-            pass
-
-        # Try to import Composio
-        try:
-            from airweave.platform.auth_providers.composio import ComposioAuthProvider
-
-            auth_provider_classes.append(ComposioAuthProvider)
-        except ImportError:
-            # Skip if provider is not available
-            auth_provider_logger.debug("Composio provider not available")
-            pass
-
-        # Add future providers here with individual try/except blocks
+        # Get all available auth provider classes from the resource locator
+        auth_provider_classes = resource_locator.get_available_auth_provider_classes()
 
         # Check each available provider
         for auth_provider_class in auth_provider_classes:
