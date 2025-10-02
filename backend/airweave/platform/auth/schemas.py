@@ -139,6 +139,53 @@ class ConfigClassAuthSettings(BaseAuthSettings):
     pass
 
 
+class OAuth1Settings(BaseAuthSettings):
+    """OAuth1 authentication settings schema.
+
+    OAuth1 uses a 3-legged flow with request tokens and access tokens.
+
+    Attributes:
+        integration_short_name: The integration short name
+        request_token_url: URL to obtain temporary credentials (request token)
+        authorization_url: URL to redirect user for authorization
+        access_token_url: URL to exchange for access token
+        consumer_key: OAuth consumer key (API key)
+        consumer_secret: OAuth consumer secret
+        scope: Optional scope (read, write, account, etc.)
+        expiration: Optional token expiration (1hour, 1day, 30days, never)
+    """
+
+    integration_short_name: str
+    request_token_url: str
+    authorization_url: str
+    access_token_url: str
+    consumer_key: str
+    consumer_secret: Optional[str] = None
+    scope: Optional[str] = None
+    expiration: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_oauth1_fields(self):
+        """Validate that OAuth1 integrations have required fields."""
+        if not self.request_token_url:
+            raise ValueError(
+                f"OAuth1 integration {self.integration_short_name} missing 'request_token_url'"
+            )
+        if not self.authorization_url:
+            raise ValueError(
+                f"OAuth1 integration {self.integration_short_name} missing 'authorization_url'"
+            )
+        if not self.access_token_url:
+            raise ValueError(
+                f"OAuth1 integration {self.integration_short_name} missing 'access_token_url'"
+            )
+        if not self.consumer_key:
+            raise ValueError(
+                f"OAuth1 integration {self.integration_short_name} missing 'consumer_key'"
+            )
+        return self
+
+
 class OAuth2AuthUrl(BaseModel):
     """OAuth2 authorization URL schema.
 

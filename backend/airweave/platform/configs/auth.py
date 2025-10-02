@@ -407,6 +407,18 @@ class TodoistAuthConfig(OAuth2AuthConfig):
     # Inherits access_token from OAuth2AuthConfig
 
 
+class TrelloAuthConfig(AuthConfig):
+    """Trello authentication credentials schema.
+
+    Trello uses OAuth1, which requires both a token and token secret.
+    """
+
+    oauth_token: str = Field(title="OAuth Token", description="The OAuth1 access token for Trello")
+    oauth_token_secret: str = Field(
+        title="OAuth Token Secret", description="The OAuth1 access token secret for Trello"
+    )
+
+
 # AUTH PROVIDER AUTHENTICATION CONFIGS
 # These are for authenticating TO auth providers themselves
 

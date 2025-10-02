@@ -299,6 +299,12 @@ class TodoistConfig(SourceConfig):
     pass
 
 
+class TrelloConfig(SourceConfig):
+    """Trello configuration schema."""
+
+    pass
+
+
 # AUTH PROVIDER CONFIGURATION CLASSES
 # These are for configuring auth provider behavior
 

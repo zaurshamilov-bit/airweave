@@ -258,6 +258,16 @@ integrations:
     client_credential_location: "body"
     scope: "data:read"
 
+  trello:
+    oauth_type: "oauth1"
+    request_token_url: "https://trello.com/1/OAuthGetRequestToken"
+    authorization_url: "https://trello.com/1/OAuthAuthorizeToken"
+    access_token_url: "https://trello.com/1/OAuthGetAccessToken"
+    consumer_key: "88e61134b0cbdbced53c8b652a1461bf"  # Get from https://trello.com/power-ups/admin
+    consumer_secret: "ddc6b96b7c9f0854a05dd291bfac082d2a553630cda92c216073d6d39b94f775"
+    scope: "read,write"
+    expiration: "never"
+
   clickup:
     oauth_type: "access_only"
     url: "https://app.clickup.com/api"

@@ -22,7 +22,7 @@ interface SourceDetails {
   short_name: string;
   name: string;
   auth_methods?: string[];  // Array of supported auth methods
-  oauth_type?: string;  // OAuth token type (access_only, with_refresh, etc.)
+  oauth_type?: string;  // OAuth token type (oauth1, access_only, with_refresh, etc.)
   requires_byoc?: boolean;  // Whether source requires user to bring their own OAuth credentials
   auth_config_class?: string;  // Optional, only for DIRECT auth sources
   auth_fields?: {  // Optional, only present for DIRECT auth sources
@@ -145,6 +145,11 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
   }, [sourceName, sourceConnectionName]);
 
   const [connectionUrl, setConnectionUrl] = useState('');
+
+  // Check if source uses OAuth1 (vs OAuth2)
+  const isOAuth1 = () => {
+    return sourceDetails?.oauth_type === 'oauth1';
+  };
 
   // Check if source requires custom OAuth credentials (BYOC - Bring Your Own Credentials)
   const requiresCustomOAuth = () => {
@@ -336,20 +341,28 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
           credentials: authFields
         };
       } else if (authMode === 'oauth2') {
-        // OAuth2 flow
+        // OAuth flow (OAuth1 or OAuth2)
         authentication = {
           redirect_uri: customRedirectUrl.trim() || getDefaultRedirectUrl()
         };
 
-        // Add client credentials if BYOC or user chose to use own credentials
+        // Add credentials if BYOC or user chose to use own credentials
         if (requiresCustomOAuth() || useOwnCredentials) {
           if (!clientId || !clientSecret) {
-            toast.error('Please provide OAuth client credentials');
+            const credType = isOAuth1() ? 'consumer' : 'client';
+            toast.error(`Please provide OAuth ${credType} credentials`);
             setIsCreating(false);
             return;
           }
-          authentication.client_id = clientId;
-          authentication.client_secret = clientSecret;
+
+          // OAuth1 uses consumer_key/consumer_secret, OAuth2 uses client_id/client_secret
+          if (isOAuth1()) {
+            authentication.consumer_key = clientId;
+            authentication.consumer_secret = clientSecret;
+          } else {
+            authentication.client_id = clientId;
+            authentication.client_secret = clientSecret;
+          }
         }
       } else if (authMode === 'external_provider') {
         // External provider auth
@@ -384,10 +397,9 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       const response = await apiClient.post('/source-connections', payload);
 
       if (!response.ok) {
-        // const error = await response.json();
-        const error = await response.text();
-        console.error(error)
-        throw new Error(error.detail || 'Failed to create connection');
+        const errorText = await response.text();
+        console.error(errorText);
+        throw new Error(errorText || 'Failed to create connection');
       }
 
       const result = await response.json();
@@ -620,18 +632,35 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                                     "text-xs leading-relaxed",
                                     isDark ? "text-gray-400" : "text-gray-600"
                                   )}>
-                                    OAuth credentials (Client ID and Client Secret) are like a special key that allows Airweave to securely access your {sourceName} data on your behalf. You create these in {sourceName}'s developer settings, and they ensure only authorized applications can connect to your account.
+                                    {isOAuth1() ? (
+                                      <>OAuth1 credentials (Consumer Key and Consumer Secret) are like a special key that allows Airweave to securely access your {sourceName} data on your behalf. You create these in {sourceName}'s developer settings, and they ensure only authorized applications can connect to your account.</>
+                                    ) : (
+                                      <>OAuth credentials (Client ID and Client Secret) are like a special key that allows Airweave to securely access your {sourceName} data on your behalf. You create these in {sourceName}'s developer settings, and they ensure only authorized applications can connect to your account.</>
+                                    )}
                                   </p>
                                   <div className={cn(
                                     "text-xs space-y-1 pt-2 border-t",
                                     isDark ? "border-gray-700" : "border-gray-200"
                                   )}>
-                                    <p className={cn(isDark ? "text-gray-500" : "text-gray-500")}>
-                                      <span className="font-medium">Client ID:</span> Public identifier for your app
-                                    </p>
-                                    <p className={cn(isDark ? "text-gray-500" : "text-gray-500")}>
-                                      <span className="font-medium">Client Secret:</span> Private key (keep this secure!)
-                                    </p>
+                                    {isOAuth1() ? (
+                                      <>
+                                        <p className={cn(isDark ? "text-gray-500" : "text-gray-500")}>
+                                          <span className="font-medium">Consumer Key:</span> Public identifier for your app
+                                        </p>
+                                        <p className={cn(isDark ? "text-gray-500" : "text-gray-500")}>
+                                          <span className="font-medium">Consumer Secret:</span> Private key (keep this secure!)
+                                        </p>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <p className={cn(isDark ? "text-gray-500" : "text-gray-500")}>
+                                          <span className="font-medium">Client ID:</span> Public identifier for your app
+                                        </p>
+                                        <p className={cn(isDark ? "text-gray-500" : "text-gray-500")}>
+                                          <span className="font-medium">Client Secret:</span> Private key (keep this secure!)
+                                        </p>
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -662,7 +691,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                           <div className="space-y-2.5">
                             <ValidatedInput
                               type="text"
-                              placeholder="Client ID"
+                              placeholder={isOAuth1() ? "Consumer Key" : "Client ID"}
                               value={clientId}
                               onChange={setClientId}
                               validation={clientIdValidation}
@@ -675,7 +704,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                             />
                             <ValidatedInput
                               type="password"
-                              placeholder="Client Secret"
+                              placeholder={isOAuth1() ? "Consumer Secret" : "Client Secret"}
                               value={clientSecret}
                               onChange={setClientSecret}
                               validation={clientSecretValidation}
@@ -770,7 +799,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                             <div className="mt-3 space-y-2.5 pl-13">
                               <ValidatedInput
                                 type="text"
-                                placeholder="Client ID"
+                                placeholder={isOAuth1() ? "Consumer Key" : "Client ID"}
                                 value={clientId}
                                 onChange={setClientId}
                                 validation={clientIdValidation}
@@ -783,7 +812,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                               />
                               <ValidatedInput
                                 type="password"
-                                placeholder="Client Secret"
+                                placeholder={isOAuth1() ? "Consumer Secret" : "Client Secret"}
                                 value={clientSecret}
                                 onChange={setClientSecret}
                                 validation={clientSecretValidation}

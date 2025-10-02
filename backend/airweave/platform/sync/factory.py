@@ -16,7 +16,7 @@ from airweave.core.exceptions import NotFoundException
 from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import ContextualLogger, LoggerConfigurator, logger
 from airweave.core.sync_cursor_service import sync_cursor_service
-from airweave.platform.auth.services import oauth2_service
+from airweave.platform.auth.oauth2_service import oauth2_service
 from airweave.platform.auth_providers._base import BaseAuthProvider
 from airweave.platform.auth_providers.auth_result import AuthProviderMode
 from airweave.platform.auth_providers.pipedream import PipedreamAuthProvider

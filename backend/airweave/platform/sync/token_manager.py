@@ -11,7 +11,7 @@ from airweave.api.context import ApiContext
 from airweave.core import credentials
 from airweave.core.exceptions import TokenRefreshError
 from airweave.core.logging import logger
-from airweave.platform.auth.services import oauth2_service
+from airweave.platform.auth.oauth2_service import oauth2_service
 
 
 class TokenManager:

@@ -1,8 +1,12 @@
 """Helper methods for source connection service v2."""
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from airweave.platform.auth.oauth1_service import OAuth1TokenResponse
+    from airweave.platform.auth.schemas import OAuth2TokenResponse
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -32,7 +36,9 @@ from airweave.models.integration_credential import IntegrationType
 from airweave.models.source_connection import SourceConnection
 from airweave.models.sync import Sync
 from airweave.models.sync_job import SyncJob
-from airweave.platform.auth.services import oauth2_service
+from airweave.platform.auth.oauth1_service import oauth1_service
+from airweave.platform.auth.oauth2_service import oauth2_service
+from airweave.platform.auth.schemas import OAuth1Settings
 from airweave.platform.configs._base import ConfigValues
 from airweave.platform.configs.auth import AuthConfig
 from airweave.platform.locator import resource_locator
@@ -1059,31 +1065,57 @@ class SourceConnectionHelpers:
         proxy_url = f"{core_settings.api_url}/source-connections/authorize/{code8}"
         return proxy_url, proxy_expires, redirect_sess.id
 
-    async def exchange_oauth_code(
+    async def exchange_oauth1_code(
         self,
-        db: AsyncSession,
+        short_name: str,
+        verifier: str,
+        overrides: Dict[str, Any],
+        oauth_settings: OAuth1Settings,
+        ctx: ApiContext,
+    ) -> "OAuth1TokenResponse":
+        """Exchange OAuth1 verifier for access token.
+
+        Args:
+            short_name: Integration short name
+            verifier: OAuth verifier from user authorization
+            overrides: Session overrides with request token credentials
+            oauth_settings: OAuth1 settings
+            ctx: API context
+
+        Returns:
+            OAuth1TokenResponse with access token credentials
+        """
+        ctx.logger.info(f"Exchanging OAuth1 verifier for access token: {short_name}")
+
+        return await oauth1_service.exchange_token(
+            access_token_url=oauth_settings.access_token_url,
+            consumer_key=oauth_settings.consumer_key,
+            consumer_secret=oauth_settings.consumer_secret,
+            oauth_token=overrides.get("oauth_token", ""),
+            oauth_token_secret=overrides.get("oauth_token_secret", ""),
+            oauth_verifier=verifier,
+            logger=ctx.logger,
+        )
+
+    async def exchange_oauth2_code(
+        self,
         short_name: str,
         code: str,
         overrides: Dict[str, Any],
         ctx: ApiContext,
-    ) -> Any:
-        """Exchange OAuth code for token with PKCE support.
+    ) -> "OAuth2TokenResponse":
+        """Exchange OAuth2 authorization code for access token.
 
-        Retrieves the code_verifier from overrides if it was stored during
-        authorization (for PKCE-enabled providers like Airtable).
+        Supports PKCE for providers like Airtable.
 
         Args:
-        ----
-            db: Database session
             short_name: Integration short name
             code: Authorization code from OAuth provider
-            overrides: Session overrides containing client credentials and PKCE data
+            overrides: Session overrides with client credentials and PKCE data
             ctx: API context
 
         Returns:
-        -------
-            OAuth2TokenResponse: Token response from the OAuth provider
-
+            OAuth2TokenResponse with access and refresh tokens
         """
         redirect_uri = (
             overrides.get("oauth_redirect_uri")
@@ -1139,7 +1171,7 @@ class SourceConnectionHelpers:
 
         # Generate new OAuth URL
 
-        from airweave.platform.auth.services import oauth2_service
+        from airweave.platform.auth.oauth2_service import oauth2_service
         from airweave.platform.auth.settings import integration_settings
 
         oauth_settings = await integration_settings.get_by_short_name(source.short_name)
@@ -1172,26 +1204,110 @@ class SourceConnectionHelpers:
 
         return proxy_url, proxy_expiry
 
-    async def complete_oauth_connection(
+    async def complete_oauth1_connection(
         self,
         db: AsyncSession,
         source_conn_shell: schemas.SourceConnection,
         init_session: Any,
-        token_response: Any,
+        token_response: "OAuth1TokenResponse",
         ctx: ApiContext,
     ) -> Any:
-        """Complete OAuth connection after callback."""
+        """Complete OAuth1 connection after callback.
+
+        Builds OAuth1 credentials with oauth_token, oauth_token_secret,
+        and consumer credentials for API signing.
+
+        Detects BYOC by checking if consumer credentials differ from defaults.
+        """
         source = await crud.source.get_by_short_name(db, short_name=init_session.short_name)
         if not source:
             raise HTTPException(
                 status_code=404, detail=f"Source '{init_session.short_name}' not found"
             )
+
         init_session_id = init_session.id
         payload = init_session.payload or {}
         overrides = init_session.overrides or {}
 
-        # Build OAuth credentials from token response
+        # Build OAuth1 credentials
+        auth_fields = {
+            "oauth_token": token_response.oauth_token,
+            "oauth_token_secret": token_response.oauth_token_secret,
+        }
+
+        # Add consumer credentials for future API calls (needed for signing)
+        consumer_key = overrides.get("consumer_key")
+        consumer_secret = overrides.get("consumer_secret")
+
+        if consumer_key:
+            auth_fields["consumer_key"] = consumer_key
+        if consumer_secret:
+            auth_fields["consumer_secret"] = consumer_secret
+
+        # Determine if BYOC by checking if credentials differ from platform defaults
+        from airweave.platform.auth.settings import integration_settings
+
+        try:
+            platform_settings = await integration_settings.get_by_short_name(
+                init_session.short_name
+            )
+            from airweave.platform.auth.schemas import OAuth1Settings
+
+            if isinstance(platform_settings, OAuth1Settings):
+                # Check if user provided custom consumer_key (different from platform default)
+                is_byoc = (
+                    consumer_key is not None and consumer_key != platform_settings.consumer_key
+                )
+            else:
+                is_byoc = False
+        except Exception:
+            # If we can't determine, assume not BYOC
+            is_byoc = False
+
+        auth_method_to_save = (
+            AuthenticationMethod.OAUTH_BYOC if is_byoc else AuthenticationMethod.OAUTH_BROWSER
+        )
+
+        # Continue with common logic
+        return await self._complete_oauth_connection_common(
+            db,
+            source,
+            source_conn_shell,
+            init_session_id,
+            payload,
+            auth_fields,
+            auth_method_to_save,
+            is_oauth1=True,  # ✅ Explicit parameter
+            ctx=ctx,
+        )
+
+    async def complete_oauth2_connection(
+        self,
+        db: AsyncSession,
+        source_conn_shell: schemas.SourceConnection,
+        init_session: Any,
+        token_response: "OAuth2TokenResponse",
+        ctx: ApiContext,
+    ) -> Any:
+        """Complete OAuth2 connection after callback.
+
+        Builds OAuth2 credentials with access_token, refresh_token,
+        and optional BYOC client credentials.
+        """
+        source = await crud.source.get_by_short_name(db, short_name=init_session.short_name)
+        if not source:
+            raise HTTPException(
+                status_code=404, detail=f"Source '{init_session.short_name}' not found"
+            )
+
+        init_session_id = init_session.id
+        payload = init_session.payload or {}
+        overrides = init_session.overrides or {}
+
+        # Build OAuth2 credentials
         auth_fields = token_response.model_dump()
+
+        # Add BYOC client credentials if present
         if overrides.get("client_id"):
             auth_fields["client_id"] = overrides["client_id"]
         if overrides.get("client_secret"):
@@ -1204,18 +1320,60 @@ class SourceConnectionHelpers:
             else AuthenticationMethod.OAUTH_BROWSER
         )
 
+        # Continue with common logic
+        return await self._complete_oauth_connection_common(
+            db,
+            source,
+            source_conn_shell,
+            init_session_id,
+            payload,
+            auth_fields,
+            auth_method_to_save,
+            is_oauth1=False,  # ✅ Explicit parameter
+            ctx=ctx,
+        )
+
+    async def _complete_oauth_connection_common(
+        self,
+        db: AsyncSession,
+        source: Any,
+        source_conn_shell: schemas.SourceConnection,
+        init_session_id: UUID,
+        payload: Dict[str, Any],
+        auth_fields: Dict[str, Any],
+        auth_method_to_save: AuthenticationMethod,
+        is_oauth1: bool,
+        ctx: ApiContext,
+    ) -> Any:
+        """Common logic for completing OAuth connections (shared by OAuth1/OAuth2).
+
+        Args:
+            db: Database session
+            source: Source schema
+            source_conn_shell: Shell source connection to complete
+            init_session_id: Init session ID
+            payload: Request payload from init session
+            auth_fields: OAuth credentials (different structure for OAuth1 vs OAuth2)
+            auth_method_to_save: Authentication method to record
+            is_oauth1: True for OAuth1, False for OAuth2
+            ctx: API context
+        """
         # Validate config fields if provided (payload uses 'config')
         validated_config = await self.validate_config_fields(
-            db, init_session.short_name, payload.get("config"), ctx
+            db, source.short_name, payload.get("config"), ctx
         )
+
+        # Use explicit parameter instead of checking dictionary keys
+        auth_type_name = "OAuth1" if is_oauth1 else "OAuth2"
 
         async with UnitOfWork(db) as uow:
             # Create credential
             encrypted = credentials.encrypt(auth_fields)
+
             cred_in = schemas.IntegrationCredentialCreateEncrypted(
-                name=f"{source.name} OAuth2 Credential",
-                description=f"OAuth2 credentials for {source.name}",
-                integration_short_name=init_session.short_name,
+                name=f"{source.name} {auth_type_name} Credential",
+                description=f"{auth_type_name} credentials for {source.name}",
+                integration_short_name=source.short_name,
                 integration_type=IntegrationType.SOURCE,
                 authentication_method=auth_method_to_save,
                 oauth_type=getattr(source, "oauth_type", None),
@@ -1235,7 +1393,7 @@ class SourceConnectionHelpers:
                 integration_type=IntegrationType.SOURCE,
                 status=ConnectionStatus.ACTIVE,
                 integration_credential_id=credential.id,
-                short_name=init_session.short_name,
+                short_name=source.short_name,
             )
             connection = await crud.connection.create(uow.session, obj_in=conn_in, ctx=ctx, uow=uow)
 
