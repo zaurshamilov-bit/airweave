@@ -5465,7 +5465,7 @@
               }
             ],
             "title": "Supported Auth Providers",
-            "description": "List of auth provider short names that support this source (e.g., ['composio', 'pipedream'])"
+            "description": "List of auth provider short names that support this source (e.g., ['composio', 'pipedream']). Computed dynamically for API responses. This field is not stored in the database."
           }
         },
         "type": "object",
