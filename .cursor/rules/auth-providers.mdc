@@ -45,12 +45,6 @@ FIELD_NAME_MAPPING = {"api_key": "generic_api_key", "personal_access_token": "ac
 SLUG_NAME_MAPPING = {"google_drive": "googledrive", "outlook_mail": "outlook"}
 ```
 
-#### Source Support Configuration
-Providers control which sources they support:
-```python
-# List of sources this provider DOES NOT support
-BLOCKED_SOURCES = ["github", "confluence", "jira", "bitbucket", "ctti"]
-```
 
 ## Integration with TokenManager
 

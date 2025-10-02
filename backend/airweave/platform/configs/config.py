@@ -307,6 +307,11 @@ class TodoistConfig(SourceConfig):
     pass
 
 
+class TeamsConfig(SourceConfig):
+    """Microsoft Teams configuration schema."""
+
+    pass
+
 class ZendeskConfig(SourceConfig):
     """Zendesk configuration schema."""
 
