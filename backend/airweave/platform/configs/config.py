@@ -61,6 +61,20 @@ class BitbucketConfig(SourceConfig):
         return value
 
 
+class BoxConfig(SourceConfig):
+    """Box configuration schema."""
+
+    folder_id: str = Field(
+        default="0",
+        title="Folder ID",
+        description=(
+            "Specific Box folder ID to sync. Default is '0' (root folder, syncs all files). "
+            "To sync a specific folder, enter its folder ID. "
+            "You can find folder IDs in the Box URL when viewing a folder."
+        ),
+    )
+
+
 class ClickUpConfig(SourceConfig):
     """ClickUp configuration schema."""
 
