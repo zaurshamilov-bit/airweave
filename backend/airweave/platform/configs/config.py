@@ -1,8 +1,10 @@
 """Configuration classes for platform components."""
 
+from typing import Optional
+
 from pydantic import Field, validator
 
-from airweave.platform.configs._base import BaseConfig
+from airweave.platform.configs._base import BaseConfig, RequiredTemplateConfig
 
 
 class SourceConfig(BaseConfig):
@@ -19,6 +21,12 @@ class AirtableConfig(SourceConfig):
 
 class AsanaConfig(SourceConfig):
     """Asana configuration schema."""
+
+    pass
+
+
+class AttioConfig(SourceConfig):
+    """Attio configuration schema."""
 
     pass
 
@@ -51,6 +59,20 @@ class BitbucketConfig(SourceConfig):
             # Split by commas and strip whitespace
             return [ext.strip() for ext in value.split(",") if ext.strip()]
         return value
+
+
+class BoxConfig(SourceConfig):
+    """Box configuration schema."""
+
+    folder_id: str = Field(
+        default="0",
+        title="Folder ID",
+        description=(
+            "Specific Box folder ID to sync. Default is '0' (root folder, syncs all files). "
+            "To sync a specific folder, enter its folder ID. "
+            "You can find folder IDs in the Box URL when viewing a folder."
+        ),
+    )
 
 
 class ClickUpConfig(SourceConfig):
@@ -303,6 +325,27 @@ class TrelloConfig(SourceConfig):
     """Trello configuration schema."""
 
     pass
+
+
+class TeamsConfig(SourceConfig):
+    """Microsoft Teams configuration schema."""
+
+    pass
+
+
+class ZendeskConfig(SourceConfig):
+    """Zendesk configuration schema."""
+
+    subdomain: str = RequiredTemplateConfig(
+        title="Zendesk Subdomain",
+        description="Your Zendesk subdomain only (e.g., 'mycompany' NOT 'mycompany.zendesk.com')",
+        json_schema_extra={"required_for_auth": True},
+    )
+    exclude_closed_tickets: Optional[bool] = Field(
+        default=False,
+        title="Exclude Closed Tickets",
+        description="Skip closed tickets during sync (recommended for faster syncing)",
+    )
 
 
 # AUTH PROVIDER CONFIGURATION CLASSES

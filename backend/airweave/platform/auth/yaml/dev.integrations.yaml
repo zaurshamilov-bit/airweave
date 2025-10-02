@@ -23,7 +23,20 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
 
+  attio:
+
   bitbucket:
+
+  box:
+    oauth_type: "with_refresh"
+    url: "https://account.box.com/api/oauth2/authorize"
+    backend_url: "https://api.box.com/oauth2/token"
+    grant_type: "authorization_code"
+    client_id: "fs0xec3a2whqpohxuiksc1lw4qlmy2yc"
+    client_secret: "0hYcyx6u5YpV9L29sTAjifivofr9fkQj"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "root_readwrite"
 
   confluence:
     oauth_type: "with_rotating_refresh"
@@ -157,6 +170,20 @@ integrations:
     client_credential_location: "body"
     scope: "read"
 
+  teams:
+    oauth_type: "with_rotating_refresh"
+    url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+    backend_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+    grant_type: "authorization_code"
+    client_id: "0eb3749d-44d9-4500-9a7b-56095de0039a"
+    client_secret: "hdE8Q~nT2.Rprwzr_H~uCovLmdpBE~cZNblxPaMW"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/Team.ReadBasic.All https://graph.microsoft.com/Channel.ReadBasic.All https://graph.microsoft.com/ChannelMessage.Read.All https://graph.microsoft.com/Chat.Read https://graph.microsoft.com/ChatMessage.Read https://graph.microsoft.com/Group.Read.All"
+    additional_frontend_params:
+      response_type: "code"
+      response_mode: "query"
+
   monday:
     oauth_type: "access_only"
     url: "https://auth.monday.com/oauth2/authorize"
@@ -267,6 +294,19 @@ integrations:
     consumer_secret: "ddc6b96b7c9f0854a05dd291bfac082d2a553630cda92c216073d6d39b94f775"
     scope: "read,write"
     expiration: "never"
+
+  zendesk:
+    oauth_type: "with_refresh"
+    url: "https://{subdomain}.zendesk.com/oauth/authorizations/new"
+    backend_url: "https://{subdomain}.zendesk.com/oauth/tokens"
+    grant_type: "authorization_code"
+    client_id: "placeholder_client_id"
+    client_secret: "placeholder_client_secret"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read write"
+    url_template: true
+    backend_url_template: true
 
   clickup:
     oauth_type: "access_only"

@@ -81,6 +81,7 @@ class ComposioBroker(BaseAuthBroker):
             "outlook_calendar": "outlook",
             "onedrive": "one_drive",
             "sharepoint": "one_drive",  # this is not a bug, we are using the one drive token for sharepoint given overlapping scopes
+            "teams": "microsoft_teams",
         }
 
         # Check if we have an explicit mapping
