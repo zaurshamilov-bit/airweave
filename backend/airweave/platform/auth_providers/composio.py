@@ -22,6 +22,16 @@ from airweave.platform.decorators import auth_provider
 class ComposioAuthProvider(BaseAuthProvider):
     """Composio authentication provider."""
 
+    # Sources that Composio does not support
+    BLOCKED_SOURCES = [
+        "postgresql",
+        "confluence",
+        "jira",
+        "bitbucket",
+        "github",
+        "ctti",
+    ]
+
     # Mapping of Airweave field names to Composio field names
     # Key: Airweave field name, Value: Composio field name
     FIELD_NAME_MAPPING = {
@@ -30,7 +40,8 @@ class ComposioAuthProvider(BaseAuthProvider):
     }
 
     # Mapping of Airweave source short names to Composio toolkit slugs
-    # Key: Airweave short name, Value: Composio slug
+    # Key: Airweave short name, Value: Composio toolkit slug
+    # Only include mappings where names differ between Airweave and Composio
     SLUG_NAME_MAPPING = {
         "google_drive": "googledrive",
         "google_calendar": "googlecalendar",
