@@ -276,7 +276,10 @@ class TestOAuthAuthentication:
             "name": "OAuth Browser Flow with Sync Immediately",
             "short_name": "gmail",
             "readable_collection_id": collection["readable_id"],
-            "authentication": {},
+            "authentication": {
+                "client_id": "test-client-id",
+                "client_secret": "test-client-secret",
+            },
             "sync_immediately": True,
         }
         response = await api_client.post("/source-connections", json=payload)
