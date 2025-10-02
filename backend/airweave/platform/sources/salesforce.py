@@ -221,7 +221,7 @@ class SalesforceSource(BaseSource):
             # Check for next page
             next_records_url = data.get("nextRecordsUrl")
             if next_records_url:
-                url = f"{self.instance_url}{next_records_url}"
+                url = f"https://{self.instance_url}{next_records_url}"
                 params = None  # nextRecordsUrl already includes all parameters
             else:
                 url = None
