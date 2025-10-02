@@ -157,150 +157,149 @@ class OAuth2Service:
             integration_config=oauth2_settings,
         )
 
-@staticmethod
-async def generate_auth_url_with_redirect(
-    oauth2_settings: OAuth2Settings,
-    *,
-    redirect_uri: str,
-    client_id: Optional[str] = None,
-    state: Optional[str] = None,
-    template_configs: Optional[dict] = None,
-) -> Tuple[str, Optional[str]]:
-    """Generate an OAuth2 authorization URL with PKCE support if required.
+    @staticmethod
+    async def generate_auth_url_with_redirect(
+        oauth2_settings: OAuth2Settings,
+        *,
+        redirect_uri: str,
+        client_id: Optional[str] = None,
+        state: Optional[str] = None,
+        template_configs: Optional[dict] = None,
+    ) -> Tuple[str, Optional[str]]:
+        """Generate an OAuth2 authorization URL with PKCE support if required.
 
-    For providers that require PKCE (e.g., Airtable), this method generates
-    a code_verifier and includes the corresponding code_challenge in the
-    authorization URL. The code_verifier must be stored and sent during
-    token exchange.
+        For providers that require PKCE (e.g., Airtable), this method generates
+        a code_verifier and includes the corresponding code_challenge in the
+        authorization URL. The code_verifier must be stored and sent during
+        token exchange.
 
-    Args:
-    ----
-        oauth2_settings: The OAuth2 settings for the integration
-        redirect_uri: The redirect URI for the OAuth callback
-        client_id: Optional client ID to override the default
-        state: Optional state token for CSRF protection
-        template_configs: Optional config fields for URL templates (e.g., instance_url)
+        Args:
+        ----
+            oauth2_settings: The OAuth2 settings for the integration
+            redirect_uri: The redirect URI for the OAuth callback
+            client_id: Optional client ID to override the default
+            state: Optional state token for CSRF protection
+            template_configs: Optional config fields for URL templates (e.g., instance_url)
 
-    Returns:
-    -------
-        Tuple[str, Optional[str]]: (authorization_url, code_verifier)
-            - authorization_url: The complete URL to redirect the user to
-            - code_verifier: The PKCE code verifier if PKCE is required, None otherwise
+        Returns:
+        -------
+            Tuple[str, Optional[str]]: (authorization_url, code_verifier)
+                - authorization_url: The complete URL to redirect the user to
+                - code_verifier: The PKCE code verifier if PKCE is required, None otherwise
 
-    Raises:
-    ------
-        ValueError: If template URL requires template_configs but it's missing
-    """
-    if not client_id:
-        client_id = oauth2_settings.client_id
+        Raises:
+        ------
+            ValueError: If template URL requires template_configs but it's missing
+        """
+        if not client_id:
+            client_id = oauth2_settings.client_id
 
-    # Render URL if it's a template
-    if oauth2_settings.url_template:
-        if not template_configs:
-            raise ValueError(
-                f"template_configs needed for templated OAuth URLs "
-                f"({oauth2_settings.integration_short_name})"
-            )
+        # Render URL if it's a template
+        if oauth2_settings.url_template:
+            if not template_configs:
+                raise ValueError(
+                    f"template_configs needed for templated OAuth URLs "
+                    f"({oauth2_settings.integration_short_name})"
+                )
+            try:
+                auth_url_base = oauth2_settings.render_url(**template_configs)
+            except KeyError as e:
+                raise ValueError(
+                    f"Missing template variable {e} for {oauth2_settings.integration_short_name}"
+                ) from e
+        else:
+            auth_url_base = oauth2_settings.url
+
+        params = {
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            **(oauth2_settings.additional_frontend_params or {}),
+        }
+        if state:
+            params["state"] = state
+        if oauth2_settings.scope:
+            params["scope"] = oauth2_settings.scope
+
+        # Generate PKCE parameters if required by the provider
+        code_verifier = None
+        if oauth2_settings.requires_pkce:
+            code_verifier, code_challenge = OAuth2Service._generate_pkce_challenge_pair()
+            params["code_challenge"] = code_challenge
+            params["code_challenge_method"] = "S256"
+
+        auth_url = f"{auth_url_base}?{urlencode(params)}"
+        return auth_url, code_verifier
+
+    @staticmethod
+    async def exchange_authorization_code_for_token_with_redirect(
+        ctx: ApiContext,
+        *,
+        source_short_name: str,
+        code: str,
+        redirect_uri: str,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        template_configs: Optional[dict] = None,
+        code_verifier: Optional[str] = None,
+    ) -> OAuth2TokenResponse:
+        """Exchange an OAuth2 code using an explicit redirect_uri.
+
+        Args:
+        ----
+            ctx: The API context
+            source_short_name: The short name of the integration
+            code: The authorization code from the OAuth provider
+            redirect_uri: Must match the one used in authorization request
+            client_id: Optional client ID override
+            client_secret: Optional client secret override
+            template_configs: Optional config fields for URL templates
+            code_verifier: PKCE code verifier (required if provider uses PKCE)
+
+        Returns:
+        -------
+            OAuth2TokenResponse: The response containing the access token and other details
+
+        Raises:
+        ------
+            HTTPException: If settings not found or token exchange fails
+            ValueError: If template URL requires template_configs but it's missing
+        """
         try:
-            auth_url_base = oauth2_settings.render_url(**template_configs)
+            oauth2_settings = await integration_settings.get_by_short_name(source_short_name)
         except KeyError as e:
-            raise ValueError(
-                f"Missing template variable {e} for {oauth2_settings.integration_short_name}"
+            raise HTTPException(
+                status_code=404, detail=f"Settings not found for source: {source_short_name}"
             ) from e
-    else:
-        auth_url_base = oauth2_settings.url
 
-    params = {
-        "response_type": "code",
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        **(oauth2_settings.additional_frontend_params or {}),
-    }
-    if state:
-        params["state"] = state
-    if oauth2_settings.scope:
-        params["scope"] = oauth2_settings.scope
+        # Render backend URL if it's a template
+        if getattr(oauth2_settings, "backend_url_template", False):
+            if not template_configs:
+                raise ValueError(f"template_configs needed for {source_short_name}")
+            try:
+                backend_url = oauth2_settings.render_backend_url(**template_configs)
+            except KeyError as e:
+                raise ValueError(
+                    f"Missing template variable {e} in template_configs for token exchange"
+                ) from e
+        else:
+            backend_url = oauth2_settings.backend_url
 
-    # Generate PKCE parameters if required by the provider
-    code_verifier = None
-    if oauth2_settings.requires_pkce:
-        code_verifier, code_challenge = OAuth2Service._generate_pkce_challenge_pair()
-        params["code_challenge"] = code_challenge
-        params["code_challenge_method"] = "S256"
+        if not client_id:
+            client_id = oauth2_settings.client_id
+        if not client_secret:
+            client_secret = oauth2_settings.client_secret
 
-    auth_url = f"{auth_url_base}?{urlencode(params)}"
-    return auth_url, code_verifier
-
-
-@staticmethod
-async def exchange_authorization_code_for_token_with_redirect(
-    ctx: ApiContext,
-    *,
-    source_short_name: str,
-    code: str,
-    redirect_uri: str,
-    client_id: Optional[str] = None,
-    client_secret: Optional[str] = None,
-    template_configs: Optional[dict] = None,
-    code_verifier: Optional[str] = None,
-) -> OAuth2TokenResponse:
-    """Exchange an OAuth2 code using an explicit redirect_uri.
-
-    Args:
-    ----
-        ctx: The API context
-        source_short_name: The short name of the integration
-        code: The authorization code from the OAuth provider
-        redirect_uri: Must match the one used in authorization request
-        client_id: Optional client ID override
-        client_secret: Optional client secret override
-        template_configs: Optional config fields for URL templates
-        code_verifier: PKCE code verifier (required if provider uses PKCE)
-
-    Returns:
-    -------
-        OAuth2TokenResponse: The response containing the access token and other details
-
-    Raises:
-    ------
-        HTTPException: If settings not found or token exchange fails
-        ValueError: If template URL requires template_configs but it's missing
-    """
-    try:
-        oauth2_settings = await integration_settings.get_by_short_name(source_short_name)
-    except KeyError as e:
-        raise HTTPException(
-            status_code=404, detail=f"Settings not found for source: {source_short_name}"
-        ) from e
-
-    # Render backend URL if it's a template
-    if getattr(oauth2_settings, "backend_url_template", False):
-        if not template_configs:
-            raise ValueError(f"template_configs needed for {source_short_name}")
-        try:
-            backend_url = oauth2_settings.render_backend_url(**template_configs)
-        except KeyError as e:
-            raise ValueError(
-                f"Missing template variable {e} in template_configs for token exchange"
-            ) from e
-    else:
-        backend_url = oauth2_settings.backend_url
-
-    if not client_id:
-        client_id = oauth2_settings.client_id
-    if not client_secret:
-        client_secret = oauth2_settings.client_secret
-
-    return await OAuth2Service._exchange_code(
-        logger=ctx.logger,
-        code=code,
-        redirect_uri=redirect_uri,
-        client_id=client_id,
-        client_secret=client_secret,
-        backend_url=backend_url,
-        integration_config=oauth2_settings,
-        code_verifier=code_verifier,
-    )
+        return await OAuth2Service._exchange_code(
+            logger=ctx.logger,
+            code=code,
+            redirect_uri=redirect_uri,
+            client_id=client_id,
+            client_secret=client_secret,
+            backend_url=backend_url,
+            integration_config=oauth2_settings,
+            code_verifier=code_verifier,
+        )
 
     @staticmethod
     async def refresh_access_token(
@@ -775,7 +774,6 @@ async def exchange_authorization_code_for_token_with_redirect(
         if code_verifier:
             payload["code_verifier"] = code_verifier
             logger.debug("Including PKCE code_verifier in token exchange request")
-
 
         if integration_config.client_credential_location == "header":
             encoded_credentials = OAuth2Service._encode_client_credentials(client_id, client_secret)
