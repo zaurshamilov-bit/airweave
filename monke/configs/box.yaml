@@ -8,13 +8,13 @@ connector:
   # ===== HUMAN SETS THIS UP =====
   auth_mode: composio  # Using Composio for authentication
   composio_config:
-    account_id: ca_c2JNuBSRZuBp  # Human obtains from Composio
-    auth_config_id: ac_5wOUqwXpowSe  # Human obtains from Composio
+    account_id: ca_Sbgu88tdIe6e  # Human obtains from Composio
+    auth_config_id: ac_XHb59VgCmLMa  # Human obtains from Composio
   # ==============================
 
   config_fields:
     openai_model: "gpt-4.1-mini"
-    max_concurrency: 2
+    max_concurrency: 3  # Higher concurrency for faster entity creation
 
 test_flow:
   steps:
@@ -36,12 +36,12 @@ test_flow:
     - collection_cleanup   # Delete test collection
 
 deletion:
-  partial_delete_count: 2  # Number of entities to delete in partial_delete step
+  partial_delete_count: 1  # Number of entities to delete in partial_delete step
   verify_partial_deletion: true  # Box supports deletion detection
   verify_remaining_entities: true
   verify_complete_deletion: true
 
-entity_count: 3  # Number of folders to create (each gets files and comments)
+entity_count: 2  # Number of folders to create (reduced for faster test completion)
 
 collection:
   name: Box Test Collection

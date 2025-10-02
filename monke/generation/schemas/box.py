@@ -43,7 +43,9 @@ class FileSpec(BaseModel):
     """Metadata for file generation."""
 
     token: str = Field(..., description="Verification token to embed")
-    file_type: str = Field(default="txt", description="Type of file to generate")
+    file_extension: str = Field(
+        default=".txt", description="File extension (e.g. .txt, .md)"
+    )
 
 
 class BoxFile(BaseModel):

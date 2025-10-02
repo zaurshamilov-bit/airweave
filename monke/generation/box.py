@@ -54,9 +54,10 @@ async def generate_file(model: str, token: str) -> Tuple[bytes, str, str]:
     llm = LLMClient(model_override=model)
 
     instruction = (
-        f"Generate content for a business document or report. "
+        f"Generate content for a business document or report as plain text. "
         f"You MUST include the literal token '{token}' in the content. "
-        f"Make it look like a real business document."
+        f"Make it look like a real business document. "
+        f"The filename should end with .txt extension."
     )
 
     file_data = await llm.generate_structured(BoxFile, instruction)
@@ -66,10 +67,17 @@ async def generate_file(model: str, token: str) -> Tuple[bytes, str, str]:
     if token not in file_data.content.content:
         file_data.content.content += f"\n\nVerification Token: {token}"
 
+    # Ensure filename has .txt extension
+    filename = file_data.content.filename
+    if not filename.endswith(".txt"):
+        # Remove any existing extension and add .txt
+        base_name = filename.rsplit(".", 1)[0] if "." in filename else filename
+        filename = f"{base_name}.txt"
+
     # Convert to bytes
     content_bytes = file_data.content.content.encode("utf-8")
 
-    return content_bytes, file_data.content.filename, file_data.content.description
+    return content_bytes, filename, file_data.content.description
 
 
 async def generate_comment(model: str, token: str) -> dict:

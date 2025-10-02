@@ -4,6 +4,7 @@ Creates, updates, and deletes test entities via the real Box API.
 """
 
 import asyncio
+import json
 import time
 import uuid
 from typing import Any, Dict, List, Optional
@@ -131,19 +132,37 @@ class BoxBongo(BaseBongo):
                     # Generate content
                     folder_data = await generate_folder(self.openai_model, folder_token)
 
+                    # Make folder name unique by appending token (Box doesn't allow duplicates)
+                    unique_folder_name = f"{folder_data['name']}_{folder_token}"
+
+                    # Put token prominently at start of description for reliable search
+                    folder_description = (
+                        f"Token: {folder_token}\n\n{folder_data['description']}"
+                    )
+
                     # Create via API
                     await self._rate_limit()
                     resp = await client.post(
                         f"{self.API_BASE}/folders",
                         headers=self._headers(),
                         json={
-                            "name": folder_data["name"],
-                            "description": folder_data["description"],
+                            "name": unique_folder_name,
                             "parent": {"id": self._test_folder_id},
                         },
                     )
                     resp.raise_for_status()
                     folder = resp.json()
+
+                    # Box API doesn't support setting description during folder creation
+                    # Update it separately
+                    await self._rate_limit()
+                    resp = await client.put(
+                        f"{self.API_BASE}/folders/{folder['id']}",
+                        headers=self._headers(),
+                        json={"description": folder_description},
+                    )
+                    resp.raise_for_status()
+                    folder = resp.json()  # Get updated folder with description
 
                     # Track the folder
                     folder_descriptor = {
@@ -174,16 +193,26 @@ class BoxBongo(BaseBongo):
                             self.openai_model, file_token
                         )
 
+                        # Make filename unique by appending token (Box doesn't allow duplicates)
+                        base_name = (
+                            filename.rsplit(".", 1)[0] if "." in filename else filename
+                        )
+                        extension = (
+                            filename.rsplit(".", 1)[1] if "." in filename else "txt"
+                        )
+                        unique_filename = f"{base_name}_{file_token}.{extension}"
+
                         # Upload the file
                         await self._rate_limit()
 
-                        # Box upload API requires multipart/form-data
-                        files = {"file": (filename, file_content, "text/plain")}
+                        # Box upload API requires multipart/form-data with JSON attributes
+                        files = {"file": (unique_filename, file_content, "text/plain")}
                         data = {
-                            "attributes": (
-                                None,
-                                f'{{"name":"{filename}","parent":{{"id":"{folder["id"]}"}}}}',
-                                "application/json",
+                            "attributes": json.dumps(
+                                {
+                                    "name": unique_filename,
+                                    "parent": {"id": folder["id"]},
+                                }
                             )
                         }
 
