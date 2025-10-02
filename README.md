@@ -6,14 +6,22 @@
 
 <div align="center">
 
+# Make Any App Searchable for AI Agents
+
 [![Ruff](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml)
 [![ESLint](https://github.com/airweave-ai/airweave/actions/workflows/eslint.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/eslint.yml)
+[![System Tests](https://github.com/airweave-ai/airweave/actions/workflows/test-public-api.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/test-public-api.yml)
 [![Codecov](https://codecov.io/gh/airweave-ai/airweave/branch/main/graph/badge.svg)](https://codecov.io/gh/airweave-ai/airweave)
-[![Discord](https://img.shields.io/discord/1323415085011701870?label=Discord&logo=discord&logoColor=white&style=flat-square)](https://discord.com/invite/484HY9Ehxt)
+[![Discord](https://img.shields.io/discord/1323415085011701870?label=Discord&logo=discord&logoColor=white&style=flat-square)](https://discord.gg/gDuebsWGkn)
 <br>
 <div style="padding-top: 16px;">
 <a href="https://trendshift.io/repositories/13748" target="_blank"><img src="https://trendshift.io/api/badge/repositories/13748" alt="airweave-ai%2Fairweave | Trendshift" style="width: 250px; height: 55px; margin-right: 24px;" width="250" height="55"/></a>&nbsp;&nbsp;<a href="https://www.ycombinator.com/launches/NX7-airweave-let-agents-search-any-app" target="_blank"><img src="https://www.ycombinator.com/launches/NX7-airweave-let-agents-search-any-app/upvote_embed.svg" alt="Launch YC: Airweave - Let Agents Search Any App" style="margin-left: 12px;"/></a>
 </div>
+
+<br>
+
+⭐ **Help us reach more developers and grow the Airweave community. Star this repo!**
+
 </div>
 
 ## Overview
@@ -133,7 +141,7 @@ await client.collections.create({
 
 ## 🔑 Key Features
 
-- **Data synchronization** from 30+ sources with minimal config
+- **Data synchronization** from 25+ sources with minimal config
 - **Entity extraction** and transformation pipeline
 - **Multi-tenant** architecture with OAuth2
 - **Incremental updates** using content hashing
