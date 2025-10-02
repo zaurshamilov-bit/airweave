@@ -917,6 +917,7 @@ class SourceConnectionHelpers:
         ctx: ApiContext,
         uow: Any,
         redirect_session_id: Optional[UUID] = None,
+        template_configs: Optional[dict] = None,
         additional_overrides: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """Create connection init session for OAuth flow.
@@ -930,15 +931,14 @@ class SourceConnectionHelpers:
         For BYOC, both client_id and client_secret are REQUIRED; otherwise 422.
 
         Args:
-        ----
             db: Database session
-            obj_in: Source connection creation request
-            state: OAuth state parameter for CSRF protection
+            obj_in: Input schema
+            state: OAuth state token
             ctx: API context
             uow: Unit of work
             redirect_session_id: Optional redirect session ID
+            template_configs: Optional pre-validated template configs (e.g., instance_url)
             additional_overrides: Additional data to store in overrides (e.g., PKCE code_verifier)
-
         """
         # Handle both new and legacy schemas
         source_type = getattr(obj_in, "source_type", None) or getattr(obj_in, "short_name", None)
@@ -1003,6 +1003,10 @@ class SourceConnectionHelpers:
                         oauth_client_mode = "byoc_top_level"
 
         # 4) Platform default: keep client_id/client_secret as None
+
+        # NOTE: template_configs is passed in pre-validated by caller (source_connection_service)
+        # No need to re-validate here - just use what was passed in
+
         overrides = {
             "client_id": client_id,
             "client_secret": client_secret,
@@ -1011,6 +1015,8 @@ class SourceConnectionHelpers:
             "redirect_url": getattr(obj_in, "redirect_url", core_settings.app_url),
             # OAuth provider callback that this backend handles:
             "oauth_redirect_uri": f"{core_settings.api_url}/source-connections/callback",
+            # NEW: Store template configs for callback (pre-validated by caller)
+            "template_configs": template_configs,
         }
 
         # Merge additional overrides (e.g., PKCE code_verifier) if provided
@@ -1090,6 +1096,8 @@ class SourceConnectionHelpers:
             or f"{core_settings.api_url}/source-connections/callback"
         )
 
+        # Extract template configs from overrides
+        template_configs = overrides.get("template_configs")
         # Retrieve PKCE code verifier if it was stored during authorization
         code_verifier = overrides.get("code_verifier")
 
@@ -1100,6 +1108,7 @@ class SourceConnectionHelpers:
             redirect_uri=redirect_uri,
             client_id=overrides.get("client_id"),
             client_secret=overrides.get("client_secret"),
+            template_configs=template_configs,
             code_verifier=code_verifier,
         )
 
@@ -1152,12 +1161,14 @@ class SourceConnectionHelpers:
             init_session.overrides.get("oauth_redirect_uri")
             or f"{core_settings.api_url}/source-connections/callback"
         )
-
+        # Extract template configs from overrides
+        template_configs = init_session.overrides.get("template_configs")
         provider_auth_url, code_verifier = await oauth2_service.generate_auth_url_with_redirect(
             oauth_settings,
             redirect_uri=api_callback,
             client_id=init_session.overrides.get("client_id"),
             state=state,
+            template_configs=template_configs,
         )
 
         # Store code_verifier in init_session if PKCE is being used

@@ -11,13 +11,35 @@ import pytest
 import httpx
 import asyncio
 from typing import Dict
+from urllib.parse import parse_qs, urlparse, unquote
+
+
+def verify_redirect_uri(provider_url: str, expected_api_url: str) -> None:
+    """Helper to verify redirect_uri parameter in OAuth URL.
+
+    Args:
+        provider_url: The OAuth provider URL
+        expected_api_url: Expected API URL (e.g., http://localhost:8001)
+    """
+    parsed = urlparse(provider_url)
+    params = parse_qs(parsed.query)
+
+    assert "redirect_uri" in params, f"OAuth URL should have redirect_uri parameter: {provider_url}"
+    redirect_uri = unquote(params["redirect_uri"][0])
+
+    expected_redirect = f"{expected_api_url}/source-connections/callback"
+    assert (
+        redirect_uri == expected_redirect
+    ), f"redirect_uri should be {expected_redirect}, got {redirect_uri}"
 
 
 class TestOAuthAuthentication:
     """Test suite for OAuth authentication source connections."""
 
     @pytest.mark.asyncio
-    async def test_oauth_browser_flow(self, api_client: httpx.AsyncClient, collection: Dict):
+    async def test_oauth_browser_flow(
+        self, api_client: httpx.AsyncClient, collection: Dict, config
+    ):
         """Test OAuth browser flow (creates shell connection)."""
         payload = {
             "name": "Test Linear OAuth Browser",
@@ -41,12 +63,26 @@ class TestOAuthAuthentication:
         assert "auth_url" in connection["auth"]
         assert connection["auth"]["auth_url"] is not None
 
+        # Follow the proxy URL to verify it redirects to OAuth provider
+        auth_url = connection["auth"]["auth_url"]
+        proxy_response = await api_client.get(auth_url, follow_redirects=False)
+        assert proxy_response.status_code == 303, "Should redirect to OAuth provider"
+        provider_url = proxy_response.headers.get("location")
+        assert provider_url is not None, "Should have provider redirect URL"
+        # Verify it's a valid OAuth URL (contains common OAuth patterns)
+        assert any(
+            pattern in provider_url for pattern in ["oauth", "authorize", "auth"]
+        ), f"Should be OAuth URL: {provider_url}"
+
+        # Verify redirect_uri parameter is correct for this environment
+        verify_redirect_uri(provider_url, config.api_url)
+
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
     @pytest.mark.asyncio
     async def test_oauth_browser_defaults_sync_immediately_false(
-        self, api_client: httpx.AsyncClient, collection: Dict
+        self, api_client: httpx.AsyncClient, collection: Dict, config
     ):
         """Test that OAuth browser defaults to sync_immediately=False when not specified."""
         payload = {
@@ -64,6 +100,13 @@ class TestOAuthAuthentication:
         # OAuth browser should not have sync details (no immediate sync)
         assert connection["sync"] is None
         assert connection["status"] == "pending_auth"
+
+        # Verify OAuth URL is correctly formed
+        auth_url = connection["auth"]["auth_url"]
+        proxy_response = await api_client.get(auth_url, follow_redirects=False)
+        assert proxy_response.status_code == 303
+        provider_url = proxy_response.headers.get("location")
+        verify_redirect_uri(provider_url, config.api_url)
 
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
@@ -154,11 +197,25 @@ class TestOAuthAuthentication:
         assert "auth_url" in connection["auth"]
         assert connection["auth"]["auth_url"] is not None
 
+        # Verify BYOC generates valid OAuth redirect with custom client
+        auth_url = connection["auth"]["auth_url"]
+        proxy_response = await api_client.get(auth_url, follow_redirects=False)
+        assert proxy_response.status_code == 303
+        provider_url = proxy_response.headers.get("location")
+        assert provider_url is not None
+        # BYOC should use the custom client_id in the OAuth URL
+        assert "client_id=" in provider_url, "OAuth URL should include client_id parameter"
+
+        # Verify redirect_uri is correct
+        verify_redirect_uri(provider_url, config.api_url)
+
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
 
     @pytest.mark.asyncio
-    async def test_minimal_oauth_payload(self, api_client: httpx.AsyncClient, collection: Dict):
+    async def test_minimal_oauth_payload(
+        self, api_client: httpx.AsyncClient, collection: Dict, config
+    ):
         """Test minimal OAuth payload defaults."""
         # Minimal payload - should default to OAuth browser
         payload = {"short_name": "notion", "readable_collection_id": collection["readable_id"]}
@@ -176,6 +233,18 @@ class TestOAuthAuthentication:
         auth_url = connection["auth"]["auth_url"]
         assert isinstance(auth_url, str)
         assert auth_url.startswith("http://") or auth_url.startswith("https://")
+
+        # Verify minimal payload generates valid OAuth redirect
+        proxy_response = await api_client.get(auth_url, follow_redirects=False)
+        assert proxy_response.status_code == 303
+        provider_url = proxy_response.headers.get("location")
+        assert provider_url is not None
+        assert (
+            "notion" in provider_url.lower() or "oauth" in provider_url.lower()
+        ), f"Should be Notion OAuth URL: {provider_url}"
+
+        # Verify redirect_uri is correct
+        verify_redirect_uri(provider_url, config.api_url)
 
         # Cleanup
         await api_client.delete(f"/source-connections/{connection['id']}")
@@ -207,7 +276,10 @@ class TestOAuthAuthentication:
             "name": "OAuth Browser Flow with Sync Immediately",
             "short_name": "gmail",
             "readable_collection_id": collection["readable_id"],
-            "authentication": {},
+            "authentication": {
+                "client_id": "test-client-id",
+                "client_secret": "test-client-secret",
+            },
             "sync_immediately": True,
         }
         response = await api_client.post("/source-connections", json=payload)
@@ -234,3 +306,30 @@ class TestOAuthAuthentication:
         assert response.status_code == 400
         error = response.json()
         assert "sync_immediately" in error["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_oauth_byoc_requires_credentials(
+        self, api_client: httpx.AsyncClient, collection: Dict
+    ):
+        """Test that sources requiring BYOC fail with empty authentication.
+
+        Zendesk has requires_byoc=True, so it should fail without client credentials.
+        """
+        # Test with empty authentication dict - should fail
+        payload = {
+            "name": "Test Zendesk BYOC without Credentials",
+            "short_name": "zendesk",
+            "readable_collection_id": collection["readable_id"],
+            "config": {
+                "subdomain": "mycompany",
+            },
+            "authentication": {},  # Empty - should fail for BYOC sources
+            "sync_immediately": False,
+        }
+
+        response = await api_client.post("/source-connections", json=payload)
+        assert response.status_code == 400
+        error = response.json()
+        detail = error.get("detail", "").lower()
+        # Should mention client credentials are required
+        assert "client" in detail or "credentials" in detail or "byoc" in detail

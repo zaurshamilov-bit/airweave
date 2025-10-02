@@ -260,6 +260,19 @@ integrations:
     client_credential_location: "body"
     scope: "data:read"
 
+  zendesk:
+    oauth_type: "with_refresh"
+    url: "https://{subdomain}.zendesk.com/oauth/authorizations/new"
+    backend_url: "https://{subdomain}.zendesk.com/oauth/tokens"
+    grant_type: "authorization_code"
+    client_id: "placeholder_client_id"
+    client_secret: "placeholder_client_secret"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read write"
+    url_template: true
+    backend_url_template: true
+
   clickup:
     oauth_type: "access_only"
     url: "https://app.clickup.com/api"

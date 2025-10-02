@@ -548,7 +548,10 @@ class TestTemporalSchedules:
             "name": "OAuth Invalid Sync",
             "short_name": "gmail",
             "readable_collection_id": collection["readable_id"],
-            "authentication": {},  # OAuth browser is default
+            "authentication": {
+                "client_id": "test-client-id",
+                "client_secret": "test-client-secret",
+            },
             "sync_immediately": True,  # Should be rejected
         }
 
