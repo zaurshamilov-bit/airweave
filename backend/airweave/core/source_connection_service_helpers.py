@@ -1109,7 +1109,7 @@ class SourceConnectionHelpers:
             client_id=overrides.get("client_id"),
             client_secret=overrides.get("client_secret"),
             template_configs=template_configs,
-            code_verifier=code_verifier
+            code_verifier=code_verifier,
         )
 
     async def _regenerate_oauth_url(
