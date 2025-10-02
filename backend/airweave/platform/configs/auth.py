@@ -156,10 +156,25 @@ class Neo4jAuthConfig(AuthConfig):
 # AUTH CONFIGS FOR ALL SOURCES
 
 
+class AirtableAuthConfig(OAuth2WithRefreshAuthConfig):
+    """Airtable authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+
+
 class AsanaAuthConfig(OAuth2WithRefreshAuthConfig):
     """Asana authentication credentials schema."""
 
     # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+
+
+class AttioAuthConfig(APIKeyAuthConfig):
+    """Attio authentication credentials schema."""
+
+    api_key: str = Field(
+        title="API Key",
+        description="The API key for Attio. Generate one in Workspace Settings > Developers.",
+    )
 
 
 class BitbucketAuthConfig(AuthConfig):
@@ -281,6 +296,12 @@ class GoogleDriveAuthConfig(OAuth2BYOCAuthConfig):
     # Inherits client_id, client_secret, refresh_token and access_token from OAuth2BYOCAuthConfig
 
 
+class GitLabAuthConfig(OAuth2WithRefreshAuthConfig):
+    """GitLab authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+
+
 class HubspotAuthConfig(OAuth2WithRefreshAuthConfig):
     """Hubspot authentication credentials schema."""
 
@@ -356,6 +377,12 @@ class CTTIAuthConfig(AuthConfig):
 
 class PostgreSQLAuthConfig(BaseDatabaseAuthConfig):
     """PostgreSQL authentication configuration."""
+
+
+class SharePointAuthConfig(OAuth2WithRefreshAuthConfig):
+    """SharePoint authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
 class SlackAuthConfig(OAuth2AuthConfig):

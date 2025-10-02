@@ -88,6 +88,10 @@ class OAuth2Settings(BaseAuthSettings):
         scope (Optional[str]): The scope.
         url_template (bool): Whether url contains template variables (default: False).
         backend_url_template (bool): Whether backend_url has templates (default: False).
+        requires_pkce (bool): Whether this OAuth provider requires PKCE
+            (Proof Key for Code Exchange). PKCE is a security extension that
+            prevents authorization code interception. Set to True for providers
+            like Airtable that mandate PKCE.
 
     """
 
@@ -101,6 +105,7 @@ class OAuth2Settings(BaseAuthSettings):
     client_credential_location: str
     additional_frontend_params: Optional[dict[str, str]] = None
     scope: Optional[str] = None
+    requires_pkce: bool = False
 
     # Template support for instance-specific OAuth URLs
     url_template: bool = False

@@ -19,6 +19,100 @@ Your task is to write the code. The human will handle testing and running comman
 
 ---
 
+## Important Guidelines
+
+These are the most common mistakes when building connectors:
+
+### 1. Make Entities Information-Rich (Embeddable Fields)
+
+**Rule:** Mark ~70% of entity fields as `embeddable=True`
+
+**Why:** Without `embeddable=True`, fields are only keyword-searchable, not semantically searchable. Users won't be able to find relevant data.
+
+**What to mark embeddable:**
+- ✅ All text content (descriptions, notes, comments, body)
+- ✅ All names and titles
+- ✅ All people (assignees, authors, owners, members)
+- ✅ All status/metadata (status, priority, tags, labels)
+- ✅ All timestamps (created_at, modified_at, due_dates)
+
+**What NOT to mark embeddable:**
+- ❌ Internal IDs (entity_id, external_id, database IDs)
+- ❌ Binary metadata (sizes, checksums, mime_types)
+
+**Bad Example:**
+```python
+# Avoid: Sparse entity - users can't search by anything except name
+class TaskEntity(ChunkEntity):
+    name: str = AirweaveField(..., embeddable=True)
+    description: str = Field(...)  # Should be embeddable
+    assignee: Dict = Field(...)     # Should be embeddable
+```
+
+**Good Example:**
+```python
+# Better: Information-rich - users can search everything
+class TaskEntity(ChunkEntity):
+    name: str = AirweaveField(..., embeddable=True)
+    description: str = AirweaveField(..., embeddable=True)
+    assignee: Dict = AirweaveField(..., embeddable=True)
+    status: str = AirweaveField(..., embeddable=True)
+    external_id: str = Field(...)  # ID correctly not embeddable
+```
+
+### 2. Test Entity Types Your Source Actually Implements
+
+**Rule:** Your Monke tests should create and verify the entity types that your source actually yields
+
+**Why:** Untested entity types may break in production without detection.
+
+**Important:** Only test entities that your source implementation yields. You don't need to test every theoretically possible entity type from the API—just the ones your connector actually implements.
+
+**How to verify:**
+1. Open your source: `backend/airweave/platform/sources/{short_name}.py`
+2. Find all `yield` statements in `generate_entities()`
+3. List the entity types your source ACTUALLY yields (e.g., Task, Comment, File)
+4. Your `bongos/{short_name}.py::create_entities()` should create at least one of each yielded type
+5. Your `create_entities()` should return descriptors for all yielded types
+
+**Example:** If your SharePoint source only yields `ListItem`, `Page`, and `DriveItem` entities (not `User`, `Group`, `Site`), then your Monke bongo only needs to create those three types—not the entire SharePoint API surface.
+
+**Bad Example:**
+```python
+# Avoid: Only creates tasks, ignores comments and files
+async def create_entities(self):
+    for i in range(self.entity_count):
+        task = await self._create_task(...)
+        all_entities.append(task)
+    # Source yields comments and files, but we don't test them
+    return all_entities
+```
+
+**Good Example:**
+```python
+# Better: Creates all entity types from source
+async def create_entities(self):
+    for i in range(self.entity_count):
+        # Create parent
+        task = await self._create_task(...)
+        all_entities.append(task)
+
+        # Create comments (source yields them)
+        for j in range(2):
+            comment = await self._create_comment(task["id"], ...)
+            all_entities.append(comment)
+
+        # Create file (source yields them)
+        file = await self._upload_file(task["id"], ...)
+        all_entities.append(file)
+
+    return all_entities  # Returns tasks, comments, AND files
+```
+
+---
+
+---
+
 ## Phase 1: Research & Planning
 
 ### Step 1: Understand the API
@@ -112,11 +206,41 @@ You must expose those via the config fields.
 3. Add **nested entities** (comments, messages)
 4. Add **file entities** if the API supports attachments
 
+** Make entities information-rich with embeddable fields**
+
 **Key principles:**
-- Use `AirweaveField(..., embeddable=True)` for searchable text
+- **USE `AirweaveField(..., embeddable=True)` FOR ~70% OF FIELDS** - this is what makes entities searchable!
+- Mark ALL user-visible content as `embeddable=True`:
+  - Text content (descriptions, notes, comments, body)
+  - Names and titles
+  - People (assignees, authors, owners)
+  - Status/metadata (status, priority, tags)
+  - Timestamps (created_at, modified_at, due_dates)
+- Only use `Field()` without embeddable for:
+  - Internal IDs (entity_id, external_id)
+  - Binary metadata (sizes, checksums, mime_types)
 - Always include `created_at` and `modified_at` with proper flags
-- Use `Field(...)` for non-searchable metadata
 - Inherit from `ChunkEntity` or `FileEntity`
+
+**Anti-pattern to avoid:**
+```python
+# ❌ BAD: Sparse entity with only name embeddable
+class TaskEntity(ChunkEntity):
+    name: str = AirweaveField(..., embeddable=True)
+    description: str = Field(...)  # ❌ Should be embeddable!
+    assignee: Dict = Field(...)     # ❌ Should be embeddable!
+```
+
+**Good pattern:**
+```python
+# ✅ GOOD: Information-rich entity with most fields embeddable
+class TaskEntity(ChunkEntity):
+    name: str = AirweaveField(..., embeddable=True)
+    description: str = AirweaveField(..., embeddable=True)  # ✅
+    assignee: Dict = AirweaveField(..., embeddable=True)    # ✅
+    status: str = AirweaveField(..., embeddable=True)       # ✅
+    external_id: str = Field(...)  # ✅ ID not embeddable
+```
 
 **Example structure:**
 
@@ -417,26 +541,45 @@ async def generate_comment(model: str, token: str) -> dict:
 
 **Reference:** See `monke-testing-guide.mdc` Part 1
 
-**This is the most critical file.** It must create ALL entity types.
+**It must create ALL entity types defined in your source connector.**
+
+**Before starting:**
+1. Open `backend/airweave/platform/sources/{short_name}.py`
+2. Find `generate_entities()` method
+3. List EVERY entity type that is yielded:
+   ```python
+   # Example from your source:
+   yield WorkspaceEntity(...)     # ← Must create in tests
+   yield ProjectEntity(...)       # ← Must create in tests
+   yield TaskEntity(...)          # ← Must create in tests
+   yield CommentEntity(...)       # ← Must create in tests
+   yield FileEntity(...)          # ← Must create in tests
+   ```
+4. Your `create_entities()` MUST create instances of ALL these types
 
 **Implementation order:**
 
 1. Create the class skeleton
 2. Implement `_ensure_workspace()` and `_ensure_project()` helpers
-3. Implement `create_entities()` - **MUST create all entity types**
+3. **Implement `create_entities()` - MUST create ALL entity types (not just tasks!)**
 4. Implement `update_entities()`
 5. Implement `delete_specific_entities()`
 6. Implement `delete_entities()`
 7. Implement `cleanup()`
 8. Add rate limiting and error handling
 
-**Critical: Test ALL Entity Types**
+** Test ALL Entity Types**
+
+**Validation before proceeding:**
+- [ ] Count: How many entity types does your source yield?
+- [ ] Count: How many entity types does `create_entities()` create?
+- [ ] These numbers MUST match (excluding workspace/project if they're not stored)
 
 ```python
 async def create_entities(self) -> List[Dict[str, Any]]:
     """Create comprehensive test entities.
 
-    CRITICAL: Must create instances of EVERY entity type that
+    Must create instances of EVERY entity type that
     the source connector syncs.
     """
     all_entities = []
@@ -460,7 +603,7 @@ async def create_entities(self) -> List[Dict[str, Any]]:
             })
 
             # ==========================================
-            # CRITICAL: Create child entities
+            # Create child entities
             # ==========================================
 
             # Create 2 comments per task
@@ -574,10 +717,17 @@ Wait for human feedback. If tests fail, review the error logs and fix the code.
 ### Checklist
 
 **Source Connector:**
-- [ ] All entity types are implemented
+- [ ] All entity types are implemented in `entities/{short_name}.py`
+- [ ] **semantically relevant entity fields use `AirweaveField(..., embeddable=True)`**
+  - [ ] All text content fields are embeddable
+  - [ ] All people fields are embeddable
+  - [ ] All status/metadata fields are embeddable
+  - [ ] All timestamps are embeddable
+  - [ ] Only IDs and binary metadata use `Field()` without embeddable
+  - [ ] Verified: ~70% of fields are embeddable
 - [ ] All entities have `created_at` or `modified_at` timestamps
 - [ ] Token refresh is properly handled
-- [ ] Rate limiting is implemented
+- [ ] Rate limiting is implemented (if API requires it)
 - [ ] Pagination is handled correctly
 - [ ] Errors are handled gracefully (don't fail entire sync)
 - [ ] Breadcrumbs track entity hierarchy
@@ -585,10 +735,13 @@ Wait for human feedback. If tests fail, review the error logs and fix the code.
 - [ ] OAuth config is in `dev.integrations.yaml`
 
 **Monke Tests:**
-- [ ] Bongo creates ALL entity types (not just tasks)
+- [ ] **Bongo creates ALL entity types from source**
+  - [ ] Listed all entity types yielded in source's `generate_entities()`
+  - [ ] Confirmed `create_entities()` creates each type
+  - [ ] Entity type count matches between source and tests
 - [ ] Each entity has unique verification token
 - [ ] Tokens are embedded in searchable content
-- [ ] Generation schemas defined for all types
+- [ ] Generation schemas defined for all entity types
 - [ ] Test config has comprehensive test flow
 - [ ] All entity types are verified after sync
 - [ ] Update flow tests incremental sync
@@ -657,7 +810,7 @@ Reference the Asana source as an example: @asana.py
 ```
 Now implement the Monke tests.
 
-CRITICAL: The bongo MUST create instances of EVERY entity type, including
+The bongo MUST create instances of EVERY entity type, including
 comments and files, not just the top-level tasks.
 
 Start with:
@@ -677,12 +830,18 @@ Building a complete connector requires:
 
 1. **Research:** Understand the API, entity hierarchy, auth, and rate limits
 2. **Entities:** Define schemas for ALL entity types with proper timestamps
+   - **Mark ~70% of fields as `embeddable=True` for semantic search**
 3. **Source:** Implement hierarchical entity generation with token refresh
 4. **Testing:** Create Monke tests that verify EVERY entity type
+   - **Test ALL entity types your source yields, not just tasks**
 5. **Validation:** Run E2E tests and verify all entities appear in search
 6. **Refinement:** Debug issues, optimize performance, handle edge cases
 
-**The key to success:** Test comprehensively. Don't just test tasks—test comments, files, and all nested entities. If your connector syncs it, your tests should verify it.
+**The two keys to success:**
+
+1. **Information-Rich Entities**: Mark most fields as `embeddable=True` so users can semantically search your data. Sparse entities with only names embeddable are barely useful.
+
+2. **Comprehensive Testing**: Don't just test tasks—test comments, files, and all nested entities. If your connector syncs it, your tests must verify it. Count entity types in your source's `generate_entities()` and match that count in your Monke tests.
 
 ---
 

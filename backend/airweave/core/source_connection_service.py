@@ -667,13 +667,22 @@ class SourceConnectionService:
         # Use custom client if provided
         client_id = oauth_auth.client_id if oauth_auth.client_id else None
 
-        provider_auth_url = await oauth2_service.generate_auth_url_with_redirect(
+        # Generate authorization URL with PKCE support if required
+        provider_auth_url, code_verifier = await oauth2_service.generate_auth_url_with_redirect(
             oauth_settings,
             redirect_uri=api_callback,
             client_id=client_id,
             state=state,
             template_configs=template_configs,
         )
+
+        # Store PKCE code verifier if present (will be used during token exchange)
+        pkce_overrides = {}
+        if code_verifier:
+            pkce_overrides["code_verifier"] = code_verifier
+            ctx.logger.debug(
+                f"Generated PKCE challenge for {source.short_name} (code_verifier stored)"
+            )
 
         async with UnitOfWork(db) as uow:
             # Create shell source connection
@@ -694,7 +703,7 @@ class SourceConnectionService:
                 uow.session, provider_auth_url, ctx, uow
             )
 
-            # Create init session with the redirect_session_id
+            # Create init session with the redirect_session_id and PKCE overrides
             init_session = await self._create_init_session(
                 uow.session,
                 obj_in,
@@ -703,6 +712,7 @@ class SourceConnectionService:
                 uow,
                 redirect_session_id=redirect_session_id,
                 template_configs=template_configs,
+                additional_overrides=pkce_overrides,
             )
 
             # Link them
@@ -881,6 +891,20 @@ class SourceConnectionService:
             raise HTTPException(
                 status_code=404,
                 detail=f"Auth provider '{obj_in.authentication.provider_readable_id}' not found",
+            )
+
+        # Validate that the source supports this auth provider
+        supported_providers = auth_provider_service.get_supported_providers_for_source(
+            obj_in.short_name
+        )
+        if auth_provider_conn.short_name not in supported_providers:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Source '{obj_in.short_name}' does not support "
+                    f"'{auth_provider_conn.short_name}' as an auth provider. "
+                    f"Supported providers: {supported_providers}"
+                ),
             )
 
         # Validate provider config

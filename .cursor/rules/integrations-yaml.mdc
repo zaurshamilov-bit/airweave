@@ -20,12 +20,15 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"  # or "header"
     scope: "scope1 scope2 scope3"  # service-specific permissions
+    requires_pkce: false  # optional, default false. Set true for PKCE-required providers (e.g., Airtable)
     additional_frontend_params:  # optional service-specific parameters
       param1: "value1"
       param2: "value2"
 ```
 
-### Example Integration
+### Example Integrations
+
+**Standard OAuth (Gmail):**
 ```yaml
 gmail:
   auth_type: "oauth2_with_refresh"
@@ -41,6 +44,31 @@ gmail:
     access_type: "offline"
     prompt: "consent"
 ```
+
+**OAuth with PKCE (Airtable):**
+```yaml
+airtable:
+  oauth_type: "with_refresh"
+  url: "https://airtable.com/oauth2/v1/authorize"
+  backend_url: "https://airtable.com/oauth2/v1/token"
+  grant_type: "authorization_code"
+  client_id: "your-client-id"
+  client_secret: "your-client-secret"
+  content_type: "application/x-www-form-urlencoded"
+  client_credential_location: "header"
+  scope: "schema.bases:read data.records:read"
+  requires_pkce: true  # PKCE (Proof Key for Code Exchange) prevents authorization code interception
+```
+
+**PKCE Flow Details:**
+When `requires_pkce: true`, the OAuth flow includes:
+1. System generates a `code_verifier` (random string) during authorization
+2. Computes `code_challenge` = SHA256(code_verifier) and sends in auth URL
+3. Stores `code_verifier` in `init_session.overrides` for later retrieval
+4. During token exchange, sends the original `code_verifier` to prove authenticity
+5. Provider verifies SHA256(code_verifier) matches the original code_challenge
+
+This prevents authorization code interception attacks by ensuring the token exchange request comes from the same client that initiated authorization.
 
 ## Folder Structure
 The files appear to be part of a structured monorepo with:

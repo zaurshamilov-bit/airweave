@@ -25,6 +25,7 @@ interface SourceDetails {
   oauth_type?: string;  // OAuth token type (access_only, with_refresh, etc.)
   requires_byoc?: boolean;  // Whether source requires user to bring their own OAuth credentials
   auth_config_class?: string;  // Optional, only for DIRECT auth sources
+  supported_auth_providers?: string[];  // Array of auth provider short names that support this source
   auth_fields?: {  // Optional, only present for DIRECT auth sources
     fields: Array<{
       name: string;
@@ -75,16 +76,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
   const { authProviderConnections, fetchAuthProviderConnections } = useAuthProvidersStore();
 
-  // Sources that are temporarily blocked from using auth providers
-  const SOURCES_BLOCKED_FROM_AUTH_PROVIDERS = [
-    "confluence",
-    "jira",
-    "bitbucket",
-    "github",
-    "ctti",
-    "monday",
-    "postgresql"
-  ];
 
   const [isCreating, setIsCreating] = useState(false);
   const [sourceDetails, setSourceDetails] = useState<SourceDetails | null>(null);
@@ -174,10 +165,11 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       methods.push('oauth2');
     }
 
-    // Add external provider if any are connected and source supports it and is not blocked
+    // Add external provider if any are connected and source supports it
     if (authProviderConnections.length > 0 &&
       sourceDetails.auth_methods.includes('auth_provider') &&
-      !SOURCES_BLOCKED_FROM_AUTH_PROVIDERS.includes(sourceDetails.short_name)) {
+      sourceDetails.supported_auth_providers &&
+      sourceDetails.supported_auth_providers.length > 0) {
       methods.push('external_provider');
     }
 
