@@ -35,19 +35,52 @@ class TrelloBongo(BaseBongo):
         """
         super().__init__(credentials)
 
+        # Initialize logger first
+        self.logger = get_logger("trello_bongo")
+
         # OAuth1 user tokens (from Composio)
         self.oauth_token: str = credentials["oauth_token"]
         self.oauth_token_secret: str = credentials["oauth_token_secret"]
 
-        # OAuth1 consumer credentials (app-level, from config/env vars)
-        # Composio provides user tokens, but consumer credentials must come from config
-        self.consumer_key: str = kwargs.get("consumer_key", "")
-        self.consumer_secret: str = kwargs.get("consumer_secret", "")
+        # OAuth1 consumer credentials
+        # Try to get from Composio credentials first (they might provide api_key)
+        # If not, fall back to config
+        self.consumer_key: str = (
+            credentials.get("api_key")
+            or credentials.get("key")
+            or kwargs.get("consumer_key", "")
+        )
+        self.consumer_secret: str = credentials.get(
+            "consumer_secret", ""
+        ) or kwargs.get("consumer_secret", "")
+
+        # Debug: Log ALL fields from Composio to see what's available
+        self.logger.info(f"🔍 All fields from Composio: {list(credentials.keys())}")
+
+        # Debug: Log what we're using
+        self.logger.info("🔑 OAuth1 Credentials Check:")
+        self.logger.info(
+            f"  oauth_token: {'✅ Present' if self.oauth_token else '❌ MISSING'}"
+        )
+        self.logger.info(
+            f"  oauth_token_secret: {'✅ Present' if self.oauth_token_secret else '❌ MISSING'}"
+        )
+        self.logger.info(
+            f"  consumer_key: {self.consumer_key[:10] + '...' if self.consumer_key else '❌ MISSING'}"
+        )
+        self.logger.info(
+            f"  consumer_secret: {'✅ Present' if self.consumer_secret else '❌ MISSING'}"
+        )
 
         if not self.consumer_key or not self.consumer_secret:
             raise ValueError(
                 "Trello requires consumer_key and consumer_secret in config. "
-                "Add to trello.yaml: consumer_key: ${MONKE_TRELLO_CONSUMER_KEY}"
+                "Add to monke/.env:\n"
+                "  MONKE_TRELLO_CONSUMER_KEY=your_key\n"
+                "  MONKE_TRELLO_CONSUMER_SECRET=your_secret\n"
+                "Then add to trello.yaml config_fields:\n"
+                "  consumer_key: ${MONKE_TRELLO_CONSUMER_KEY}\n"
+                "  consumer_secret: ${MONKE_TRELLO_CONSUMER_SECRET}"
             )
 
         # Test configuration
@@ -64,8 +97,6 @@ class TrelloBongo(BaseBongo):
         # Rate limiting
         self.last_request_time = 0.0
         self.min_delay = 0.3  # 300ms between requests
-
-        self.logger = get_logger("trello_bongo")
 
     def _percent_encode(self, value: str) -> str:
         """Percent-encode for OAuth1."""
@@ -141,27 +172,27 @@ class TrelloBongo(BaseBongo):
         query_params: Optional[Dict[str, Any]] = None,
         json_data: Optional[Dict[str, Any]] = None,
     ) -> Dict:
-        """Make authenticated OAuth1 request to Trello API."""
+        """Make authenticated request to Trello API.
+
+        Trello supports two authentication methods:
+        1. OAuth1 signing (complex, requires matching consumer/token)
+        2. Simple key + token query params (after authorization)
+
+        We use method #2 since Composio provides the token but not matching consumer creds.
+        """
         await self._rate_limit()
 
-        # Build OAuth parameters
-        oauth_params = self._build_oauth1_params()
+        # Use Trello's simple key+token authentication
+        # key = consumer_key (API key)
+        # token = oauth_token (access token)
+        if query_params is None:
+            query_params = {}
 
-        # Merge with query parameters for signing
-        all_params = {**oauth_params}
-        if query_params:
-            all_params.update({k: str(v) for k, v in query_params.items()})
-
-        # Sign the request
-        signature = self._sign_request(method, url, all_params)
-        oauth_params["oauth_signature"] = signature
-
-        # Build Authorization header
-        auth_header = self._build_auth_header(oauth_params)
+        query_params["key"] = self.consumer_key
+        query_params["token"] = self.oauth_token
 
         # Make request
         request_kwargs = {
-            "headers": {"Authorization": auth_header},
             "params": query_params,
         }
 

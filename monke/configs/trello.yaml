@@ -6,8 +6,8 @@ connector:
   type: trello
   auth_mode: composio
   composio_config:
-    account_id: ca_iJd3n9DkeVRP
-    auth_config_id: ac_Oa96sKaVX4ku
+    account_id: ca_LrmCrRcDeDdi
+    auth_config_id: ac_r8g0h__3n7RC
   config_fields:
     openai_model: "gpt-4.1-mini"
     max_concurrency: 3
