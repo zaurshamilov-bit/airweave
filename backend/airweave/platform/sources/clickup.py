@@ -31,7 +31,7 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
         AuthenticationMethod.OAUTH_TOKEN,
         AuthenticationMethod.AUTH_PROVIDER,
     ],
-    oauth_type=OAuthType.WITH_REFRESH,
+    oauth_type=OAuthType.ACCESS_ONLY,
     auth_config_class="ClickUpAuthConfig",
     config_class="ClickUpConfig",
     labels=["Project Management"],

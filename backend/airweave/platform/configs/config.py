@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator, validator
 
 from airweave.platform.configs._base import BaseConfig, RequiredTemplateConfig
 
@@ -315,6 +315,27 @@ class StripeConfig(SourceConfig):
     pass
 
 
+class SalesforceConfig(SourceConfig):
+    """Salesforce configuration schema."""
+
+    instance_url: str = RequiredTemplateConfig(
+        title="Salesforce Instance URL",
+        description="Your Salesforce instance domain only (e.g. 'mycompany.my.salesforce.com')",
+        json_schema_extra={"required_for_auth": True},
+    )
+
+    @field_validator("instance_url", mode="before")
+    @classmethod
+    def strip_https_prefix(cls, value):
+        """Remove https:// or http:// prefix if present."""
+        if isinstance(value, str):
+            if value.startswith("https://"):
+                return value.replace("https://", "", 1)
+            elif value.startswith("http://"):
+                return value.replace("http://", "", 1)
+        return value
+
+
 class TodoistConfig(SourceConfig):
     """Todoist configuration schema."""
 
@@ -325,6 +346,7 @@ class TeamsConfig(SourceConfig):
     """Microsoft Teams configuration schema."""
 
     pass
+
 
 class ZendeskConfig(SourceConfig):
     """Zendesk configuration schema."""

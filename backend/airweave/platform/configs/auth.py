@@ -320,6 +320,13 @@ class IntercomAuthConfig(OAuth2AuthConfig):
     # Inherits access_token from OAuth2AuthConfig
 
 
+class SalesforceAuthConfig(OAuth2BYOCAuthConfig):
+    """Salesforce authentication credentials schema."""
+
+    # instance_url is now in SalesforceConfig as a template field
+    # Inherits client_id, client_secret, refresh_token and access_token from OAuth2BYOCAuthConfig
+
+
 class JiraAuthConfig(OAuth2WithRefreshAuthConfig):
     """Jira authentication credentials schema."""
 
