@@ -55,6 +55,8 @@ navigation:
       path: docs/pages/connectors/attio/main.mdx
     - page: Bitbucket
       path: docs/pages/connectors/bitbucket/main.mdx
+    - page: Box
+      path: docs/pages/connectors/box/main.mdx
     - page: Clickup
       path: docs/pages/connectors/clickup/main.mdx
     - page: Confluence
