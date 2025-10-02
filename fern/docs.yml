@@ -47,10 +47,18 @@ navigation:
       path: docs/pages/direct-token-injection.mdx
   - section: Connectors
     contents:
+    - page: Airtable
+      path: docs/pages/connectors/airtable/main.mdx
     - page: Asana
       path: docs/pages/connectors/asana/main.mdx
+    - page: Attio
+      path: docs/pages/connectors/attio/main.mdx
     - page: Bitbucket
       path: docs/pages/connectors/bitbucket/main.mdx
+    - page: Box
+      path: docs/pages/connectors/box/main.mdx
+    - page: Clickup
+      path: docs/pages/connectors/clickup/main.mdx
     - page: Confluence
       path: docs/pages/connectors/confluence/main.mdx
     - page: Ctti
@@ -59,6 +67,8 @@ navigation:
       path: docs/pages/connectors/dropbox/main.mdx
     - page: Github
       path: docs/pages/connectors/github/main.mdx
+    - page: Gitlab
+      path: docs/pages/connectors/gitlab/main.mdx
     - page: Gmail
       path: docs/pages/connectors/gmail/main.mdx
     - page: Google Calendar
@@ -83,10 +93,16 @@ navigation:
       path: docs/pages/connectors/outlook_mail/main.mdx
     - page: Postgresql
       path: docs/pages/connectors/postgresql/main.mdx
+    - page: Sharepoint
+      path: docs/pages/connectors/sharepoint/main.mdx
     - page: Stripe
       path: docs/pages/connectors/stripe/main.mdx
+    - page: Teams
+      path: docs/pages/connectors/teams/main.mdx
     - page: Todoist
       path: docs/pages/connectors/todoist/main.mdx
+    - page: Zendesk
+      path: docs/pages/connectors/zendesk/main.mdx
 - api: API Reference
   alphabetized: false
   display-errors: true

@@ -26,11 +26,16 @@ from airweave.schemas.source_connection import AuthenticationMethod, OAuthType
 @source(
     name="ClickUp",
     short_name="clickup",
-    auth_methods=[AuthenticationMethod.OAUTH_BROWSER, AuthenticationMethod.OAUTH_TOKEN],
+    auth_methods=[
+        AuthenticationMethod.OAUTH_BROWSER,
+        AuthenticationMethod.OAUTH_TOKEN,
+        AuthenticationMethod.AUTH_PROVIDER,
+    ],
     oauth_type=OAuthType.ACCESS_ONLY,
     auth_config_class="ClickUpAuthConfig",
     config_class="ClickUpConfig",
     labels=["Project Management"],
+    supports_continuous=False,
 )
 class ClickUpSource(BaseSource):
     """ClickUp source connector integrates with the ClickUp API to extract and synchronize data.
@@ -614,9 +619,11 @@ class ClickUpSource(BaseSource):
                                 task_breadcrumb = Breadcrumb(
                                     entity_id=task_entity.entity_id,
                                     name=task_entity.name,
-                                    type="task"
-                                    if isinstance(task_entity, ClickUpTaskEntity)
-                                    else "subtask",
+                                    type=(
+                                        "task"
+                                        if isinstance(task_entity, ClickUpTaskEntity)
+                                        else "subtask"
+                                    ),
                                 )
                                 task_breadcrumbs = [*list_breadcrumbs, task_breadcrumb]
 
@@ -675,9 +682,11 @@ class ClickUpSource(BaseSource):
                             task_breadcrumb = Breadcrumb(
                                 entity_id=task_entity.entity_id,
                                 name=task_entity.name,
-                                type="task"
-                                if isinstance(task_entity, ClickUpTaskEntity)
-                                else "subtask",
+                                type=(
+                                    "task"
+                                    if isinstance(task_entity, ClickUpTaskEntity)
+                                    else "subtask"
+                                ),
                             )
                             task_breadcrumbs = [*list_breadcrumbs, task_breadcrumb]
 

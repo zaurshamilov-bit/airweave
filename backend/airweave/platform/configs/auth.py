@@ -156,10 +156,25 @@ class Neo4jAuthConfig(AuthConfig):
 # AUTH CONFIGS FOR ALL SOURCES
 
 
+class AirtableAuthConfig(OAuth2WithRefreshAuthConfig):
+    """Airtable authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+
+
 class AsanaAuthConfig(OAuth2WithRefreshAuthConfig):
     """Asana authentication credentials schema."""
 
     # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+
+
+class AttioAuthConfig(APIKeyAuthConfig):
+    """Attio authentication credentials schema."""
+
+    api_key: str = Field(
+        title="API Key",
+        description="The API key for Attio. Generate one in Workspace Settings > Developers.",
+    )
 
 
 class BitbucketAuthConfig(AuthConfig):
@@ -202,6 +217,12 @@ class BitbucketAuthConfig(AuthConfig):
         description="Specific repository to sync (e.g., 'my-repo'). "
         "If empty, syncs all repositories in the workspace.",
     )
+
+
+class BoxAuthConfig(OAuth2WithRefreshAuthConfig):
+    """Box authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
 class ClickUpAuthConfig(OAuth2AuthConfig):
@@ -279,6 +300,12 @@ class GoogleDriveAuthConfig(OAuth2BYOCAuthConfig):
     """Google Drive authentication credentials schema."""
 
     # Inherits client_id, client_secret, refresh_token and access_token from OAuth2BYOCAuthConfig
+
+
+class GitLabAuthConfig(OAuth2WithRefreshAuthConfig):
+    """GitLab authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
 class HubspotAuthConfig(OAuth2WithRefreshAuthConfig):
@@ -370,6 +397,12 @@ class PostgreSQLAuthConfig(BaseDatabaseAuthConfig):
     """PostgreSQL authentication configuration."""
 
 
+class SharePointAuthConfig(OAuth2WithRefreshAuthConfig):
+    """SharePoint authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+
+
 class SlackAuthConfig(OAuth2AuthConfig):
     """Slack authentication credentials schema."""
 
@@ -399,6 +432,12 @@ class TodoistAuthConfig(OAuth2AuthConfig):
     """Todoist authentication credentials schema."""
 
     # Inherits access_token from OAuth2AuthConfig
+
+
+class TeamsAuthConfig(OAuth2WithRefreshAuthConfig):
+    """Microsoft Teams authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
 # AUTH PROVIDER AUTHENTICATION CONFIGS

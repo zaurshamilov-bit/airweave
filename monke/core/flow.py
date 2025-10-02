@@ -55,7 +55,9 @@ class TestFlow:
             try:
                 await self.cleanup()
             except Exception as cleanup_error:
-                self.logger.error(f"❌ Cleanup failed after test failure: {cleanup_error}")
+                self.logger.error(
+                    f"❌ Cleanup failed after test failure: {cleanup_error}"
+                )
             raise
 
     async def _execute_step(self, step_name: str):
@@ -142,7 +144,9 @@ class TestFlow:
             await self._emit_event("cleanup_failed", extra={"error": str(e)})
             return False
 
-    async def _emit_event(self, event_type: str, extra: Optional[Dict[str, Any]] = None) -> None:
+    async def _emit_event(
+        self, event_type: str, extra: Optional[Dict[str, Any]] = None
+    ) -> None:
         payload: Dict[str, Any] = {
             "type": event_type,
             "run_id": self.run_id,

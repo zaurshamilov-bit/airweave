@@ -160,6 +160,62 @@ class SourceConnectionService:
 
         # All other patterns (including "0 * * * *" for hourly) are allowed
 
+    async def _validate_and_extract_template_configs(
+        self,
+        db: AsyncSession,
+        source: schemas.Source,
+        validated_config: Optional[dict],
+        ctx: ApiContext,
+    ) -> Optional[dict]:
+        """Validate and extract template config fields for OAuth flows.
+
+        Template configs are config fields that are required before OAuth can begin
+        (e.g., instance URLs like Zendesk subdomain).
+
+        Args:
+            db: Database session
+            source: Source model
+            validated_config: Already validated config dictionary
+            ctx: API context
+
+        Returns:
+            Dictionary of template configs or None if not applicable
+
+        Raises:
+            HTTPException: If required template configs are missing or invalid
+        """
+        template_configs = None
+        if source.config_class and validated_config is not None:
+            from airweave.platform.locator import resource_locator
+
+            try:
+                config_class = resource_locator.get_config(source.config_class)
+
+                # Check if this source has template config fields
+                template_config_fields = config_class.get_template_config_fields()
+
+                if template_config_fields:
+                    # Validate template config fields are present
+                    # (even if validated_config is empty dict)
+                    try:
+                        config_class.validate_template_configs(validated_config)
+                        template_configs = config_class.extract_template_configs(validated_config)
+
+                        ctx.logger.info(
+                            f"✅ Validated template configs for {source.short_name}: "
+                            f"{list(template_configs.keys())}"
+                        )
+                    except ValueError as e:
+                        raise HTTPException(status_code=422, detail=str(e))
+            except HTTPException:
+                # Re-raise HTTP exceptions (like validation errors)
+                raise
+            except Exception as e:
+                # Log but don't fail if config class not found (backward compatibility)
+                ctx.logger.warning(f"Could not load config class for {source.short_name}: {e}")
+
+        return template_configs
+
     """Clean service with automatic auth method inference.
 
     Key improvements:
@@ -233,6 +289,14 @@ class SourceConnectionService:
                 status_code=400,
                 detail=f"Source {obj_in.short_name} does not support this authentication method. "
                 f"Supported methods: {[m.value for m in supported]}",
+            )
+
+        # Validate BYOC requirement: If source requires BYOC, auth method must be OAUTH_BYOC
+        if source_class.requires_byoc() and auth_method == AuthenticationMethod.OAUTH_BROWSER:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Source {obj_in.short_name} requires custom OAuth client credentials. "
+                "Please provide client_id and client_secret in the authentication configuration.",
             )
 
         # Handle the edge case where authentication was None (defaults to OAuth browser)
@@ -583,12 +647,17 @@ class SourceConnectionService:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Source '{source.name}' requires BYOC (Bring Your Own Credentials). "
-                    f"You must provide both client_id and client_secret in the authentication object.",
+                    f"You must provide both client_id and client_secret in the auth object.",
                 )
 
         # Validate config
         validated_config = await self._validate_config_fields(
             db, obj_in.short_name, obj_in.config, ctx
+        )
+
+        # Validate and extract template config fields for OAuth flow
+        template_configs = await self._validate_and_extract_template_configs(
+            db, source, validated_config, ctx
         )
 
         # Generate OAuth URL
@@ -607,12 +676,22 @@ class SourceConnectionService:
         # Use custom client if provided
         client_id = oauth_auth.client_id if oauth_auth.client_id else None
 
-        provider_auth_url = await oauth2_service.generate_auth_url_with_redirect(
+        # Generate authorization URL with PKCE support if required
+        provider_auth_url, code_verifier = await oauth2_service.generate_auth_url_with_redirect(
             oauth_settings,
             redirect_uri=api_callback,
             client_id=client_id,
             state=state,
+            template_configs=template_configs,
         )
+
+        # Store PKCE code verifier if present (will be used during token exchange)
+        pkce_overrides = {}
+        if code_verifier:
+            pkce_overrides["code_verifier"] = code_verifier
+            ctx.logger.debug(
+                f"Generated PKCE challenge for {source.short_name} (code_verifier stored)"
+            )
 
         async with UnitOfWork(db) as uow:
             # Create shell source connection
@@ -633,9 +712,16 @@ class SourceConnectionService:
                 uow.session, provider_auth_url, ctx, uow
             )
 
-            # Create init session with the redirect_session_id
+            # Create init session with the redirect_session_id and PKCE overrides
             init_session = await self._create_init_session(
-                uow.session, obj_in, state, ctx, uow, redirect_session_id=redirect_session_id
+                uow.session,
+                obj_in,
+                state,
+                ctx,
+                uow,
+                redirect_session_id=redirect_session_id,
+                template_configs=template_configs,
+                additional_overrides=pkce_overrides,
             )
 
             # Link them
@@ -814,6 +900,20 @@ class SourceConnectionService:
             raise HTTPException(
                 status_code=404,
                 detail=f"Auth provider '{obj_in.authentication.provider_readable_id}' not found",
+            )
+
+        # Validate that the source supports this auth provider
+        supported_providers = auth_provider_service.get_supported_providers_for_source(
+            obj_in.short_name
+        )
+        if auth_provider_conn.short_name not in supported_providers:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Source '{obj_in.short_name}' does not support "
+                    f"'{auth_provider_conn.short_name}' as an auth provider. "
+                    f"Supported providers: {supported_providers}"
+                ),
             )
 
         # Validate provider config
@@ -1308,7 +1408,7 @@ class SourceConnectionService:
         sync_job_schema = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
         return sync_job_schema.to_source_connection_job(source_connection_id)
 
-    async def complete_oauth_callback(
+    async def complete_oauth_callback(  # noqa: C901
         self,
         db: AsyncSession,
         *,
@@ -1348,7 +1448,7 @@ class SourceConnectionService:
             db, init_session.short_name, code, init_session.overrides, ctx
         )
 
-        # Validate token - pass full credentials dict for sources that need extra fields (like Salesforce)
+        # Validate token - pass full credentials dict for sources that need extra fields
         credentials = token_response.model_dump()
 
         # Capture extra fields (e.g., instance_url for Salesforce) from Pydantic v2
