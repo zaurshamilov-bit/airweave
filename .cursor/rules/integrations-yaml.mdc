@@ -93,4 +93,20 @@ The files appear to be part of a structured monorepo with:
 └── prod.integrations.yaml
 ```
 
+## Template URLs for Instance-Specific OAuth
+
+Some integrations require per-customer endpoints (e.g., Zendesk subdomain):
+
+```yaml
+zendesk:
+  auth_type: "oauth2_with_refresh"
+  url: "https://{instance_url}/oauth/authorizations/new"
+  backend_url: "https://{instance_url}/oauth/tokens"
+  url_template: true  # Enable URL templating
+  backend_url_template: true  # Enable backend URL templating
+  # ... rest of config
+```
+
+Template variables are populated from the source's config class `get_template_config_fields()`.
+
 Note that it is alphabetically sorted.

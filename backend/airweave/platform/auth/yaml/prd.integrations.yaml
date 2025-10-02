@@ -24,6 +24,8 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
 
+  attio:
+
   bitbucket:
 
   confluence:
@@ -272,6 +274,19 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
     scope: "data:read"
+
+  zendesk:
+    oauth_type: "with_refresh"
+    url: "https://{subdomain}.zendesk.com/oauth/authorizations/new"
+    backend_url: "https://{subdomain}.zendesk.com/oauth/tokens"
+    grant_type: "authorization_code"
+    client_id: "zendesk-client-id-key"
+    client_secret: "zendesk-client-secret-key"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read write"
+    url_template: true
+    backend_url_template: true
 
   clickup:
     oauth_type: "access_only"

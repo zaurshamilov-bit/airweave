@@ -187,6 +187,12 @@ Decide:
 
 **Note:** The human has already set up OAuth credentials here. This configuration exists and is ready to use.
 
+### For Instance-Specific OAuth URLs
+
+If OAuth URLs vary per customer (e.g., `https://{subdomain}.service.com`), human will already have added the {subdomain} to their dev.integrations.yaml.
+
+You must expose those via the config fields.
+
 ### Step 5: Implement Entity Schemas
 
 **File:** `backend/airweave/platform/entities/{short_name}.py`
@@ -785,42 +791,6 @@ Wait for human feedback. If tests fail, review the error logs and fix the code.
    - Include example search queries
 
 ---
-
-## Example Prompts for AI Assistant
-
-When using this guide with an AI coding assistant like Claude or Cursor:
-
-### Initial Prompt
-
-```
-You are an expert connector builder for Airweave.
-
-You must now implement the connector for [CONNECTOR NAME].
-
-The most important entities we must implement from this API are:
-- [ENTITY 1]
-- [ENTITY 2]
-- [ENTITY 3]
-
-I have already completed all prerequisites:
-✅ Added OAuth credentials to `backend/airweave/platform/auth/yaml/dev.integrations.yaml`
-✅ Set up authentication in `monke/configs/[short_name].yaml`
-✅ Loaded API documentation: @[CONNECTOR API DOCS]
-
-Your job is to write the code. I will handle:
-- Starting/stopping services
-- Testing the connector manually
-- Running Monke tests
-
-Follow this guide: @connector-development-end-to-end.mdc
-
-Please start by:
-1. Analyzing the API documentation to understand the entity hierarchy
-2. Creating entity schemas in `backend/airweave/platform/entities/[short_name].py`
-3. Creating the source connector in `backend/airweave/platform/sources/[short_name].py`
-
-Do not write code to trigger syncs or test anything - I will do that manually.
-```
 
 ### Follow-up Prompts
 
