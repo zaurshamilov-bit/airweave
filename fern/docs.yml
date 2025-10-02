@@ -95,6 +95,8 @@ navigation:
       path: docs/pages/connectors/sharepoint/main.mdx
     - page: Stripe
       path: docs/pages/connectors/stripe/main.mdx
+    - page: Teams
+      path: docs/pages/connectors/teams/main.mdx
     - page: Todoist
       path: docs/pages/connectors/todoist/main.mdx
     - page: Zendesk
