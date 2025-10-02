@@ -26,6 +26,17 @@ integrations:
 
   bitbucket:
 
+  box:
+    oauth_type: "with_refresh"
+    url: "https://account.box.com/api/oauth2/authorize"
+    backend_url: "https://api.box.com/oauth2/token"
+    grant_type: "authorization_code"
+    client_id: "9v2ljrwlogpn0j6xm7prup7lp0ql4t2y"
+    client_secret: "box-client-secret-key"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "root_readonly"
+
   confluence:
     oauth_type: "with_rotating_refresh"
     url: "https://auth.atlassian.com/authorize"

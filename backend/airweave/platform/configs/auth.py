@@ -210,6 +210,12 @@ class BitbucketAuthConfig(AuthConfig):
     )
 
 
+class BoxAuthConfig(OAuth2WithRefreshAuthConfig):
+    """Box authentication credentials schema."""
+
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
+
+
 class ClickUpAuthConfig(OAuth2AuthConfig):
     """Clickup authentication credentials schema."""
 
