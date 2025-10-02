@@ -34,7 +34,7 @@ integrations:
     client_secret: "0hYcyx6u5YpV9L29sTAjifivofr9fkQj"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
-    scope: "root_readonly"
+    scope: "root_readwrite"
 
   confluence:
     oauth_type: "with_rotating_refresh"

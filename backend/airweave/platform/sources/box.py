@@ -64,10 +64,15 @@ class BoxSource(BaseSource):
         instance.access_token = access_token
 
         # Store config values as instance attributes
+        # folder_id defaults to "0" (root) if not provided or empty
+        folder_id = "0"
         if config:
-            instance.folder_id = config.get("folder_id", "0")  # 0 is root folder
-        else:
-            instance.folder_id = "0"
+            config_folder_id = config.get("folder_id", "0")
+            # Handle empty string or None - use default "0"
+            if config_folder_id and str(config_folder_id).strip():
+                folder_id = str(config_folder_id).strip()
+
+        instance.folder_id = folder_id
 
         # Rate limiting state
         instance.last_request_time = 0.0
@@ -241,6 +246,15 @@ class BoxSource(BaseSource):
         Returns:
             BoxFolderEntity instance
         """
+        # Safely extract parent information (None for root folder)
+        parent = folder_data.get("parent") or {}
+        parent_id = parent.get("id") if parent else None
+        parent_name = parent.get("name") if parent else None
+
+        # Safely extract path collection
+        path_collection_data = folder_data.get("path_collection") or {}
+        path_entries = path_collection_data.get("entries") or []
+
         return BoxFolderEntity(
             entity_id=folder_data["id"],
             breadcrumbs=breadcrumbs,
@@ -249,8 +263,7 @@ class BoxSource(BaseSource):
             description=folder_data.get("description"),
             size=folder_data.get("size"),
             path_collection=[
-                {"id": entry.get("id"), "name": entry.get("name")}
-                for entry in folder_data.get("path_collection", {}).get("entries", [])
+                {"id": entry.get("id"), "name": entry.get("name")} for entry in path_entries
             ],
             created_at=folder_data.get("created_at"),
             modified_at=folder_data.get("modified_at"),
@@ -259,8 +272,8 @@ class BoxSource(BaseSource):
             created_by=folder_data.get("created_by"),
             modified_by=folder_data.get("modified_by"),
             owned_by=folder_data.get("owned_by"),
-            parent_id=folder_data.get("parent", {}).get("id"),
-            parent_name=folder_data.get("parent", {}).get("name"),
+            parent_id=parent_id,
+            parent_name=parent_name,
             item_status=folder_data.get("item_status"),
             shared_link=folder_data.get("shared_link"),
             folder_upload_email=folder_data.get("folder_upload_email"),
@@ -366,11 +379,13 @@ class BoxSource(BaseSource):
         )
         folder_breadcrumbs = [*breadcrumbs, folder_breadcrumb]
 
-        # Generate collaborations for this folder
-        async for collab_entity in self._generate_collaboration_entities(
-            client, folder_data["id"], "folder", folder_data.get("name", ""), folder_breadcrumbs
-        ):
-            yield collab_entity
+        # Generate collaborations for this folder (skip root folder - ID 0)
+        # Box API doesn't support collaborations on the root folder
+        if folder_data["id"] != "0":
+            async for collab_entity in self._generate_collaboration_entities(
+                client, folder_data["id"], "folder", folder_data.get("name", ""), folder_breadcrumbs
+            ):
+                yield collab_entity
 
         # Process all items in this folder (files and subfolders)
         async for entity in self._process_folder_items(client, folder_id, folder_breadcrumbs):
@@ -389,19 +404,32 @@ class BoxSource(BaseSource):
         Yields:
             File, comment, and collaboration entities
         """
+        # Safely extract parent and path information
+        parent = file_data.get("parent") or {}
+        parent_folder_id = parent.get("id") if parent else ""
+        parent_folder_name = parent.get("name") if parent else ""
+
+        path_collection_data = file_data.get("path_collection") or {}
+        path_entries = path_collection_data.get("entries") or []
+
+        file_name = file_data.get("name", "")
+        file_extension = file_data.get("extension", "").lower()
+
+        # Check if this is a Box Note (proprietary format that can't be downloaded)
+        is_box_note = file_extension == "boxnote"
+
         # Create file entity
         file_entity = BoxFileEntity(
             entity_id=file_data["id"],
             breadcrumbs=breadcrumbs,
             file_id=file_data["id"],
-            name=file_data.get("name", ""),
+            name=file_name,
             box_id=file_data["id"],
             description=file_data.get("description"),
-            parent_folder_id=file_data.get("parent", {}).get("id", ""),
-            parent_folder_name=file_data.get("parent", {}).get("name", ""),
+            parent_folder_id=parent_folder_id,
+            parent_folder_name=parent_folder_name,
             path_collection=[
-                {"id": entry.get("id"), "name": entry.get("name")}
-                for entry in file_data.get("path_collection", {}).get("entries", [])
+                {"id": entry.get("id"), "name": entry.get("name")} for entry in path_entries
             ],
             mime_type=file_data.get("mime_type"),
             size=file_data.get("size"),
@@ -429,21 +457,36 @@ class BoxSource(BaseSource):
             sequence_id=file_data.get("sequence_id"),
         )
 
-        # Prepare auth headers for file download
-        token = await self.get_access_token()
-        headers = {"Authorization": f"Bearer {token}"}
-
         # Process the file entity (download, extract text, chunk)
-        try:
-            processed_entity = await self.process_file_entity(
-                file_entity=file_entity,
-                headers=headers,
-            )
-            yield processed_entity
-        except Exception as e:
-            self.logger.warning(f"Failed to process file {file_data['id']}: {e}")
-            # Still yield the file entity without processed content
+        # Skip Box Notes (proprietary format) and files without download permission
+        permissions = file_data.get("permissions") or {}
+        can_download = permissions.get("can_download", False)
+
+        if is_box_note:
+            # For Box Notes, yield as-is (metadata only, no content extraction)
+            self.logger.debug(f"Skipping Box Note (proprietary format): {file_name}")
             yield file_entity
+        elif not can_download:
+            # File doesn't have download permissions
+            self.logger.debug(
+                f"Skipping file without download permission: {file_name} ({file_data['id']})"
+            )
+            yield file_entity
+        else:
+            # File can be downloaded - process it
+            token = await self.get_access_token()
+            headers = {"Authorization": f"Bearer {token}"}
+
+            try:
+                processed_entity = await self.process_file_entity(
+                    file_entity=file_entity,
+                    headers=headers,
+                )
+                yield processed_entity
+            except Exception as e:
+                self.logger.warning(f"Failed to process file {file_name} ({file_data['id']}): {e}")
+                # Still yield the file entity without processed content
+                yield file_entity
 
         # Create breadcrumb for this file
         file_breadcrumb = Breadcrumb(

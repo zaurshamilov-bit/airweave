@@ -35,7 +35,7 @@ integrations:
     client_secret: "box-client-secret-key"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
-    scope: "root_readonly"
+    scope: "root_readwrite"
 
   confluence:
     oauth_type: "with_rotating_refresh"
