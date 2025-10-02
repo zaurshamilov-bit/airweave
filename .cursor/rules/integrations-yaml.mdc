@@ -70,6 +70,20 @@ When `requires_pkce: true`, the OAuth flow includes:
 
 This prevents authorization code interception attacks by ensuring the token exchange request comes from the same client that initiated authorization.
 
+**Microsoft Teams (Microsoft Graph API):**
+```yaml
+teams:
+  auth_type: "oauth2_with_refresh"
+  url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+  backend_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+  grant_type: "authorization_code"
+  client_id: "your-client-id"
+  client_secret: "your-client-secret"
+  content_type: "application/x-www-form-urlencoded"
+  client_credential_location: "body"
+  scope: "offline_access User.Read Team.ReadBasic.All Channel.ReadBasic.All ChannelMessage.Read.All Chat.Read ChatMessage.Read Files.Read.All"
+```
+
 ## Folder Structure
 The files appear to be part of a structured monorepo with:
 

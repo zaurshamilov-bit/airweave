@@ -36,7 +36,13 @@ class PipedreamAuthProvider(BaseAuthProvider):
 Providers map between Airweave and external service naming:
 ```python
 FIELD_NAME_MAPPING = {"api_key": "generic_api_key"}
-SLUG_NAME_MAPPING = {"google_drive": "googledrive"}
+SLUG_NAME_MAPPING = {
+    "google_drive": "googledrive",
+    "outlook_calendar": "outlook",
+    "onedrive": "one_drive",
+    "sharepoint": "one_drive",  # SharePoint uses OneDrive integration (same Graph API)
+    "teams": "microsoft_teams",
+}
 ```
 
 ## Integration with TokenManager
