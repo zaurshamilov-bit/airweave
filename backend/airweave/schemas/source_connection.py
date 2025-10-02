@@ -29,6 +29,7 @@ class AuthenticationMethod(str, Enum):
 class OAuthType(str, Enum):
     """OAuth token types for sources."""
 
+    OAUTH1 = "oauth1"  # OAuth 1.0a flow (consumer key/secret)
     ACCESS_ONLY = "access_only"  # Just access token, no refresh
     WITH_REFRESH = "with_refresh"  # Access + refresh token
     WITH_ROTATING_REFRESH = "with_rotating_refresh"  # Refresh token rotates on use

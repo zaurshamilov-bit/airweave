@@ -58,21 +58,17 @@ class IntegrationSettings:
         if config is None:
             config = {}
 
-        # Check for auth_type first (for OAuth1)
-        auth_type_str = config.get("auth_type", "")
-
-        # Then check oauth_type (for OAuth2)
+        # Check oauth_type for all OAuth integrations (OAuth1 and OAuth2)
         oauth_type_str = config.get("oauth_type", "")
 
         # Set integration short name
         config["integration_short_name"] = name
 
-        # Handle OAuth1 (new auth_type field)
-        if auth_type_str == "oauth1":
+        # Handle OAuth1
+        if oauth_type_str == "oauth1":
             config["authentication_method"] = AuthenticationMethod.OAUTH_BROWSER.value
-            config["oauth_type"] = None  # OAuth1 doesn't use oauth_type
             model = OAuth1Settings
-        # Handle OAuth2 (existing oauth_type field)
+        # Handle OAuth2 (access_only, with_refresh, with_rotating_refresh)
         elif oauth_type_str:
             # It's an OAuth2 integration
             config["authentication_method"] = AuthenticationMethod.OAUTH_BROWSER.value

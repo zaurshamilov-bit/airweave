@@ -30,14 +30,25 @@ class TrelloBongo(BaseBongo):
         """Initialize the Trello bongo.
 
         Args:
-            credentials: Dict with oauth_token and oauth_token_secret
-            **kwargs: Configuration from test config file
+            credentials: Dict with oauth_token and oauth_token_secret from Composio
+            **kwargs: Configuration from test config file (includes consumer credentials)
         """
         super().__init__(credentials)
+
+        # OAuth1 user tokens (from Composio)
         self.oauth_token: str = credentials["oauth_token"]
         self.oauth_token_secret: str = credentials["oauth_token_secret"]
-        self.consumer_key: str = credentials.get("consumer_key", "")
-        self.consumer_secret: str = credentials.get("consumer_secret", "")
+
+        # OAuth1 consumer credentials (app-level, from config/env vars)
+        # Composio provides user tokens, but consumer credentials must come from config
+        self.consumer_key: str = kwargs.get("consumer_key", "")
+        self.consumer_secret: str = kwargs.get("consumer_secret", "")
+
+        if not self.consumer_key or not self.consumer_secret:
+            raise ValueError(
+                "Trello requires consumer_key and consumer_secret in config. "
+                "Add to trello.yaml: consumer_key: ${MONKE_TRELLO_CONSUMER_KEY}"
+            )
 
         # Test configuration
         self.entity_count: int = int(kwargs.get("entity_count", 3))
