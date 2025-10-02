@@ -424,21 +424,57 @@ class BoxBongo(BaseBongo):
                             f"Failed to delete file {entity['id']}: {e}"
                         )
 
-            # Finally delete folders
+            # Finally delete folders (Box deletes contents automatically with recursive=true)
+            # We need to track cascade-deleted children
             for entity in entities:
                 if entity["type"] == "folder":
+                    folder_id = entity["id"]
+
+                    # Find all child entities that will be cascade-deleted
+                    children_to_delete = []
+
+                    # Find files in this folder
+                    for file in self.created_entities:
+                        if (
+                            file["type"] == "file"
+                            and file.get("parent_id") == folder_id
+                        ):
+                            file_id = file["id"]
+                            children_to_delete.append(file_id)
+
+                            # Find comments on this file (comments have parent_id = file_id)
+                            for comment in self.created_entities:
+                                if (
+                                    comment["type"] == "comment"
+                                    and comment.get("parent_id") == file_id
+                                ):
+                                    children_to_delete.append(comment["id"])
+
+                    # Find nested folders
+                    for subfolder in self.created_entities:
+                        if (
+                            subfolder["type"] == "folder"
+                            and subfolder.get("parent_id") == folder_id
+                        ):
+                            children_to_delete.append(subfolder["id"])
+
                     try:
                         await self._rate_limit()
                         resp = await client.delete(
-                            f"{self.API_BASE}/folders/{entity['id']}?recursive=true",
+                            f"{self.API_BASE}/folders/{folder_id}?recursive=true",
                             headers=self._headers(),
                         )
                         if resp.status_code == 204:
-                            deleted.append(entity["id"])
+                            # Add the folder itself
+                            deleted.append(folder_id)
+                            # Add all cascade-deleted children
+                            deleted.extend(children_to_delete)
+                            if children_to_delete:
+                                self.logger.info(
+                                    f"📎 Folder {folder_id} cascade-deleted {len(children_to_delete)} children"
+                                )
                     except Exception as e:
-                        self.logger.warning(
-                            f"Failed to delete folder {entity['id']}: {e}"
-                        )
+                        self.logger.warning(f"Failed to delete folder {folder_id}: {e}")
 
         return deleted
 
