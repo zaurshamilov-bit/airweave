@@ -342,6 +342,12 @@ class TodoistConfig(SourceConfig):
     pass
 
 
+class TrelloConfig(SourceConfig):
+    """Trello configuration schema."""
+
+    pass
+
+
 class TeamsConfig(SourceConfig):
     """Microsoft Teams configuration schema."""
 

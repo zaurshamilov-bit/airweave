@@ -275,6 +275,16 @@ integrations:
 
   stripe:
 
+  trello:
+    oauth_type: "oauth1"
+    request_token_url: "https://trello.com/1/OAuthGetRequestToken"
+    authorization_url: "https://trello.com/1/OAuthAuthorizeToken"
+    access_token_url: "https://trello.com/1/OAuthGetAccessToken"
+    consumer_key: "65319d6cb1a017fafcb23b1f0d3c8dea"  # Get from https://trello.com/power-ups/admin
+    consumer_secret: "trello-consumer-secret-key"  # Fetched from Azure Key Vault
+    scope: "read,write"
+    expiration: "never"
+
   todoist:
     oauth_type: "access_only"
     url: "https://todoist.com/oauth/authorize"

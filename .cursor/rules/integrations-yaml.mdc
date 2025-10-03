@@ -93,6 +93,19 @@ The files appear to be part of a structured monorepo with:
 └── prod.integrations.yaml
 ```
 
+**OAuth1 Structure (e.g., Trello):**
+```yaml
+trello:
+  oauth_type: "oauth1"  # Specifies OAuth1 instead of OAuth2
+  request_token_url: "https://trello.com/1/OAuthGetRequestToken"
+  authorization_url: "https://trello.com/1/OAuthAuthorizeToken"
+  access_token_url: "https://trello.com/1/OAuthGetAccessToken"
+  consumer_key: "your-consumer-key"
+  consumer_secret: "@Microsoft.KeyVault(SecretUri=...)"
+  scope: "read,write"  # Optional
+  expiration: 8640000  # Optional, token lifetime in seconds
+```
+
 ## Template URLs for Instance-Specific OAuth
 
 Some integrations require per-customer endpoints (e.g., Zendesk subdomain):
