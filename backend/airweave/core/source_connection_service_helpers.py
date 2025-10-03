@@ -659,12 +659,8 @@ class SourceConnectionHelpers:
                     entities_inserted = getattr(job, "entities_inserted", 0) or 0
                     entities_updated = getattr(job, "entities_updated", 0) or 0
                     entities_deleted = getattr(job, "entities_deleted", 0) or 0
-                    entities_kept = getattr(job, "entities_kept", 0) or 0
                     entities_skipped = getattr(job, "entities_skipped", 0) or 0
 
-                    entities_processed = (
-                        entities_inserted + entities_updated + entities_deleted + entities_kept
-                    )
                     entities_failed = entities_skipped
 
                     last_job = schemas.SyncJobDetails(
@@ -673,7 +669,6 @@ class SourceConnectionHelpers:
                         started_at=getattr(job, "started_at", None),
                         completed_at=getattr(job, "completed_at", None),
                         duration_seconds=duration_seconds,
-                        entities_processed=entities_processed,
                         entities_inserted=entities_inserted,
                         entities_updated=entities_updated,
                         entities_deleted=entities_deleted,
@@ -913,7 +908,6 @@ class SourceConnectionHelpers:
                 if job.completed_at and job.started_at
                 else None
             ),
-            entities_processed=getattr(job, "entities_processed", 0),
             entities_inserted=getattr(job, "entities_inserted", 0),
             entities_updated=getattr(job, "entities_updated", 0),
             entities_deleted=getattr(job, "entities_deleted", 0),
