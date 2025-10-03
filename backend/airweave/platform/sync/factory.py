@@ -364,8 +364,19 @@ class SyncFactory:
             # Non-fatal: older sources may ignore this
             pass
 
-        # Setup token manager if needed
-        if auth_config.get("auth_provider_instance"):
+        # Setup token manager if needed (for both auth provider and standard OAuth sources)
+        auth_provider_instance = auth_config.get("auth_provider_instance")
+        auth_config_class = source_connection_data.get("auth_config_class")
+
+        # Set up token manager if:
+        # 1. There's an auth provider instance, OR
+        # 2. It's a standard OAuth source (has auth_config_class and credentials are
+        #    not just a string token)
+        should_setup_token_manager = auth_provider_instance is not None or (
+            auth_config_class and not isinstance(source_credentials, str)
+        )
+
+        if should_setup_token_manager:
             try:
                 await cls._setup_token_manager(
                     db=db,
@@ -374,7 +385,7 @@ class SyncFactory:
                     source_credentials=auth_config["credentials"],
                     ctx=ctx,
                     logger=logger,
-                    auth_provider_instance=auth_config["auth_provider_instance"],
+                    auth_provider_instance=auth_provider_instance,
                 )
             except Exception as e:
                 logger.error(
@@ -826,10 +837,10 @@ class SyncFactory:
                 db,
                 source,
                 source_connection_data,
-                ctx,
-                None,
-                final_access_token,
-                logger,
+                final_access_token,  # source_credentials (4th param)
+                ctx,  # ctx (5th param)
+                logger,  # logger (6th param)
+                None,  # auth_provider_instance (7th param)
             )
 
     @classmethod
