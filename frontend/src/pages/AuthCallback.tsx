@@ -256,8 +256,11 @@ async function handleOriginalOAuthCallback(
       // Store in localStorage without risk of exception
       localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
 
-      // Immediate redirect to dashboard with error flag
-      const returnPath = savedState.originPath || "/";
+      // Immediate redirect to collection or dashboard with error flag
+      const collectionId = savedState.collectionId;
+      const returnPath = collectionId
+        ? `/collections/${collectionId}`
+        : (savedState.originPath || "/");
       window.location.href = `${returnPath}?connected=error`;
       return;
     }
@@ -284,9 +287,19 @@ async function handleOriginalOAuthCallback(
     console.log("📊 UPDATED STATE WITH CREDENTIALS:", JSON.stringify(updatedState, null, 2));
     sessionStorage.setItem("oauth_dialog_state", JSON.stringify(updatedState));
 
-    // Redirect back to original page with flag to restore dialog
-    const returnPath = savedState.originPath || "/";
-    window.location.href = `${returnPath}?restore_dialog=true`;
+    // Redirect back to collection page if we have a collection ID, otherwise originPath or home
+    const collectionId = savedState.collectionId;
+    let returnPath: string;
+
+    if (collectionId) {
+      // Redirect to collection detail page with success params
+      returnPath = `/collections/${collectionId}?status=success&source_connection_id=${credential.id}`;
+    } else {
+      // Fallback to originPath with restore dialog flag
+      returnPath = `${savedState.originPath || "/"}?restore_dialog=true`;
+    }
+
+    window.location.href = returnPath;
   } catch (error) {
     console.error("❌ Error processing OAuth callback:", error);
     setIsProcessing(false);
@@ -316,8 +329,11 @@ async function handleOriginalOAuthCallback(
     // Store in localStorage
     localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
 
-    // Redirect with error flag - this will trigger the error UI
-    const returnPath = parsedState.originPath || "/dashboard";
+    // Redirect with error flag - prefer collection page if available, otherwise originPath or dashboard
+    const collectionId = parsedState.collectionId;
+    const returnPath = collectionId
+      ? `/collections/${collectionId}`
+      : (parsedState.originPath || "/dashboard");
     window.location.href = `${returnPath}?connected=error`;
   }
 }

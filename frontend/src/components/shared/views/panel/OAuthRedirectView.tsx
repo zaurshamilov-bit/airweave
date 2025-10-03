@@ -7,15 +7,31 @@ interface OAuthRedirectViewProps {
     context: {
         authenticationUrl?: string;
         sourceName?: string;
+        collectionId?: string;
     };
 }
 
 export const OAuthRedirectView: React.FC<OAuthRedirectViewProps> = ({ context }) => {
-    const { authenticationUrl, sourceName } = context;
+    const { authenticationUrl, sourceName, collectionId } = context;
     const { closePanel } = useSidePanelStore.getState();
 
     const handleRedirect = () => {
         if (authenticationUrl) {
+            // Save collection context to sessionStorage before OAuth redirect
+            if (collectionId) {
+                const existingStateJson = sessionStorage.getItem('oauth_dialog_state');
+                const existingState = existingStateJson ? JSON.parse(existingStateJson) : {};
+
+                const stateToSave = {
+                    ...existingState,
+                    collectionId: collectionId,
+                    originPath: `/collections/${collectionId}`,
+                    timestamp: Date.now(),
+                };
+
+                sessionStorage.setItem('oauth_dialog_state', JSON.stringify(stateToSave));
+            }
+
             // Close the panel before redirecting
             closePanel();
             window.location.href = authenticationUrl;

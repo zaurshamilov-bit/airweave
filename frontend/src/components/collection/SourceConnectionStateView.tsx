@@ -610,6 +610,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
           isRefreshing={isRefreshingAuth}
           showBorder={false}
           onDelete={handleDeleteConnection}
+          collectionId={sourceConnection.readable_collection_id}
         />
       )}
 
