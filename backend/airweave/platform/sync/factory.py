@@ -364,8 +364,16 @@ class SyncFactory:
             # Non-fatal: older sources may ignore this
             pass
 
-        # Setup token manager if needed
-        if auth_config.get("auth_provider_instance"):
+        # Setup token manager for OAuth sources (if applicable)
+        # Skip only for direct token injection - let _setup_token_manager decide if
+        # a token manager should actually be created based on OAuth type and credentials
+        auth_mode = auth_config.get("auth_mode")
+        auth_provider_instance = auth_config.get("auth_provider_instance")
+        is_direct_injection = auth_mode == AuthProviderMode.DIRECT and isinstance(
+            source_credentials, str
+        )
+
+        if not is_direct_injection:
             try:
                 await cls._setup_token_manager(
                     db=db,
@@ -374,7 +382,7 @@ class SyncFactory:
                     source_credentials=auth_config["credentials"],
                     ctx=ctx,
                     logger=logger,
-                    auth_provider_instance=auth_config["auth_provider_instance"],
+                    auth_provider_instance=auth_provider_instance,
                 )
             except Exception as e:
                 logger.error(
@@ -826,10 +834,10 @@ class SyncFactory:
                 db,
                 source,
                 source_connection_data,
-                ctx,
-                None,
                 final_access_token,
+                ctx,
                 logger,
+                None,
             )
 
     @classmethod

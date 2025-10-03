@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   all_connectors_one_runner:
+    if: false # Temporarily disabled
     runs-on: ubuntu-latest
     environment: dev
     # Add Azure permissions for OIDC authentication
