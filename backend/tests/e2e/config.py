@@ -49,6 +49,9 @@ class TestSettings(BaseSettings):
     TEST_PIPEDREAM_CLIENT_ID: str = Field(description="Pipedream client ID for BYOC")
     TEST_PIPEDREAM_CLIENT_SECRET: str = Field(description="Pipedream client secret for BYOC")
 
+    TEST_TRELLO_CONSUMER_KEY: str = Field(description="Trello consumer key for BYOC")
+    TEST_TRELLO_CONSUMER_SECRET: str = Field(description="Trello consumer secret for BYOC")
+
     # Auth provider configuration
     TEST_AUTH_PROVIDER_NAME: Literal["composio"] = Field(
         default="composio",
