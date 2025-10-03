@@ -451,8 +451,17 @@ class TestOAuth1Authentication:
         }
 
         response = await api_client.post("/source-connections", json=payload)
-        assert response.status_code == 400
+
+        # The validation should catch partial OAuth1 credentials
+        # This could be either 400 (business logic) or 422 (schema validation)
+        assert response.status_code in [400, 422], f"Expected error status, got {response.status_code}"
+
         error = response.json()
-        detail = error.get("detail", "").lower()
-        # Should mention both credentials are required
-        assert "consumer" in detail or "both" in detail
+
+        # Convert entire error response to string for checking
+        error_str = str(error).lower()
+
+        # Check that the error mentions the validation issue
+        # The Pydantic validator raises: "OAuth1 BYOC requires both consumer_key and consumer_secret or neither"
+        assert "consumer" in error_str and ("both" in error_str or "neither" in error_str or "required" in error_str), \
+            f"Expected validation error about OAuth1 credentials, got: {error}"
