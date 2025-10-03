@@ -364,19 +364,16 @@ class SyncFactory:
             # Non-fatal: older sources may ignore this
             pass
 
-        # Setup token manager if needed (for both auth provider and standard OAuth sources)
+        # Setup token manager for OAuth sources (if applicable)
+        # Skip only for direct token injection - let _setup_token_manager decide if
+        # a token manager should actually be created based on OAuth type and credentials
+        auth_mode = auth_config.get("auth_mode")
         auth_provider_instance = auth_config.get("auth_provider_instance")
-        auth_config_class = source_connection_data.get("auth_config_class")
-
-        # Set up token manager if:
-        # 1. There's an auth provider instance, OR
-        # 2. It's a standard OAuth source (has auth_config_class and credentials are
-        #    not just a string token)
-        should_setup_token_manager = auth_provider_instance is not None or (
-            auth_config_class and not isinstance(source_credentials, str)
+        is_direct_injection = auth_mode == AuthProviderMode.DIRECT and isinstance(
+            source_credentials, str
         )
 
-        if should_setup_token_manager:
+        if not is_direct_injection:
             try:
                 await cls._setup_token_manager(
                     db=db,
