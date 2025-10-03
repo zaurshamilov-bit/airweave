@@ -323,4 +323,19 @@ integrations:
       access_type: "offline"
       prompt: "consent"
 
+  salesforce:
+    oauth_type: "with_refresh"
+    url: "https://{instance_url}/services/oauth2/authorize"
+    backend_url: "https://{instance_url}/services/oauth2/token"
+    url_template: true
+    backend_url_template: true
+    grant_type: "authorization_code"
+    client_id: "salesforce-client-id-key"
+    client_secret: "salesforce-client-secret-key"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "api refresh_token"
+    additional_frontend_params:
+      response_type: "code"
+
   qdrant:

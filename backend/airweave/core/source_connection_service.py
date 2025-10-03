@@ -797,6 +797,15 @@ class SourceConnectionService:
             # Create default OAuth browser authentication
             oauth_auth = OAuthBrowserAuthentication()
 
+        # Enforce BYOC if required by the source
+        if source.requires_byoc:
+            if not oauth_auth.client_id or not oauth_auth.client_secret:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Source '{source.name}' requires BYOC (Bring Your Own Credentials). "
+                    f"You must provide both client_id and client_secret in the auth object.",
+                )
+
         # Validate config
         validated_config = await self._validate_config_fields(
             db, obj_in.short_name, obj_in.config, ctx

@@ -344,7 +344,7 @@ class OAuth2Service:
                 ctx.logger, integration_short_name
             )
 
-            # NEW: Render backend URL if it's a template
+            # Render backend URL if it's a template
             backend_url = integration_config.backend_url
             if getattr(integration_config, "backend_url_template", False):
                 if not config_fields:

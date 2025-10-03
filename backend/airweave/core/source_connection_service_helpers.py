@@ -272,13 +272,25 @@ class SourceConnectionHelpers:
         access_token: str,
         config_fields: Optional[ConfigValues],
         ctx: ApiContext,
+        credentials: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Validate OAuth access token."""
+        """Validate OAuth access token.
+
+        Args:
+            db: Database session
+            source: Source model
+            access_token: OAuth access token (for backward compatibility)
+            config_fields: Optional config fields
+            ctx: API context
+            credentials: Full OAuth credentials dict (includes access_token, instance_url, etc.)
+        """
         try:
             source_cls = resource_locator.get_source(source)
+
             source_instance = await source_cls.create(
                 access_token=access_token, config=config_fields
             )
+
             source_instance.set_logger(ctx.logger)
 
             if hasattr(source_instance, "validate"):
