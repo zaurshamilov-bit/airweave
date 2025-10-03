@@ -344,7 +344,6 @@ class SyncJobDetails(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     duration_seconds: Optional[float] = None
-    entities_processed: int = 0
     entities_inserted: int = 0
     entities_updated: int = 0
     entities_deleted: int = 0
@@ -436,7 +435,6 @@ class SourceConnectionJob(BaseModel):
     duration_seconds: Optional[float] = None
 
     # Metrics
-    entities_processed: int = 0
     entities_inserted: int = 0
     entities_updated: int = 0
     entities_deleted: int = 0
