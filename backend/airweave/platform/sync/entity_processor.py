@@ -766,9 +766,15 @@ class EntityProcessor:
             inserts.clear()
 
         if create_objs:
-            await self._execute_bulk_insert(
+            # Deduplicate both DB payload AND the inserts list to keep them in sync
+            deduped_objs, kept_parent_ids = await self._execute_bulk_insert(
                 db, create_objs, inserts, children_by_parent, sync_context
             )
+
+            # Remove duplicate parents from inserts to match deduplicated DB payload
+            # This ensures downstream consumers (destinations, metrics) see consistent data
+            inserts[:] = [p for p in inserts if p.entity_id in kept_parent_ids]
+
             await self._update_state_tracker_for_inserts(inserts, sync_context)
 
     async def _prepare_insert_objects(
@@ -833,7 +839,7 @@ class EntityProcessor:
         self,
         create_objs: List[schemas.EntityCreate],
         sync_context: SyncContext,
-    ) -> List[schemas.EntityCreate]:
+    ) -> Tuple[List[schemas.EntityCreate], Set[str]]:
         """Deduplicate entities by entity_id, keeping only the last occurrence.
 
         This prevents CardinalityViolationError when the same entity_id appears
@@ -844,7 +850,7 @@ class EntityProcessor:
             sync_context: Sync context for logging
 
         Returns:
-            Deduplicated list of entity create objects
+            Tuple of (deduplicated objects, set of kept entity_ids)
         """
         seen_entity_ids: Dict[str, int] = {}
         deduped_objs: List[schemas.EntityCreate] = []
@@ -865,7 +871,9 @@ class EntityProcessor:
                 f"(removed {removed_count} duplicates - shared resources in batch)"
             )
 
-        return deduped_objs
+        # Return both deduplicated objects and the set of kept entity_ids
+        kept_entity_ids = {obj.entity_id for obj in deduped_objs}
+        return deduped_objs, kept_entity_ids
 
     async def _execute_bulk_insert(
         self,
@@ -874,10 +882,14 @@ class EntityProcessor:
         inserts: List[BaseEntity],
         children_by_parent: Dict[str, List[BaseEntity]],
         sync_context: SyncContext,
-    ) -> None:
-        """Execute bulk insert with deduplication and metadata assignment."""
+    ) -> Tuple[List[schemas.EntityCreate], Set[str]]:
+        """Execute bulk insert with deduplication and metadata assignment.
+
+        Returns:
+            Tuple of (deduplicated objects, set of kept entity_ids)
+        """
         # Deduplicate entities to prevent CardinalityViolationError
-        deduped_objs = self._deduplicate_entity_creates(create_objs, sync_context)
+        deduped_objs, kept_entity_ids = self._deduplicate_entity_creates(create_objs, sync_context)
 
         # Bulk insert to database
         created_rows = await crud.entity.bulk_create(db=db, objs=deduped_objs, ctx=sync_context.ctx)
@@ -885,18 +897,24 @@ class EntityProcessor:
         # Map database IDs back to entities
         created_map = {row.entity_id: row.id for row in created_rows}
 
-        # Assign database IDs to parent entities
+        # Assign database IDs to parent entities (only those that were kept)
         for parent in inserts:
+            if parent.entity_id not in kept_entity_ids:
+                continue
             db_id = created_map.get(parent.entity_id)
             if db_id and parent.airweave_system_metadata:
                 parent.airweave_system_metadata.db_entity_id = db_id
 
-        # Assign database IDs to child entities
+        # Assign database IDs to child entities (only for kept parents)
         for parent in inserts:
+            if parent.entity_id not in kept_entity_ids:
+                continue
             db_id = created_map.get(parent.entity_id)
             for child in children_by_parent.get(parent.entity_id, []):
                 if child.airweave_system_metadata and db_id:
                     child.airweave_system_metadata.db_entity_id = db_id
+
+        return deduped_objs, kept_entity_ids
 
     async def _batch_persist_db_updates(
         self,
