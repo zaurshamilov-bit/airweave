@@ -93,6 +93,26 @@ export const statusConfig = {
     label: "Cancelled"
   },
 
+  // API Key statuses
+  "EXPIRED": {
+    color: "bg-rose-500",
+    textColor: "text-rose-700 dark:text-rose-400",
+    bgColor: "bg-rose-50 dark:bg-rose-950/80",
+    label: "Expired"
+  },
+  "EXPIRING_SOON": {
+    color: "bg-amber-500",
+    textColor: "text-amber-700 dark:text-amber-400",
+    bgColor: "bg-amber-50 dark:bg-amber-950/80",
+    label: "Expiring Soon"
+  },
+  "UNKNOWN": {
+    color: "bg-slate-400",
+    textColor: "text-slate-700 dark:text-slate-400",
+    bgColor: "bg-slate-50 dark:bg-slate-800/80",
+    label: "Unknown"
+  },
+
   // Fallback for unknown statuses
   "default": {
     color: "bg-slate-400",
@@ -102,26 +122,46 @@ export const statusConfig = {
   }
 };
 
-// Status descriptions for tooltips
-const getStatusDescription = (statusKey: string): string | null => {
+// Context-aware status descriptions for tooltips
+export type TooltipContext = "collection" | "apiKey";
+
+const getStatusDescription = (statusKey: string, context?: TooltipContext): string | null => {
   const normalizedKey = statusKey.toUpperCase();
 
-  const descriptions: Record<string, string> = {
+  // Collection-specific descriptions
+  const collectionDescriptions: Record<string, string> = {
     "ACTIVE": "At least one source connection has completed a sync or is currently syncing. Your collection has data and is ready for queries.",
     "ERROR": "All source connections have failed their last sync. Check your connections and authentication to resolve sync issues.",
     "NEEDS SOURCE": "This collection has no authenticated connections, or connections exist but haven't successfully synced yet. Configure a source or wait for the initial sync to complete."
   };
 
-  return descriptions[normalizedKey] || null;
+  // API key-specific descriptions
+  const apiKeyDescriptions: Record<string, string> = {
+    "ACTIVE": "This API key is valid and can be used to authenticate requests. It will remain active until its expiration date.",
+    "EXPIRING_SOON": "This API key will expire within 7 days. Create a new key before expiration to avoid service interruption.",
+    "EXPIRED": "This API key has expired and can no longer be used. Delete this key and create a new one to continue using the API.",
+    "UNKNOWN": "Unable to determine the status of this API key. Please verify the expiration date."
+  };
+
+  // Select description based on context
+  if (context === "apiKey") {
+    return apiKeyDescriptions[normalizedKey] || null;
+  } else if (context === "collection") {
+    return collectionDescriptions[normalizedKey] || null;
+  }
+
+  // No context specified - return null (no tooltip)
+  return null;
 };
 
 interface StatusBadgeProps {
   status: string;
   className?: string;
   showTooltip?: boolean;
+  tooltipContext?: TooltipContext;
 }
 
-export const StatusBadge = ({ status, className, showTooltip = true }: StatusBadgeProps) => {
+export const StatusBadge = ({ status, className, showTooltip = false, tooltipContext }: StatusBadgeProps) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
@@ -149,7 +189,7 @@ export const StatusBadge = ({ status, className, showTooltip = true }: StatusBad
   };
 
   const config = getStatusConfig(status);
-  const description = getStatusDescription(status);
+  const description = getStatusDescription(status, tooltipContext);
 
   const badge = (
     <div className={cn(
