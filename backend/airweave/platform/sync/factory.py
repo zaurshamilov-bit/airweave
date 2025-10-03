@@ -834,10 +834,10 @@ class SyncFactory:
                 db,
                 source,
                 source_connection_data,
-                final_access_token,  # source_credentials (4th param)
-                ctx,  # ctx (5th param)
-                logger,  # logger (6th param)
-                None,  # auth_provider_instance (7th param)
+                final_access_token,
+                ctx,
+                logger,
+                None,
             )
 
     @classmethod
