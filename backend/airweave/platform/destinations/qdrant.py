@@ -409,16 +409,26 @@ class QdrantDestination(VectorDBDestination):
         except Exception:  # pragma: no cover
             rhex = ()
 
-        write_timeout_errors: tuple[type[BaseException], ...] = ()
+        timeout_errors: tuple[type[BaseException], ...] = ()
         try:
             import httpcore  # type: ignore
             import httpx
 
-            write_timeout_errors = (httpx.WriteTimeout, httpcore.WriteTimeout)
+            # Catch both read and write timeouts
+            timeout_errors = (
+                httpx.ReadTimeout,
+                httpx.WriteTimeout,
+                httpcore.ReadTimeout,
+                httpcore.WriteTimeout,
+            )
         except Exception:  # pragma: no cover
-            write_timeout_errors = ()
+            timeout_errors = ()
 
         try:
+            self.logger.debug(
+                f"[Qdrant] Upserting {len(points)} points to collection={self.collection_name}, "
+                f"collection_id={self.collection_id}, vector_size={self.vector_size}"
+            )
             op = await self.client.upsert(
                 collection_name=self.collection_name,
                 points=points,
@@ -426,11 +436,26 @@ class QdrantDestination(VectorDBDestination):
             )
             if hasattr(op, "errors") and op.errors:
                 raise Exception(f"Errors during bulk insert: {op.errors}")
-        except (*write_timeout_errors, *rhex) as e:  # type: ignore[misc]
+        except (*timeout_errors, *rhex) as e:  # type: ignore[misc]
             n = len(points)
+
+            # Extract underlying error if wrapped
+            underlying_error = None
+            if hasattr(e, "__cause__") and e.__cause__:
+                underlying_error = e.__cause__
+
+            error_details = f"{type(e).__name__}: {e}"
+            if underlying_error:
+                error_details += (
+                    f" | Underlying: {type(underlying_error).__name__}: {underlying_error}"
+                )
+
             if n <= 1 or n <= min_batch:
                 self.logger.error(
-                    f"[Qdrant] Upsert failed on batch of {n} (min_batch={min_batch}): {e}"
+                    f"[Qdrant] Upsert failed on batch of {n} (min_batch={min_batch}) "
+                    f"to collection={self.collection_name}, collection_id={self.collection_id}. "
+                    f"Error: {error_details}",
+                    exc_info=True,  # This will log the full traceback
                 )
                 raise
             mid = n // 2
@@ -449,6 +474,20 @@ class QdrantDestination(VectorDBDestination):
             return
 
         await self.ensure_client_readiness()
+
+        # Log collection info before building points
+        self.logger.info(
+            f"[Qdrant] bulk_insert: {len(entities)} entities → collection={self.collection_name}, "
+            f"collection_id={self.collection_id}, vector_size={self.vector_size}"
+        )
+
+        # Verify collection exists
+        if not await self.collection_exists(self.collection_name):
+            self.logger.error(
+                f"[Qdrant] Collection {self.collection_name} does NOT exist! "
+                f"collection_id={self.collection_id}. Creating it now..."
+            )
+            await self.setup_collection(self.vector_size)
 
         point_structs = [self._build_point_struct(e) for e in entities]
 
