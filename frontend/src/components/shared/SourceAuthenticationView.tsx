@@ -20,7 +20,6 @@ interface SourceAuthenticationViewProps {
   isRefreshing?: boolean;
   showBorder?: boolean; // Optional border for collection detail view
   onDelete?: () => void; // Callback for delete action
-  collectionId?: string; // Collection ID for OAuth redirect context
 }
 
 export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> = ({
@@ -30,8 +29,7 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
   onRefreshUrl,
   isRefreshing = false,
   showBorder = false,
-  onDelete,
-  collectionId
+  onDelete
 }) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
@@ -49,21 +47,6 @@ export const SourceAuthenticationView: React.FC<SourceAuthenticationViewProps> =
 
   const handleConnect = () => {
     if (authenticationUrl) {
-      // Save collection context to sessionStorage before OAuth redirect
-      if (collectionId) {
-        const existingStateJson = sessionStorage.getItem('oauth_dialog_state');
-        const existingState = existingStateJson ? JSON.parse(existingStateJson) : {};
-
-        const stateToSave = {
-          ...existingState,
-          collectionId: collectionId,
-          originPath: `/collections/${collectionId}`,
-          timestamp: Date.now(),
-        };
-
-        sessionStorage.setItem('oauth_dialog_state', JSON.stringify(stateToSave));
-      }
-
       setIsConnecting(true);
       // Small delay for visual feedback before navigation
       setTimeout(() => {

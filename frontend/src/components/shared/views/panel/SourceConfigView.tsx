@@ -153,8 +153,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ context }) =
                 // Transition panel to show the redirect URL
                 setView('oauthRedirect', {
                     authenticationUrl: result.authentication.authentication_url,
-                    sourceName: sourceName,
-                    collectionId: collectionId
+                    sourceName: sourceName
                 });
             }
 

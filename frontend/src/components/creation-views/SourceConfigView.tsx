@@ -107,15 +107,11 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     setCustomRedirectUrl(value);
   };
 
-  // Generate default redirect URL with HTTPS
+  // Generate default redirect URL
   const getDefaultRedirectUrl = () => {
     const origin = window.location.origin;
-    // Always use HTTPS by default, even for localhost
-    if (origin.startsWith('https://')) {
-      return `${origin}?oauth_return=true`;
-    }
-    // Convert HTTP to HTTPS for all origins (including localhost)
-    return origin.replace('http://', 'https://') + '?oauth_return=true';
+    // Use the current protocol (don't force HTTPS for local dev)
+    return `${origin}?oauth_return=true`;
   };
 
   // Update store when connection name changes
@@ -388,6 +384,8 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         // For OAuth, don't sync until after authorization is complete
         // For external provider, sync immediately since we're using existing auth
         sync_immediately: authMode === 'direct_auth' || authMode === 'external_provider',
+        // Set redirect URL for OAuth flows
+        redirect_url: getDefaultRedirectUrl(),
       };
 
       // Add config fields if any - filter out empty values

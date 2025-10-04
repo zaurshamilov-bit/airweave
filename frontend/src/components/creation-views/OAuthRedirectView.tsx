@@ -14,25 +14,6 @@ export const OAuthRedirectView: React.FC = () => {
 
   const handleConnect = () => {
     if (authenticationUrl) {
-      // Save collection context to sessionStorage before OAuth redirect
-      const store = useCollectionCreationStore.getState();
-      const targetCollectionId = store.existingCollectionId || store.collectionId;
-
-      // Retrieve any existing saved state and merge with collection context
-      const existingStateJson = sessionStorage.getItem('oauth_dialog_state');
-      const existingState = existingStateJson ? JSON.parse(existingStateJson) : {};
-
-      const stateToSave = {
-        ...existingState,
-        collectionId: targetCollectionId,
-        collectionName: store.collectionName,
-        originPath: targetCollectionId ? `/collections/${targetCollectionId}` : '/',
-        isAddingToExisting: store.isAddingToExistingCollection,
-        timestamp: Date.now(),
-      };
-
-      sessionStorage.setItem('oauth_dialog_state', JSON.stringify(stateToSave));
-
       window.location.href = authenticationUrl;
     }
   };
