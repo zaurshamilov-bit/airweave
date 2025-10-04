@@ -126,7 +126,7 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
         collection = result.scalar_one_or_none()
 
         if not collection:
-            raise NotFoundException(f"Collection with readable ID {readable_id} not found")
+            raise NotFoundException(f"Collection '{readable_id}' not found.")
 
         # Validate organization access - convert PermissionException to NotFoundException
         # to avoid leaking information about collection existence across organizations
@@ -134,7 +134,7 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
             await self._validate_organization_access(ctx, collection.organization_id)
         except PermissionException:
             # Don't reveal that the collection exists but belongs to another organization
-            raise NotFoundException(f"Collection with readable ID {readable_id} not found")
+            raise NotFoundException(f"Collection '{readable_id}' not found.")
 
         # Compute and set the ephemeral status
         collection = (await self._attach_ephemeral_status(db, [collection], ctx))[0]

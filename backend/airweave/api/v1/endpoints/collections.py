@@ -238,12 +238,9 @@ async def search(
         await guard_rail.increment(ActionType.QUERIES)
 
         return result
-    except NotFoundException as e:
-        # Collection not found or doesn't belong to this organization
-        raise HTTPException(
-            status_code=404,
-            detail=f"Collection '{readable_id}' not found.",
-        ) from e
+    except NotFoundException:
+        # Let NotFoundException bubble up to middleware for 404 handling
+        raise
     except Exception as e:
         ctx.logger.error(f"Search error for collection {readable_id}: {str(e)}")
 
@@ -259,9 +256,9 @@ async def search(
                 detail="Vector database service is currently unavailable. Please try again later.",
             ) from e
         else:
-            # For other errors, provide details with 500 status
+            # For other errors, log details but return generic message
             raise HTTPException(
-                status_code=500, detail=f"An error occurred while searching: {str(e)}"
+                status_code=500, detail="An error occurred while searching. Please try again later."
             ) from e
 
 
@@ -319,12 +316,9 @@ async def search_advanced(
         await guard_rail.increment(ActionType.QUERIES)
 
         return result
-    except NotFoundException as e:
-        # Collection not found or doesn't belong to this organization
-        raise HTTPException(
-            status_code=404,
-            detail=f"Collection '{readable_id}' not found.",
-        ) from e
+    except NotFoundException:
+        # Let NotFoundException bubble up to middleware for 404 handling
+        raise
     except Exception as e:
         ctx.logger.error(f"Advanced search error for collection {readable_id}: {str(e)}")
 
@@ -345,9 +339,9 @@ async def search_advanced(
                 detail=f"Invalid filter format: {str(e)}",
             ) from e
         else:
-            # For other errors, provide details with 500 status
+            # For other errors, log details but return generic message
             raise HTTPException(
-                status_code=500, detail=f"An error occurred while searching: {str(e)}"
+                status_code=500, detail="An error occurred while searching. Please try again later."
             ) from e
 
 
