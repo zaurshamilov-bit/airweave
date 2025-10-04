@@ -509,10 +509,15 @@ class QdrantDestination(VectorDBDestination):
             points_selector=rest.FilterSelector(
                 filter=rest.Filter(
                     must=[
+                        # CRITICAL: Tenant filter for multi-tenant performance
+                        rest.FieldCondition(
+                            key="airweave_collection_id",
+                            match=rest.MatchValue(value=str(self.collection_id)),
+                        ),
                         rest.FieldCondition(
                             key="airweave_system_metadata.db_entity_id",
                             match=rest.MatchValue(value=str(db_entity_id)),
-                        )
+                        ),
                     ]
                 )
             ),
@@ -526,11 +531,16 @@ class QdrantDestination(VectorDBDestination):
             collection_name=self.collection_name,
             points_selector=rest.FilterSelector(
                 filter=rest.Filter(
-                    should=[
+                    must=[
+                        # CRITICAL: Tenant filter for multi-tenant performance
+                        rest.FieldCondition(
+                            key="airweave_collection_id",
+                            match=rest.MatchValue(value=str(self.collection_id)),
+                        ),
                         rest.FieldCondition(
                             key="airweave_system_metadata.sync_id",
                             match=rest.MatchValue(value=str(sync_id)),
-                        )
+                        ),
                     ]
                 )
             ),
@@ -547,6 +557,11 @@ class QdrantDestination(VectorDBDestination):
             points_selector=rest.FilterSelector(
                 filter=rest.Filter(
                     must=[
+                        # CRITICAL: Tenant filter for multi-tenant performance
+                        rest.FieldCondition(
+                            key="airweave_collection_id",
+                            match=rest.MatchValue(value=str(self.collection_id)),
+                        ),
                         rest.FieldCondition(
                             key="airweave_system_metadata.sync_id",
                             match=rest.MatchValue(value=str(sync_id)),
@@ -568,6 +583,11 @@ class QdrantDestination(VectorDBDestination):
             points_selector=rest.FilterSelector(
                 filter=rest.Filter(
                     must=[
+                        # CRITICAL: Tenant filter for multi-tenant performance
+                        rest.FieldCondition(
+                            key="airweave_collection_id",
+                            match=rest.MatchValue(value=str(self.collection_id)),
+                        ),
                         rest.FieldCondition(
                             key="parent_entity_id", match=rest.MatchValue(value=str(parent_id))
                         ),
@@ -591,6 +611,11 @@ class QdrantDestination(VectorDBDestination):
             points_selector=rest.FilterSelector(
                 filter=rest.Filter(
                     must=[
+                        # CRITICAL: Tenant filter for multi-tenant performance
+                        rest.FieldCondition(
+                            key="airweave_collection_id",
+                            match=rest.MatchValue(value=str(self.collection_id)),
+                        ),
                         rest.FieldCondition(
                             key="airweave_system_metadata.sync_id",
                             match=rest.MatchValue(value=str(sync_id)),
