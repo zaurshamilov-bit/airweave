@@ -122,11 +122,17 @@ class SearchConfigBuilder:
         )
         # No static DecayConfig; RecencyBias operator derives decay at runtime
 
+        # Auto-detect vector size based on embedding model configuration
+        from airweave.platform.destinations.collection_strategy import get_default_vector_size
+
+        vector_size = get_default_vector_size()
+
         # Create the config with operations as fields
         config = SearchConfig(
             # Core parameters with defaults
             query=search_request.query,
             collection_id=collection_id,
+            vector_size=vector_size,  # For collection mapping
             limit=limit,
             offset=offset,
             score_threshold=score_threshold,

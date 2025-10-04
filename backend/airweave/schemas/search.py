@@ -277,6 +277,7 @@ class SearchConfig(BaseModel):
     # Core search parameters (from request)
     query: str = Field(..., description="The search query text")
     collection_id: str = Field(..., description="ID of the collection to search")
+    vector_size: int = Field(384, description="Vector dimensions for collection mapping")
     limit: int = Field(100, ge=1, le=1000, description="Maximum number of results")
     offset: int = Field(0, ge=0, description="Pagination offset")
     score_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Minimum score")

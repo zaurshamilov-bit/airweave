@@ -121,7 +121,9 @@ class VectorSearch(SearchOperation):
 
         try:
             destination = await QdrantDestination.create(
-                collection_id=UUID(config.collection_id), logger=logger
+                collection_id=UUID(config.collection_id),
+                vector_size=config.vector_size,
+                logger=logger,
             )
             if len(embeddings) > 1:
                 await self._execute_bulk(
