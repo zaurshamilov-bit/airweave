@@ -24,6 +24,7 @@ from airweave.api.examples import (
 )
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
+from airweave.core.exceptions import NotFoundException
 from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import ContextualLogger
 from airweave.core.pubsub import core_pubsub
@@ -237,6 +238,9 @@ async def search(
         await guard_rail.increment(ActionType.QUERIES)
 
         return result
+    except NotFoundException:
+        # Let NotFoundException bubble up to middleware for 404 handling
+        raise
     except Exception as e:
         ctx.logger.error(f"Search error for collection {readable_id}: {str(e)}")
 
@@ -251,15 +255,10 @@ async def search(
                 status_code=503,
                 detail="Vector database service is currently unavailable. Please try again later.",
             ) from e
-        elif "not found" in error_message:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Collection '{readable_id}' not found or you don't have access to it.",
-            ) from e
         else:
-            # For other errors, return a generic message but with 500 status
+            # For other errors, log details but return generic message
             raise HTTPException(
-                status_code=500, detail=f"An error occurred while searching: {str(e)}"
+                status_code=500, detail="An error occurred while searching. Please try again later."
             ) from e
 
 
@@ -317,10 +316,13 @@ async def search_advanced(
         await guard_rail.increment(ActionType.QUERIES)
 
         return result
+    except NotFoundException:
+        # Let NotFoundException bubble up to middleware for 404 handling
+        raise
     except Exception as e:
         ctx.logger.error(f"Advanced search error for collection {readable_id}: {str(e)}")
 
-        # Check if it's a connection error
+        # Check if it's a connection error or filter validation error
         error_message = str(e).lower()
         if (
             "connection" in error_message
@@ -331,20 +333,15 @@ async def search_advanced(
                 status_code=503,
                 detail="Vector database service is currently unavailable. Please try again later.",
             ) from e
-        elif "not found" in error_message:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Collection '{readable_id}' not found or you don't have access to it.",
-            ) from e
         elif "invalid filter" in error_message:
             raise HTTPException(
                 status_code=422,
                 detail=f"Invalid filter format: {str(e)}",
             ) from e
         else:
-            # For other errors, return a generic message but with 500 status
+            # For other errors, log details but return generic message
             raise HTTPException(
-                status_code=500, detail=f"An error occurred while searching: {str(e)}"
+                status_code=500, detail="An error occurred while searching. Please try again later."
             ) from e
 
 
