@@ -142,6 +142,11 @@ class TestSettings(BaseSettings):
         return self.TEST_ENV == "local"
 
     @property
+    def qdrant_url(self) -> str:
+        """Get Qdrant URL for local testing only."""
+        return "http://localhost:6333"
+
+    @property
     def api_headers(self) -> dict:
         """Get API headers with authentication if needed."""
         headers = {"Content-Type": "application/json", "accept": "application/json"}
