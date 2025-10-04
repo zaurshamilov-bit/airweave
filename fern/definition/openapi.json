@@ -5793,6 +5793,18 @@
             ],
             "title": "Authentication",
             "description": "Authentication config (defaults to OAuth browser flow for OAuth sources)"
+          },
+          "redirect_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Url",
+            "description": "URL to redirect to after OAuth flow completes (only used for OAuth flows)"
           }
         },
         "type": "object",
