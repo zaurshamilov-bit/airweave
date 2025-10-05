@@ -685,7 +685,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                                 Need help setting up OAuth?
                               </span>
                               <a
-                                href="https://docs.airweave.ai/integrations/oauth-setup"
+                                href={`https://docs.airweave.ai/docs/connectors/${selectedSource.replace(/_/g, '-')}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className={cn(
