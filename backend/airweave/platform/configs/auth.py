@@ -193,11 +193,11 @@ class BitbucketAuthConfig(AuthConfig):
             "- read:user:bitbucket\n"
             "- read:workspace:bitbucket\n"
             "- read:repository:bitbucket\n\n"
-            "When using this, also provide your Atlassian email as username."
+            "When using this, also provide your Atlassian email address."
         ),
     )
 
-    username: str = Field(
+    email: str = Field(
         title="Email",
         description="Your Atlassian email address (required for API token authentication)",
     )
@@ -218,7 +218,7 @@ class BitbucketAuthConfig(AuthConfig):
         """Ensure required authentication fields are provided."""
         if not self.access_token or not self.access_token.strip():
             raise ValueError("API token is required")
-        if not self.username or not self.username.strip():
+        if not self.email or not self.email.strip():
             raise ValueError("Atlassian email is required")
         return self
 

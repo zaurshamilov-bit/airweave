@@ -63,7 +63,7 @@ class BitbucketSource(BaseSource):
         instance = cls()
 
         instance.access_token = credentials.access_token
-        instance.username = credentials.username
+        instance.email = credentials.email
         instance.workspace = credentials.workspace
         instance.repo_slug = credentials.repo_slug
 
@@ -75,7 +75,7 @@ class BitbucketSource(BaseSource):
     def _get_auth(self) -> httpx.BasicAuth:
         """Get Basic authentication object for Bitbucket API requests.
 
-        Bitbucket API uses Basic authentication with username (email) and API token.
+        Bitbucket API uses Basic authentication with email and API token.
 
         Returns:
             httpx.BasicAuth object configured for the request
@@ -84,15 +84,15 @@ class BitbucketSource(BaseSource):
             ValueError: If authentication credentials are missing
         """
         access_token = getattr(self, "access_token", None)
-        username = getattr(self, "username", None)
+        email = getattr(self, "email", None)
 
         if not access_token or not access_token.strip():
             raise ValueError("API token is required")
-        if not username or not username.strip():
-            raise ValueError("Username (Atlassian email) is required")
+        if not email or not email.strip():
+            raise ValueError("Atlassian email is required")
 
         self.logger.debug("Using API token authentication")
-        return httpx.BasicAuth(username=username, password=access_token)
+        return httpx.BasicAuth(username=email, password=access_token)
 
     @tenacity.retry(
         retry=retry_if_exception_type(httpx.HTTPError),
