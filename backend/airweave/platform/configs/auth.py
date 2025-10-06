@@ -643,15 +643,6 @@ class TrelloAuthConfig(AuthConfig):
         description="The OAuth1 access token secret for Trello",
     )
 
-    @field_validator("oauth_token", "oauth_token_secret")
-    @classmethod
-    def validate_oauth_tokens(cls, v: str, info) -> str:
-        """Validate OAuth1 tokens are not empty."""
-        if not v or not v.strip():
-            field_name = info.field_name.replace("_", " ").title()
-            raise ValueError(f"{field_name} is required")
-        return v.strip()
-
 
 # AUTH PROVIDER AUTHENTICATION CONFIGS
 # These are for authenticating TO auth providers themselves
