@@ -583,8 +583,8 @@ export const databasePortValidation: FieldValidation<string> = {
       return { isValid: true, severity: 'info' };
     }
 
-    const port = parseInt(trimmed, 10);
-    if (isNaN(port)) {
+    // Check if the entire string is numeric (reject "123abc")
+    if (!/^\d+$/.test(trimmed)) {
       return {
         isValid: false,
         hint: 'Port must be a number',
@@ -592,6 +592,7 @@ export const databasePortValidation: FieldValidation<string> = {
       };
     }
 
+    const port = parseInt(trimmed, 10);
     if (port < 1 || port > 65535) {
       return {
         isValid: false,
