@@ -717,33 +717,6 @@ export const stripeApiKeyValidation: FieldValidation<string> = {
 };
 
 /**
- * OAuth token validation (for Trello, etc.)
- */
-export const oauthTokenValidation: FieldValidation<string> = {
-  field: 'oauth_token',
-  debounceMs: 0,
-  showOn: 'blur',
-  validate: (value: string): ValidationResult => {
-    const trimmed = value.trim();
-
-    if (!trimmed) {
-      return { isValid: true, severity: 'info' };
-    }
-
-    // OAuth tokens vary in length, just check for minimum reasonable length
-    if (trimmed.length < 10) {
-      return {
-        isValid: false,
-        hint: 'OAuth token appears too short',
-        severity: 'warning'
-      };
-    }
-
-    return { isValid: true, severity: 'info' };
-  }
-};
-
-/**
  * Get validation for a specific auth field type
  * @param fieldType - The name of the field to validate
  * @param sourceShortName - Optional source short name for source-specific validations
@@ -763,9 +736,6 @@ export function getAuthFieldValidation(fieldType: string, sourceShortName?: stri
       return apiKeyValidation;
     case 'personal_access_token':
       return githubTokenValidation;
-    case 'oauth_token':
-    case 'oauth_token_secret':
-      return oauthTokenValidation;
 
     // URLs
     case 'url':
