@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from airweave.platform.configs._base import BaseConfig
 
@@ -181,25 +181,27 @@ class BitbucketAuthConfig(AuthConfig):
     """Bitbucket authentication credentials schema.
 
     Supports either:
-    - access_token (Bearer) + workspace/repo_slug, or
-    - username + app_password (legacy Basic) + workspace/repo_slug
+    - access_token + username (email) + workspace/repo_slug (API token auth), or
+    - username + app_password + workspace/repo_slug (legacy Basic auth)
     """
 
-    # New token-based auth
+    # API token-based auth
     access_token: Optional[str] = Field(
         default=None,
         title="API Token",
         description=(
-            "Bitbucket API token used as a Bearer token. Provide this to use token-based auth."
+            "Bitbucket API token. When using this, also provide your Atlassian email as username."
         ),
     )
 
-    # Legacy Basic auth (deprecated)
+    # Username (required for both auth methods)
     username: Optional[str] = Field(
         default=None,
-        title="Username",
-        description="Your Bitbucket username (email when using API token)",
+        title="Username/Email",
+        description="Your Bitbucket username or Atlassian email (required for both auth methods)",
     )
+
+    # Legacy Basic auth (deprecated)
     app_password: Optional[str] = Field(
         default=None,
         title="App Password",
@@ -217,6 +219,37 @@ class BitbucketAuthConfig(AuthConfig):
         description="Specific repository to sync (e.g., 'my-repo'). "
         "If empty, syncs all repositories in the workspace.",
     )
+
+    @model_validator(mode="after")
+    def validate_auth_combination(self):
+        """Ensure valid authentication combination is provided.
+
+        Valid combinations:
+        1. access_token + username (API token auth)
+        2. username + app_password (legacy auth)
+        """
+        has_token = bool(self.access_token and self.access_token.strip())
+        has_username = bool(self.username and self.username.strip())
+        has_app_password = bool(self.app_password and self.app_password.strip())
+
+        # Check valid combinations
+        if has_token:
+            if not has_username:
+                raise ValueError(
+                    "Username (Atlassian email) is required when using API token. "
+                    "Please provide your Atlassian account email."
+                )
+        elif has_username and has_app_password:
+            # Legacy app password auth is valid
+            pass
+        else:
+            raise ValueError(
+                "Invalid authentication combination. Please provide either:\n"
+                "1. API token + username (recommended), or\n"
+                "2. Username + app password (legacy)"
+            )
+
+        return self
 
 
 class BoxAuthConfig(OAuth2WithRefreshAuthConfig):
