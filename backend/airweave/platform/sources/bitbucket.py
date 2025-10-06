@@ -85,12 +85,12 @@ class BitbucketSource(BaseSource):
         """
         access_token = getattr(self, "access_token", None)
         username = getattr(self, "username", None)
-        
+
         if not access_token or not access_token.strip():
             raise ValueError("API token is required")
         if not username or not username.strip():
             raise ValueError("Username (Atlassian email) is required")
-            
+
         self.logger.debug("Using API token authentication")
         return httpx.BasicAuth(username=username, password=access_token)
 

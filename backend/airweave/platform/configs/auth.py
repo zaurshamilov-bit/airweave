@@ -186,7 +186,9 @@ class BitbucketAuthConfig(AuthConfig):
     access_token: str = Field(
         title="API Token",
         description=(
-            "Create a Bitbucket API token [here](https://id.atlassian.com/manage-profile/security/api-tokens) with scopes:\n"
+            "Create a Bitbucket API token "
+            "[here](https://id.atlassian.com/manage-profile/security/api-tokens) "
+            "with scopes:\n"
             "- account\n"
             "- read:user:bitbucket\n"
             "- read:workspace:bitbucket\n"
