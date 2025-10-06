@@ -191,7 +191,9 @@ class RecencyBias(SearchOperation):
         # Recency is non-critical; if destination cannot be created, skip gracefully
         try:
             destination = await QdrantDestination.create(
-                collection_id=UUID(config.collection_id), logger=logger
+                collection_id=UUID(config.collection_id),
+                vector_size=config.vector_size,
+                logger=logger,
             )
         except Exception as e:
             logger.debug(f"[RecencyBias] Skipping recency due to destination error: {e}")
