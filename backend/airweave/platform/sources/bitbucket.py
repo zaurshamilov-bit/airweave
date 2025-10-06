@@ -62,9 +62,8 @@ class BitbucketSource(BaseSource):
         """
         instance = cls()
 
-        instance.access_token = getattr(credentials, "access_token", None)
-        instance.username = getattr(credentials, "username", None)
-        instance.app_password = getattr(credentials, "app_password", None)
+        instance.access_token = credentials.access_token
+        instance.username = credentials.username
         instance.workspace = credentials.workspace
         instance.repo_slug = credentials.repo_slug
 
@@ -76,31 +75,24 @@ class BitbucketSource(BaseSource):
     def _get_auth(self) -> httpx.BasicAuth:
         """Get Basic authentication object for Bitbucket API requests.
 
-        Bitbucket API uses Basic authentication with either:
-        - Username (email) and API token as password
-        - Username and app password (legacy)
+        Bitbucket API uses Basic authentication with username (email) and API token.
 
         Returns:
             httpx.BasicAuth object configured for the request
 
         Raises:
-            ValueError: If no valid authentication credentials are provided
+            ValueError: If authentication credentials are missing
         """
         access_token = getattr(self, "access_token", None)
         username = getattr(self, "username", None)
-        app_password = getattr(self, "app_password", None)
-        if access_token and access_token.strip():
-            # API tokens use email:token format
-            if not username:
-                raise ValueError("Username (Atlassian email) is required when using API token")
-            self.logger.debug("Using API token authentication")
-            return httpx.BasicAuth(username=username, password=access_token)
-        elif username and app_password:
-            # Legacy app password authentication
-            self.logger.debug("Using app password authentication")
-            return httpx.BasicAuth(username=username, password=app_password)
-        else:
-            raise ValueError("No valid authentication credentials provided")
+        
+        if not access_token or not access_token.strip():
+            raise ValueError("API token is required")
+        if not username or not username.strip():
+            raise ValueError("Username (Atlassian email) is required")
+            
+        self.logger.debug("Using API token authentication")
+        return httpx.BasicAuth(username=username, password=access_token)
 
     @tenacity.retry(
         retry=retry_if_exception_type(httpx.HTTPError),

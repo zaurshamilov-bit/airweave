@@ -180,36 +180,27 @@ class AttioAuthConfig(APIKeyAuthConfig):
 class BitbucketAuthConfig(AuthConfig):
     """Bitbucket authentication credentials schema.
 
-    Supports either:
-    - access_token + username (email) + workspace/repo_slug (API token auth), or
-    - username + app_password + workspace/repo_slug (legacy Basic auth)
+    Requires API token authentication with Atlassian email.
     """
 
-    # API token-based auth
-    access_token: Optional[str] = Field(
-        default=None,
+    access_token: str = Field(
         title="API Token",
         description=(
-            "Bitbucket API token. When using this, also provide your Atlassian email as username."
+            "Create a Bitbucket API token [here](https://id.atlassian.com/manage-profile/security/api-tokens) with scopes:\n"
+            "- account\n"
+            "- read:user:bitbucket\n"
+            "- read:workspace:bitbucket\n"
+            "- read:repository:bitbucket\n\n"
+            "When using this, also provide your Atlassian email as username."
         ),
     )
 
-    # Username (required for both auth methods)
-    username: Optional[str] = Field(
-        default=None,
-        title="Username/Email",
-        description="Your Bitbucket username or Atlassian email (required for both auth methods)",
-    )
-
-    # Legacy Basic auth (deprecated)
-    app_password: Optional[str] = Field(
-        default=None,
-        title="App Password",
-        description=("Bitbucket app password (deprecated). Prefer API tokens where available."),
+    username: str = Field(
+        title="Email",
+        description="Your Atlassian email address (required for API token authentication)",
     )
 
     workspace: str = Field(
-        default=None,
         title="Workspace",
         description="Bitbucket workspace slug (e.g., 'my-workspace')",
     )
@@ -221,34 +212,12 @@ class BitbucketAuthConfig(AuthConfig):
     )
 
     @model_validator(mode="after")
-    def validate_auth_combination(self):
-        """Ensure valid authentication combination is provided.
-
-        Valid combinations:
-        1. access_token + username (API token auth)
-        2. username + app_password (legacy auth)
-        """
-        has_token = bool(self.access_token and self.access_token.strip())
-        has_username = bool(self.username and self.username.strip())
-        has_app_password = bool(self.app_password and self.app_password.strip())
-
-        # Check valid combinations
-        if has_token:
-            if not has_username:
-                raise ValueError(
-                    "Username (Atlassian email) is required when using API token. "
-                    "Please provide your Atlassian account email."
-                )
-        elif has_username and has_app_password:
-            # Legacy app password auth is valid
-            pass
-        else:
-            raise ValueError(
-                "Invalid authentication combination. Please provide either:\n"
-                "1. API token + username (recommended), or\n"
-                "2. Username + app password (legacy)"
-            )
-
+    def validate_required_fields(self):
+        """Ensure required authentication fields are provided."""
+        if not self.access_token or not self.access_token.strip():
+            raise ValueError("API token is required")
+        if not self.username or not self.username.strip():
+            raise ValueError("Atlassian email is required")
         return self
 
 
