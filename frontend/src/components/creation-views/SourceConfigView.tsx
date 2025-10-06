@@ -12,6 +12,7 @@ import { AuthProviderSelector } from './AuthProviderSelector';
 import { useAuthProvidersStore } from '@/lib/stores/authProviders';
 import { ValidatedInput } from '@/components/ui/validated-input';
 import { sourceConnectionNameValidation, getAuthFieldValidation, clientIdValidation, clientSecretValidation, redirectUrlValidation } from '@/lib/validation/rules';
+import ReactMarkdown from 'react-markdown';
 
 interface SourceConfigViewProps {
   humanReadableId: string;
@@ -468,7 +469,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Create Source Connection
               </h2>
-              <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
+              <p className="my-2.5 text-sm text-gray-500 dark:text-gray-400">
                 Connect your {sourceName || 'data source'} to sync and search its content
               </p>
             </div>
@@ -538,9 +539,35 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                             {field.required && <span className="text-red-500 ml-1">*</span>}
                           </label>
                           {field.description && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-                              {field.description}
-                            </p>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                              <ReactMarkdown
+                                components={{
+                                  p: ({ children }) => <span>{children}</span>,
+                                  a: ({ href, children }) => (
+                                    <a
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 dark:text-blue-400 hover:underline"
+                                    >
+                                      {children}
+                                    </a>
+                                  ),
+                                  ul: ({ children }) => (
+                                    <ul className="list-disc pl-4 my-2 space-y-0.5">
+                                      {children}
+                                    </ul>
+                                  ),
+                                  li: ({ children }) => (
+                                    <li className="text-xs text-gray-500 dark:text-gray-400">
+                                      {children}
+                                    </li>
+                                  ),
+                                }}
+                              >
+                                {field.description}
+                              </ReactMarkdown>
+                            </div>
                           )}
                           <ValidatedInput
                             type={field.name.includes('password') || field.name.includes('token') ? 'password' : 'text'}
@@ -573,9 +600,35 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                             {field.required && <span className="text-red-500 ml-1">*</span>}
                           </label>
                           {field.description && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-                              {field.description}
-                            </p>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                              <ReactMarkdown
+                                components={{
+                                  p: ({ children }) => <span>{children}</span>,
+                                  a: ({ href, children }) => (
+                                    <a
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 dark:text-blue-400 hover:underline"
+                                    >
+                                      {children}
+                                    </a>
+                                  ),
+                                  ul: ({ children }) => (
+                                    <ul className="list-disc pl-4 my-2 space-y-0.5">
+                                      {children}
+                                    </ul>
+                                  ),
+                                  li: ({ children }) => (
+                                    <li className="text-xs text-gray-500 dark:text-gray-400">
+                                      {children}
+                                    </li>
+                                  ),
+                                }}
+                              >
+                                {field.description}
+                              </ReactMarkdown>
+                            </div>
                           )}
                           <input
                             type="text"
