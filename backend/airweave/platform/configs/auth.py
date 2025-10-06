@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from airweave.platform.configs._base import BaseConfig
 
@@ -180,34 +180,29 @@ class AttioAuthConfig(APIKeyAuthConfig):
 class BitbucketAuthConfig(AuthConfig):
     """Bitbucket authentication credentials schema.
 
-    Supports either:
-    - access_token (Bearer) + workspace/repo_slug, or
-    - username + app_password (legacy Basic) + workspace/repo_slug
+    Requires API token authentication with Atlassian email.
     """
 
-    # New token-based auth
-    access_token: Optional[str] = Field(
-        default=None,
+    access_token: str = Field(
         title="API Token",
         description=(
-            "Bitbucket API token used as a Bearer token. Provide this to use token-based auth."
+            "Create a Bitbucket API token "
+            "[here](https://id.atlassian.com/manage-profile/security/api-tokens) "
+            "with scopes:\n"
+            "- account\n"
+            "- read:user:bitbucket\n"
+            "- read:workspace:bitbucket\n"
+            "- read:repository:bitbucket\n\n"
+            "When using this, also provide your Atlassian email address."
         ),
     )
 
-    # Legacy Basic auth (deprecated)
-    username: Optional[str] = Field(
-        default=None,
-        title="Username",
-        description="Your Bitbucket username (email when using API token)",
-    )
-    app_password: Optional[str] = Field(
-        default=None,
-        title="App Password",
-        description=("Bitbucket app password (deprecated). Prefer API tokens where available."),
+    email: str = Field(
+        title="Email",
+        description="Your Atlassian email address (required for API token authentication)",
     )
 
     workspace: str = Field(
-        default=None,
         title="Workspace",
         description="Bitbucket workspace slug (e.g., 'my-workspace')",
     )
@@ -217,6 +212,15 @@ class BitbucketAuthConfig(AuthConfig):
         description="Specific repository to sync (e.g., 'my-repo'). "
         "If empty, syncs all repositories in the workspace.",
     )
+
+    @model_validator(mode="after")
+    def validate_required_fields(self):
+        """Ensure required authentication fields are provided."""
+        if not self.access_token or not self.access_token.strip():
+            raise ValueError("API token is required")
+        if not self.email or not self.email.strip():
+            raise ValueError("Atlassian email is required")
+        return self
 
 
 class BoxAuthConfig(OAuth2WithRefreshAuthConfig):
